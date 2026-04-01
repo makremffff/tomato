@@ -1,0 +1,2819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Tomato Farm</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&display=swap');
+
+:root {
+  --ton:        #0098ea;
+  --ton-glow:   rgba(0,152,234,0.35);
+  --gold:       #ffd740;
+  --green:      #69f0ae;
+  --red:        #ff5252;
+  --seed:       #a8e063;
+  --water:      #29b6f6;
+  --water-glow: rgba(41,182,246,0.35);
+  --text:       #f0ede8;
+  --text-dim:   rgba(240,237,232,0.44);
+  --card:       rgba(12,8,4,0.72);
+  --card-bdr:   rgba(255,220,100,0.15);
+  --card-bdr2:  rgba(255,255,255,0.07);
+  --nb-h:       68px;
+  --soil-a:     #6b3410;
+  --soil-b:     #3d1a06;
+  --soil-c:     #8a4a1c;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  font-family: 'DynaPuff' , fantasy;
+  color: var(--text);
+  overflow: hidden;
+  text-transform: uppercase;
+}
+
+body {
+  background:  url(file.png);
+  background-size: 100% 100%;
+  
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.60);
+  z-index: 0;
+}
+
+
+/* ── PAGE SYSTEM ── */
+.page {
+  display: none;
+  position: absolute;
+  inset: 0;
+  bottom: var(--nb-h);
+  overflow-y: auto;
+  overflow-x: clip; /* clip doesn't create scroll container so -70px transforms won't be clipped */
+  -webkit-overflow-scrolling: touch;
+  user-select: none;
+}
+.page.active { display: flex; flex-direction: column; align-items: center; }
+.page::-webkit-scrollbar { width: 3px; }
+.page::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+
+/* ── NAVBAR ── */
+#navbar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: var(--nb-h);
+  display: flex;
+  background: rgba(0,8,28,0.92);
+  border-top: 1px solid rgba(0,152,234,0.14);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  z-index: 100;
+}
+.nb-btn {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  border: none; background: transparent;
+  font-family: 'DynaPuff', cursive;
+  color: var(--text-dim);
+  position: relative;
+  padding-bottom: 6px;
+}
+.nb-btn svg {
+  width: 21px; height: 21px;
+  stroke: currentColor; fill: none;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform 0.2s cubic-bezier(.34,1.56,.64,1);
+}
+.nb-btn span { font-size: 0.56rem; letter-spacing: 0.2px; }
+.nb-btn:active { opacity: 0.7; }
+.nb-btn.active { color: var(--ton); }
+.nb-btn.active svg { transform: translateY(-2px) scale(1.1); }
+.nb-btn.active::before {
+  content: '';
+  position: absolute; top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 32px; height: 2px;
+  background: var(--ton); border-radius: 0 0 4px 4px;
+}
+
+/* ── SHARED ── */
+.page-header { width: 100%; padding: 20px 20px 4px; text-align: center; }
+.page-header h2 {
+  font-size: 1.4rem; font-weight: 700;
+  background: linear-gradient(135deg, #ffd740 20%, #ff9800 70%, #ffd740 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.page-header p { font-size: 0.68rem; color: var(--text-dim); margin-top: 4px; }
+
+/* card — fixed, clean, self-contained */
+.card {
+  width: calc(100% - 32px);
+  background: rgba(0,12,36,0.72);
+  border: 1px solid rgba(0,152,234,0.14);
+  border-radius: 18px;
+  padding: 18px 16px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
+  backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field-label {
+  font-size: 0.64rem; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 1.2px;
+  margin-bottom: 6px; display: block;
+}
+
+.field-input {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 11px; padding: 11px 14px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.8rem; color: var(--text); outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.field-input::placeholder { color: var(--text-dim); }
+.field-input:focus {
+  border-color: rgba(0,152,234,0.5);
+  box-shadow: 0 0 0 3px rgba(0,152,234,0.1);
+}
+
+/* full-width buttons — no hacks */
+.big-btn {
+  width: 100%; padding: 13px 16px;
+  border: none; border-radius: 13px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.86rem; font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.big-btn:hover  { filter: brightness(1.08); }
+.big-btn:active { transform: scale(0.97); opacity: 0.85; }
+.big-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+
+.btn-ton  { background: linear-gradient(135deg, #0098ea, #006bb3); color: #fff; box-shadow: 0 4px 18px rgba(0,152,234,0.3); }
+.btn-gold { background: linear-gradient(135deg, #ffd740, #f9a825); color: #1a0a00; box-shadow: 0 4px 18px rgba(255,215,64,0.28); }
+
+.ton-img    { width: 17px; height: 17px; display: inline-block; vertical-align: middle; object-fit: contain; }
+.ton-img-sm { width: 13px; height: 13px; display: inline-block; vertical-align: middle; object-fit: contain; }
+
+.divider { width: 100%; height: 1px; background: var(--card-bdr); }
+
+/* ── FARM ── */
+#page-farm { padding: 0 0 18px; gap: 0; overflow-x: clip; }
+
+/* ── HUD BAR ── */
+.farm-hud {
+  position: sticky; top: 0; z-index: 80;
+  width: 100%;
+  padding: 10px 14px 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: transparent;
+  
+}
+.hud-balance {
+  display: flex; align-items: baseline; gap: 5px;
+  
+}
+.hud-bal-lbl { font-size: 0.52rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-right: 2px; }
+.hud-bal-val {
+  font-size: 2.2rem; font-weight: 700; color: #81d4fa; line-height: 1;
+  display: flex; align-items: center; gap: 4px;
+}
+.hud-bal-val img { width: 18px; height: 18px; }
+.hud-sparkline { margin-left: 2px; opacity: 0.7; }
+.hud-pills { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.hud-pill {
+  display: flex; align-items: center; gap: 4px;
+  background: rgba(0,152,234,0.08); border: 1px solid rgba(0,152,234,0.18);
+  border-radius: 20px; padding: 4px 9px;
+  font-size: 0.66rem; font-weight: 700; color: rgba(129,212,250,0.7);
+  white-space: nowrap;
+}
+.hud-pill.hp-seed  { color: var(--seed);  border-color: rgba(168,224,99,0.3);  background: rgba(168,224,99,0.08); }
+.hud-pill.hp-water { color: #81d4fa;      border-color: rgba(41,182,246,0.3);  background: rgba(41,182,246,0.08); }
+
+.hud-user-photo {
+  width: 100%; display: flex; justify-content: center;
+  margin-top: 0px; flex-shrink: 0;
+  translate: 0 -10px;
+}
+.hud-user-photo img {
+  width: 62px; height: 62px; border-radius: 50%;
+  border: 2px solid rgba(255,215,64,0.4);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.55), 0 0 0 4px rgba(255,215,64,0.08);
+  object-fit: cover;
+}
+
+/* ── HERO ── */
+.farm-hero {
+  position: relative;
+  width: 100%; height: 230px;
+  overflow: hidden;
+  flex-shrink: 0;
+  top: -18px;
+  
+}
+.farm-hero-bg {
+  display: none; /* remove inner background image — body background shows through */
+}
+.farm-hero-overlay {
+  display: none; /* no overlay needed since hero is transparent */
+}
+.farm-hero-title {
+  position: absolute; top: 14px; left: 0; right: 0;
+  text-align: center;
+  font-size: 1.1rem; font-weight: 700;
+  background: linear-gradient(135deg, #ffd740 20%, #ff9800 60%, #ffd740 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  text-shadow: none;
+  z-index: 2;
+}
+.farm-hero-title img { width: 46px; height: 46px; }
+.farm-hero-sub {
+  position: absolute; top: 60px; left: 0; right: 0;
+  text-align: center; font-size: 0.56rem; color: rgba(240,237,232,0.5);
+  z-index: 2; letter-spacing: 0.3px;
+}
+.user-fhoto img {
+  width: 52px; height: 52px; border-radius: 50%;
+  position: absolute; left: 50%; top: 18px;
+  transform: translateX(-50%);
+  z-index: 5; border: 2px solid rgba(255,215,64,0.35);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+
+/* plots container — overlaid on hero */
+.farm-plots-wrap {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 0 14px 14px;
+  z-index: 4;
+}
+.farm-label {
+  text-align: center; font-size: 0.52rem; color: rgba(240,237,232,0.38);
+  text-transform: uppercase; letter-spacing: 2px; translate: 0 -20px;
+  font-size: 10px;
+}
+.farm-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 2px; }
+
+/* CELL */
+.cell {
+  aspect-ratio: 1; width: 90%;
+  background: radial-gradient(ellipse at 40% 30%, var(--soil-c) 0%, var(--soil-a) 40%, var(--soil-b) 70%);
+  border: 1.5px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  cursor: pointer; position: relative;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px;
+  transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), border-color 0.2s;
+  overflow: visible; user-select: none;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.65), 0 2px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+  margin-left: 5%;
+  border-color: rgba(255,215,64,0.5); 
+ opacity: 0.8;
+ backdrop-filter: blur(5px);
+}
+
+}
+/* soil texture shimmer */
+.cell::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 100%);
+  border-radius: 13px 13px 0 0; pointer-events: none;
+}
+/* depth shadow beneath each cell */
+.cell-shadow {
+  position: absolute; bottom: -6px; left: 8%; right: 8%; height: 10px;
+  background: rgba(0,0,0,0.5); border-radius: 50%; filter: blur(5px);
+  z-index: -1; pointer-events: none;
+}
+.cell:hover { transform: translateY(-4px) scale(1.03); border-color: rgba(0,200,200,6.5); }
+.cell:active { transform: scale(0.96); }
+
+.cell .c-inner {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  width: 76%; height: 76%;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
+}
+.cell .c-inner .c-emoji { font-size: 3.1rem; line-height: 1; }
+.cell .c-inner img { width: 100%; height: 100%; object-fit: contain; }
+
+.cell .c-lbl {
+  font-size: 0.55rem; font-weight: 700;
+  color: rgba(255,255,255,0.85); background: rgba(0,0,0,0.48);
+  border-radius: 7px; padding: 2px 7px;
+  position: relative; z-index: 5; top: -9px;
+}
+.cell .c-prog {
+  position: absolute; bottom: 4px; left: 8px; right: 8px;
+  height: 4px; background: rgba(0,0,0,0.32);
+  border-radius: 4px; overflow: hidden; z-index: 1;
+}
+.cell .c-fill { height: 100%; background: linear-gradient(90deg,#69f0ae,#00e676); border-radius: 4px; transition: width 0.5s ease; }
+
+.c-water { display: none; position: absolute; top: 6px; right: 7px; font-size: 0.8rem; z-index: 2; animation: wobble 1.2s ease-in-out infinite; }
+.cell.watered .c-water { display: flex; }
+@keyframes wobble { 0%,100%{transform:rotate(-14deg)} 50%{transform:rotate(14deg)} }
+
+/* ready: golden pulsing RING outside the cell */
+.cell.ready { border-color: rgba(255,215,64,0.8) !important; }
+.cell.ready::before { animation: soilShimmer 8s linear infinite; }
+.cell.ready .c-ring {
+  display: block !important;
+}
+.c-ring {
+  display: none;
+  position: absolute; inset: -5px;
+  border-radius: 19px;
+  border: 2px solid rgba(255,215,64,0.0);
+  animation: goldRing 1.1s ease-in-out infinite;
+  pointer-events: none; z-index: 6;
+}
+@keyframes goldRing {
+  0%,100% { border-color: rgba(255,215,64,0.0); box-shadow: 0 0 0px rgba(255,215,64,0); }
+  50%      { border-color: rgba(255,215,64,0.85); box-shadow: 0 0 18px rgba(255,215,64,0.45), inset 0 0 12px rgba(255,215,64,0.1); }
+}
+
+.cell.pop     { animation: cellPop 0.28s cubic-bezier(.34,1.56,.64,1) forwards; }
+@keyframes cellPop { 0%{transform:scale(1)} 40%{transform:scale(1.18) translateY(-5px)} 70%{transform:scale(0.97)} 100%{transform:scale(1)} }
+.cell.shake   { animation: shakeCell 0.44s ease forwards; }
+@keyframes shakeCell {
+  0%  { transform:translateX(0);    border-color:var(--red); }
+  20% { transform:translateX(-7px); border-color:var(--red); }
+  40% { transform:translateX(7px); }
+  60% { transform:translateX(-5px); }
+  80% { transform:translateX(4px); }
+  100%{ transform:translateX(0);    border-color:rgba(255,255,255,0.08); }
+}
+.cell.harvesting .c-inner { animation: harvestPop 0.48s cubic-bezier(.55,0,.1,1) forwards; }
+@keyframes harvestPop {
+  0%  { transform: scale(1) translateY(0); opacity: 1; }
+  50% { transform: scale(1.3) translateY(-14px); opacity: 0.7; }
+  100%{ transform: scale(0.3) translateY(-28px); opacity: 0; }
+}
+
+/* ── SCREEN EDGE GLOW ── */
+.edge-glow {
+  position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+  box-shadow: inset 0 0 60px rgba(105,240,174,0.0);
+  transition: box-shadow 0.12s ease;
+  border-radius: 0;
+}
+.edge-glow.flash { box-shadow: inset 0 0 80px rgba(105,240,174,0.45); }
+
+/* ── ACTIONS ROW ── */
+.farm-actions {
+  display: flex; gap: 10px; padding: 12px 14px 0;
+  width: 80%;
+  translate: 0 10px;
+}
+.farm-btn {
+  flex: 1; padding: 11px 8px;
+  border: 1px solid rgba(0,152,234,0.22); border-radius: 13px;
+  font-family: 'DynaPuff'; font-size: 0.76rem; font-weight: 700;
+  cursor: pointer; color: #fff;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  transition: all 0.15s; backdrop-filter: blur(8px);
+}
+.farm-btn:active { transform: scale(0.96); }
+.fb-water { background: url(background.png); color: aqua; border-color: rgba(0,152,234,0.3); background-size: cover; backdrop-filter: blur(60px); opacity: 0.7;}
+.fb-water.active-mode { background: linear-gradient(135deg,rgba(0,152,234,0.42),rgba(0,90,160,0.52)); border-color: rgba(0,152,234,0.7); color: #fff; box-shadow: 0 0 14px rgba(0,152,234,0.3); }
+.fb-water:disabled { opacity: 0.3 !important; cursor: not-allowed; filter: grayscale(0.4); }
+.fb-water .w-badge {
+  background: rgba(250,152,634,0.92); border: 1px solid rgba(0,152,634,0.02);
+  border-radius: 12px; padding: 1px 7px; font-size: 0.65rem; font-weight: 700;
+  color: #e1f5fe; min-width: 22px; text-align: center;
+ 
+}
+.fb-harvest { background: url(background.png); color: aqua; border-color: rgba(0,152,234,0.3); background-size: cover; opacity: 0.7;}
+
+
+#farm-mode-hint {
+  width: calc(100% - 28px); margin: 0px 14px;
+  text-align: center; font-size: 0.64rem; font-weight: bold;
+  color: #C7C8D7; min-height: 14px; padding-top: 6px;
+  translate: 0 25px;
+  font-size: 13px;
+}
+#farm-mode-hint.water-mode { color: #81d4fa; }
+
+/* ── FARM STATS COLLAPSIBLE ── */
+.farm-stats-wrap { width: 100%; padding: 10px 14px 0; translate: 0 75px;}
+.farm-stats-toggle {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: rgba(0,152,234,0.32); border: 1px solid rgba(0,152,234,0.4);
+  border-radius: 12px; padding: 9px 14px;
+  cursor: pointer; font-family: 'DynaPuff', cursive;
+  font-size: 0.66rem; font-weight: 700; color: rgba(129,212,259,0.99);
+  transition: background 0.15s;
+  backdrop-filter: blur(5px);
+  translate: 0 0px;
+}
+.farm-stats-toggle:active { background: rgba(0,152,234,0.1); }
+.fs-chevron { transition: transform 0.28s cubic-bezier(.34,1.56,.64,1); font-size: 0.7rem; }
+.farm-stats-toggle.open .fs-chevron { transform: rotate(180deg); }
+.farm-stats-body {
+  display: none; padding: 10px 0 0;
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 8px;
+  overflow: hidden; max-height: 0;
+  transition: max-height 0.35s ease;
+}
+.farm-stats-body.open { max-height: 120px; }
+.fs-item {
+  background: rgba(0,15,40,0.65); border: 1px solid rgba(0,152,234,0.12);
+  border-radius: 11px; padding: 10px 8px; text-align: center;
+}
+.fs-item .fs-val { font-size: 1rem; font-weight: 700; color: #81d4fa; display: block; }
+.fs-item .fs-lbl { font-size: 0.52rem; color: var(--text-dim); margin-top: 2px; display: block; }
+
+/* balance pop */
+@keyframes balancePop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.3); color: #ffd740; }
+  100% { transform: scale(1); }
+}
+.balance-pop { animation: balancePop 0.45s cubic-bezier(.34,1.56,.64,1) forwards; }
+
+/* legacy compat — kept for updateStats refs */
+.balance-card { display: none; }
+.meta-pill { display: none; }
+.info-strip { display: none; }
+.farm-outer { display: none; }
+.farm-header { display: none; }
+.c-countdown { position:absolute;top:6px;left:8px;font-size:0.62rem;font-weight:700;background:rgba(255,152,0,0.85);color:#fff;border-radius:8px;padding:2px 6px;z-index:3;box-shadow:0 2px 8px rgba(255,100,0,0.4); }
+
+@media (max-width: 380px) {
+  .cell .c-inner .c-emoji { font-size: 2.5rem; }
+  .hud-bal-val { font-size: 1.8rem; }
+  .hud-pill { font-size: 0.58rem; padding: 3px 7px; }
+}
+
+.info-strip {
+  width: calc(100% - 32px);
+  background: var(--card); border: 1px solid var(--card-bdr); border-radius: 15px; padding: 11px 12px;
+  display: flex; justify-content: space-around; align-items: center;
+  backdrop-filter: blur(10px);
+}
+.info-item { text-align: center; }
+.info-item .i-ico { font-size: 1.1rem; display: block; }
+.info-item .i-val { font-size: 0.62rem; font-weight: 700; color: var(--text-dim); display: block; margin-top: 2px; }
+.info-item .i-val b { color: var(--gold); }
+.i-div { width: 1px; height: 26px; background: var(--card-bdr); }
+
+/* ── TASKS ── */
+#page-tasks { padding: 0 16px 20px; gap: 12px; }
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 50px 20px; text-align: center; color: var(--text-dim); }
+.empty-state .e-icon { font-size: 3.5rem; opacity: 0.4; }
+.empty-state p { font-size: 0.76rem; line-height: 1.65; }
+
+.task-card {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--card-bdr);
+  border-radius: 16px; padding: 13px 14px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
+  backdrop-filter: blur(14px);
+  display: flex; align-items: center; gap: 12px;
+  position: relative; overflow: hidden;
+}
+.task-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(41,182,246,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+.task-icon {
+  width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(145deg, #229ED9, #1a7fb5);
+  box-shadow: 0 4px 14px rgba(34,158,217,0.45);
+}
+.task-icon svg { width: 22px; height: 22px; fill: #fff; }
+.task-body { flex: 1; min-width: 0; }
+.task-title { font-size: 0.82rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+.task-desc  { font-size: 0.6rem; color: var(--text-dim); margin-top: 2px; }
+.task-meta  { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.task-reward {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(168,224,99,0.13); border: 1px solid rgba(168,224,99,0.28);
+  border-radius: 20px; padding: 3px 9px;
+  font-size: 0.64rem; font-weight: 700; color: var(--seed);
+}
+.task-action {
+  flex-shrink: 0;
+}
+.task-btn {
+  padding: 9px 14px; border: none; border-radius: 11px;
+  font-family: 'DynaPuff', cursive; font-size: 0.72rem; font-weight: 700;
+  cursor: pointer; outline: none;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  position: relative; overflow: hidden;
+  transition: opacity 0.15s, transform 0.15s;
+  background: linear-gradient(135deg, #229ED9, #1a7fb5);
+  color: #fff; white-space: nowrap;
+  box-shadow: 0 3px 12px rgba(34,158,217,0.38);
+}
+.task-btn:active { transform: scale(0.96); opacity: 0.85; }
+.task-btn:disabled {
+  background: rgba(105,240,174,0.12);
+  color: var(--green); box-shadow: none; cursor: not-allowed;
+  border: 1px solid rgba(105,240,174,0.28);
+}
+.task-btn .task-btn-progress {
+  position: absolute; left: 0; bottom: 0; height: 3px; width: 0%;
+  border-radius: 0 0 11px 11px; background: rgba(255,255,255,0.45); transition: none;
+}
+.task-btn.verifying .task-btn-progress { transition: width 2.5s linear; width: 100%; }
+.task-status {
+  font-size: 0.62rem; font-weight: 700; color: var(--green);
+  display: none; align-items: center; gap: 4px;
+  background: rgba(105,240,174,0.1); border: 1px solid rgba(105,240,174,0.25);
+  border-radius: 5px; padding: 4px 10px;
+}
+.task-status.show { display: flex; }
+
+/* ════════════════════════════════════════
+   STORE PAGE — Glass Pro Redesign
+════════════════════════════════════════ */
+#page-store { padding: 0 0 28px; gap: 0; overflow-x: clip; }
+
+/* ── STORE HERO HEADER ── */
+.store-hero {
+  width: 100%; padding: 22px 16px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  position: relative;
+}
+.store-hero::before {
+  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 320px; height: 130px;
+  background: radial-gradient(ellipse, rgba(168,224,99,0.1) 0%, rgba(41,182,246,0.06) 50%, transparent 80%);
+  filter: blur(28px); pointer-events: none;
+}
+.store-hero-title {
+  font-size: 1.3rem; font-weight: 700;
+  background: linear-gradient(135deg, #a8e063 20%, #69f0ae 60%, #4fc3f7 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  position: relative; z-index: 1;
+}
+.store-hero-sub {
+  font-size: 0.55rem; color: rgba(255,255,255,0.35);
+  margin-top: 4px; letter-spacing: 0.4px; position: relative; z-index: 1;
+}
+
+/* ── RESOURCES BAR (glass pills) ── */
+.store-res-bar {
+  width: calc(100% - 28px); margin: 0 14px 4px;
+  display: flex; gap: 8px;
+}
+.store-res-pill {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+  border-radius: 16px; padding: 11px 13px;
+  position: relative; overflow: hidden;
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  transition: border-color 0.2s;
+}
+.store-res-pill::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+}
+.store-res-pill.rp-seed {
+  background: rgba(168,224,99,0.06);
+  border: 1px solid rgba(168,224,99,0.18);
+  box-shadow: inset 0 1px 0 rgba(168,224,99,0.08), 0 4px 16px rgba(0,0,0,0.2);
+}
+.store-res-pill.rp-water {
+  background: rgba(41,182,246,0.06);
+  border: 1px solid rgba(41,182,246,0.18);
+  box-shadow: inset 0 1px 0 rgba(41,182,246,0.08), 0 4px 16px rgba(0,0,0,0.2);
+}
+.rp-ico-wrap {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+}
+.rp-seed .rp-ico-wrap  { background: rgba(168,224,99,0.12); border: 1px solid rgba(168,224,99,0.2); }
+.rp-water .rp-ico-wrap { background: rgba(41,182,246,0.12);  border: 1px solid rgba(41,182,246,0.2); }
+.rp-info { display: flex; flex-direction: column; gap: 2px; }
+.rp-lbl { font-size: 0.46rem; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 1.2px; }
+.rp-val { font-size: 1.1rem; font-weight: 700; line-height: 1; }
+.rp-seed  .rp-val { color: #a8e063; }
+.rp-water .rp-val { color: #81d4fa; }
+
+/* ── SECTION DIVIDER ── */
+.store-section {
+  width: calc(100% - 28px); margin: 14px 14px 8px;
+  display: flex; align-items: center; gap: 10px;
+}
+.store-section-line {
+  flex: 1; height: 1px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.08), transparent);
+}
+.store-section-txt {
+  font-size: 0.48rem; font-weight: 700;
+  color: rgba(255,255,255,0.28); text-transform: uppercase; letter-spacing: 1.8px;
+  white-space: nowrap;
+}
+
+/* ── STORE ITEM CARD (glass) ── */
+.store-item {
+  width: calc(100% - 28px); margin: 0 14px 12px;
+  border-radius: 20px; overflow: visible; position: relative;
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  background: rgba(255,255,255,0.04);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.28),
+              inset 0 1px 0 rgba(255,255,255,0.09),
+              inset 0 -1px 0 rgba(0,0,0,0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  /* clip children to border-radius without hiding shadows */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  mask: none;
+}
+.store-item:active { transform: scale(0.985); }
+
+/* top shimmer line */
+.store-item::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.12) 50%, transparent 95%);
+  z-index: 2; pointer-events: none;
+}
+
+/* left color accent bar */
+.store-item::after {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  border-radius: 20px 0 0 20px; z-index: 2; pointer-events: none;
+}
+.si-green { border: 1px solid rgba(168,224,99,0.15); }
+.si-green::after { background: linear-gradient(180deg, #a8e063, rgba(168,224,99,0.1)); }
+.si-blue  { border: 1px solid rgba(41,182,246,0.15); }
+.si-blue::after  { background: linear-gradient(180deg, #29b6f6, rgba(41,182,246,0.1)); }
+.si-cyan  { border: 1px solid rgba(0,188,212,0.18); }
+.si-cyan::after  { background: linear-gradient(180deg, #00bcd4, rgba(0,188,212,0.1)); }
+
+/* inner glow tint per color */
+.si-green { background: linear-gradient(135deg, rgba(168,224,99,0.05) 0%, rgba(255,255,255,0.02) 100%); }
+.si-blue  { background: linear-gradient(135deg, rgba(41,182,246,0.05) 0%, rgba(255,255,255,0.02) 100%); }
+.si-cyan  { background: linear-gradient(135deg, rgba(0,188,212,0.05)  0%, rgba(255,255,255,0.02) 100%); }
+
+.store-item-top {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 14px 14px 18px;
+  border-radius: 20px 20px 0 0;
+}
+.si-icon-wrap {
+  width: 42px; height: 42px; border-radius: 13px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+}
+.si-icon-wrap::before {
+  content: ''; position: absolute; inset: 0; border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 60%);
+}
+.si-green .si-icon-wrap { background: rgba(168,224,99,0.1);  border: 1px solid rgba(168,224,99,0.22); }
+.si-blue  .si-icon-wrap { background: rgba(41,182,246,0.1);  border: 1px solid rgba(41,182,246,0.22); }
+.si-cyan  .si-icon-wrap { background: rgba(0,188,212,0.1);   border: 1px solid rgba(0,188,212,0.22); }
+
+.si-info { flex: 1; min-width: 0; }
+.si-title { font-size: 0.84rem; font-weight: 700; color: rgba(255,255,255,0.92); }
+.si-desc  { font-size: 0.55rem; color: rgba(255,255,255,0.32); margin-top: 3px; line-height: 1.5; }
+
+.si-badge {
+  flex-shrink: 0; display: flex; align-items: center; gap: 4px;
+  border-radius: 30px; padding: 5px 10px;
+  font-size: 0.63rem; font-weight: 700; white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+.si-green .si-badge { background: rgba(168,224,99,0.1); border: 1px solid rgba(168,224,99,0.25); color: #a8e063; }
+.si-blue  .si-badge { background: rgba(41,182,246,0.1);  border: 1px solid rgba(41,182,246,0.25); color: #81d4fa; }
+.si-cyan  .si-badge { background: rgba(0,188,212,0.1);   border: 1px solid rgba(0,188,212,0.25);  color: #4dd0e1; }
+
+/* bottom action area */
+.store-item-bottom {
+  padding: 0 14px 16px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+  border-radius: 0 0 20px 20px;
+  overflow: hidden;
+}
+.store-item-divider {
+  height: 1px; margin: 0 0 2px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+}
+
+/* ── AD BUTTONS ── */
+.ad-btn {
+  width: 100%; padding: 12px 16px; border: none; border-radius: 11px;
+  font-family: 'DynaPuff', cursive; font-size: 0.77rem; font-weight: 700;
+  cursor: pointer; outline: none;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  position: relative; overflow: hidden;
+  transition: filter 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.ad-btn::before {
+  content: ''; position: absolute; top: 0; left: -120%; width: 60%; height: 100%;
+  background: linear-gradient(80deg, transparent, rgba(255,255,255,0.82), transparent);
+  transform: skewX(-20deg);
+  animation: adShimmer 3s ease-in-out infinite;
+}
+@keyframes adShimmer { 0%{left:-120%} 45%{left:150%} 100%{left:150%} }
+.ad-btn:hover  { filter: brightness(1.1); }
+.ad-btn:active { transform: scale(0.97); filter: brightness(0.95); }
+.ad-btn:disabled {
+  opacity: 0.4; cursor: not-allowed;
+  transform: none !important; filter: none;
+  animation: none;
+}
+.ad-btn:disabled::before { display: none; }
+
+.ad-btn-1 {
+  background: linear-gradient(135deg, #388e3c 0%, #1b5e20 100%);
+  color: #ccf5b0;
+  box-shadow: 0 4px 18px rgba(56,142,60,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.ad-btn-3 {
+  background: linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);
+  color: #b3d4ff;
+  box-shadow: 0 4px 18px rgba(25,118,210,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.ad-btn-w {
+  background: linear-gradient(135deg, #0097a7 0%, #00606e 100%);
+  color: #b2f0f5;
+  box-shadow: 0 4px 18px rgba(0,151,167,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.ad-btn .btn-progress {
+  position: absolute; left: 0; bottom: 0; height: 3px; width: 0%;
+  border-radius: 0 0 13px 13px; background: rgba(255,255,255,0.5); transition: none;
+}
+.ad-btn.loading   .btn-progress { transition: width 2.8s linear; width: 100%; }
+.ad-btn.loading-w .btn-progress { transition: width 5.0s linear; width: 100%; }
+.ad-btn .btn-txt { position: relative; z-index: 1; }
+
+/* ── WATER PROGRESS ── */
+.water-prog-row {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.water-prog-label {
+  font-size: 0.52rem; color: rgba(255,255,255,0.28); letter-spacing: 0.5px;
+}
+.water-dots {
+  display: flex; align-items: center; gap: 5px;
+}
+.wd-dot {
+  width: 28px; height: 4px; border-radius: 4px;
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.12);
+  transition: background 0.35s, border-color 0.35s, box-shadow 0.35s;
+}
+.wd-dot.filled {
+  background: linear-gradient(90deg, #29b6f6, #00bcd4);
+  border-color: rgba(41,182,246,0.5);
+  box-shadow: 0 0 8px rgba(41,182,246,0.5);
+}
+
+/* legacy - keep for JS compat */
+.ad-progress-label { display: none; }
+.seed-banner  { display: none; }
+.water-banner { display: none; }
+.store-card   { display: none; }
+
+/* ════════════════════════════════════════
+   INVITE PAGE — GLASSMORPHISM REBUILD
+════════════════════════════════════════ */
+#page-invite { padding: 0 0 36px; gap: 0; }
+
+/* ── INVITE HERO ── */
+.inv-hero {
+  width: 100%; padding: 22px 20px 18px;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  position: relative; text-align: center;
+}
+.inv-hero::before {
+  content: '';
+  position: absolute; top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 300px; height: 180px;
+  background: radial-gradient(ellipse, rgba(255,215,64,0.12) 0%, transparent 70%);
+  filter: blur(24px); pointer-events: none; z-index: 0;
+}
+.inv-hero > * { position: relative; z-index: 1; }
+
+.inv-hero-icon {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: rgba(255,215,64,0.1);
+  border: 1px solid rgba(255,215,64,0.22);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; margin-bottom: 10px;
+  box-shadow: 0 0 28px rgba(255,215,64,0.15), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.inv-hero-title {
+  font-size: 1.1rem; font-weight: 700; color: #fff;
+  text-shadow: 0 0 30px rgba(255,215,64,0.3);
+  letter-spacing: -0.3px;
+}
+.inv-hero-sub {
+  font-size: 0.55rem; color: rgba(255,255,255,0.38);
+  margin-top: 5px; letter-spacing: 0.3px; line-height: 1.6;
+}
+
+/* earn rate badge */
+.inv-rate-badge {
+  margin-top: 12px;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,215,64,0.1);
+  border: 1px solid rgba(255,215,64,0.22);
+  border-radius: 30px; padding: 5px 12px 5px 8px;
+  backdrop-filter: blur(12px);
+}
+.inv-rate-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #ffd740;
+  box-shadow: 0 0 6px rgba(255,215,64,0.8);
+  animation: invDotPulse 2s ease-in-out infinite;
+}
+@keyframes invDotPulse {
+  0%,100%{ transform:scale(1); opacity:1; }
+  50%    { transform:scale(0.5); opacity:0.35; }
+}
+.inv-rate-text { font-size: 0.62rem; font-weight: 700; color: #ffd740; }
+.inv-rate-sub  { font-size: 0.5rem; color: rgba(255,215,64,0.5); }
+
+/* ── STAT CARDS ROW ── */
+.inv-stats {
+  width: 100%; margin: 0 12px;
+  display: flex; gap: 5px;
+  height: 70px;
+  margin-bottom: 5px;
+}
+.inv-stat {
+  flex: 1;
+  background: rgba(255,255,255,0.055);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; padding: 10px 6px 9px;
+  text-align: center;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+  position: relative; overflow: hidden;
+}
+.inv-stat::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
+}
+.inv-stat-ico {
+  font-size: 0.95rem; margin-bottom: 4px; display: block;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+}
+.inv-stat-val {
+  font-size: 0.92rem; font-weight: 700; color: #fff; line-height: 1;
+  display: flex; align-items: center; justify-content: center; gap: 2px;
+}
+.inv-stat-val img { width: 9px; height: 9px; }
+.inv-stat-lbl {
+  font-size: 0.45rem; color: rgba(255,255,255,0.38);
+  text-transform: uppercase; letter-spacing: 0.7px; margin-top: 3px;
+}
+.inv-stat.s-gold  { border-color: rgba(255,215,64,0.18); }
+.inv-stat.s-blue  { border-color: rgba(0,200,255,0.18); }
+.inv-stat.s-green { border-color: rgba(105,240,174,0.18); }
+.inv-stat.s-gold  .inv-stat-val { color: #ffd740; }
+.inv-stat.s-blue  .inv-stat-val { color: #00e5ff;}
+.inv-stat.s-green .inv-stat-val { color: #69f0ae; }
+
+/* ── LINK CARD ── */
+.inv-link-card {
+  width: calc(100% - 28px); margin: 0 14px;
+  background: rgba(255,255,255,0.058);
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 22px; padding: 18px 16px;
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.11);
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+.inv-section-label {
+  font-size: 0.54rem; font-weight: 700;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase; letter-spacing: 1.8px;
+  display: flex; align-items: center; gap: 5px;
+}
+.inv-section-label::before {
+  content: ''; width: 2px; height: 9px; border-radius: 2px;
+  background: linear-gradient(180deg,#ffd740,rgba(255,215,64,0.15));
+  display: inline-block;
+}
+
+/* link input row */
+.inv-link-row {
+  display: flex; gap: 0; width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; overflow: hidden;
+}
+.inv-link-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  padding: 12px 14px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.68rem; color: rgba(255,255,255,0.7);
+  min-width: 0;
+}
+.inv-link-input::selection { background: rgba(255,215,64,0.25); }
+.inv-copy-btn {
+  padding: 0 14px; flex-shrink: 0;
+  background: rgba(255,215,64,0.12);
+  border-left: 1px solid rgba(255,255,255,0.08);
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.68rem; font-weight: 700; color: #ffd740;
+  cursor: pointer; white-space: nowrap;
+  display: flex; align-items: center; gap: 5px;
+  transition: background 0.15s;
+}
+.inv-copy-btn:active { background: rgba(255,215,64,0.22); }
+
+/* glass divider */
+.inv-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.09), transparent);
+}
+
+/* share button */
+.inv-share-btn {
+  width: 100%; padding: 14px;
+  border: none; border-radius: 16px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.86rem; font-weight: 700;
+  cursor: pointer; color: #0d0500;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: linear-gradient(105deg,#ffd740 0%,#ffb300 50%,#ff8f00 100%);
+  box-shadow: 0 6px 26px rgba(255,180,0,0.4), inset 0 1px 0 rgba(255,255,255,0.22);
+  position: relative; overflow: hidden;
+  transition: transform 0.13s, filter 0.2s, box-shadow 0.2s;
+}
+.inv-share-btn::before {
+  content: '';
+  position: absolute; top: 0; left: -120%; width: 70%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+  transform: skewX(-20deg);
+  animation: invShimmer 3.6s ease-in-out infinite;
+}
+@keyframes invShimmer { 0%{left:-120%} 40%{left:150%} 100%{left:150%} }
+.inv-share-btn:hover  { filter:brightness(1.08); box-shadow:0 8px 30px rgba(255,180,0,0.55); }
+.inv-share-btn:active { transform:scale(0.97); }
+
+/* ── HOW IT WORKS ── */
+.inv-how {
+  width: calc(100% - 28px); margin: 7px 14px;
+  background: rgba(255,255,255,0.038);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px; padding: 16px 14px;
+  backdrop-filter: blur(20px);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.inv-how-title {
+  font-size: 0.56rem; font-weight: 700;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase; letter-spacing: 1.8px;
+  display: flex; align-items: center; gap: 5px;
+}
+.inv-how-title::before {
+  content: ''; width: 2px; height: 9px; border-radius: 2px;
+  background: linear-gradient(180deg,#69f0ae,rgba(105,240,174,0.15));
+  display: inline-block;
+}
+.inv-how-step {
+  display: flex; align-items: center; gap: 12px;
+}
+.inv-how-num {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem; font-weight: 700; color: #fff;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.inv-how-num.n1 { background:rgba(255,215,64,0.15); border-color:rgba(255,215,64,0.3); color:#ffd740; }
+.inv-how-num.n2 { background:rgba(0,200,255,0.15);  border-color:rgba(0,200,255,0.3);  color:#00e5ff; }
+.inv-how-num.n3 { background:rgba(105,240,174,0.15);border-color:rgba(105,240,174,0.3);color:#69f0ae; }
+.inv-how-txt { display: flex; flex-direction: column; gap: 2px; }
+.inv-how-txt b   { font-size: 0.72rem; color: rgba(255,255,255,0.88); font-weight: 700; }
+.inv-how-txt span{ font-size: 0.58rem; color: rgba(255,255,255,0.38); line-height: 1.4; }
+.inv-how-sep {
+  height: 1px; margin-left: 40px;
+  background: rgba(255,255,255,0.05);
+}
+
+/* legacy */
+.referral-notice { display: none; }
+.link-row        { display: none; }
+.stat-row        { display: none; }
+.stat-box        { display: none; }
+.link-copy-btn   { display: none; }
+
+/* ════════════════════════════
+   PAGE ENTER ANIMATION
+   .pg-item starts at -70px, slides to 0
+════════════════════════════ */
+.pg-item {
+  will-change: transform, opacity;
+  transform: translateY(-70px);
+  opacity: 0;
+}
+
+/* ════════════════════════════════════════
+   WITHDRAW PAGE — GLASSMORPHISM REBUILD
+   All backgrounds transparent/frosted,
+   blue body shows through everywhere
+════════════════════════════════════════ */
+#page-withdraw { padding: 0 0 36px; gap: 0; }
+
+/* ── 1. BALANCE HERO ── */
+.wd-hero {
+  width: 100%; padding: 32px 20px 28px;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  position: relative;
+}
+/* subtle radial glow behind the number */
+.wd-hero::before {
+  content: '';
+  position: absolute; top: 10px; left: 50%;
+  transform: translateX(-50%);
+  width: 280px; height: 160px;
+  background: radial-gradient(ellipse, rgba(0,180,255,0.18) 0%, transparent 70%);
+  filter: blur(20px); pointer-events: none; z-index: 0;
+}
+.wd-hero > * { position: relative; z-index: 1; }
+
+.wd-hero-eyebrow {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.52rem; color: rgba(180,220,255,0.5);
+  text-transform: uppercase; letter-spacing: 2.5px; margin-bottom: 10px;
+}
+.wd-hero-eyebrow-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #00c8ff;
+  box-shadow: 0 0 6px rgba(0,200,255,0.8);
+  animation: wdDotBeat 2s ease-in-out infinite;
+}
+@keyframes wdDotBeat {
+  0%,100%{ transform:scale(1); opacity:1; }
+  50%    { transform:scale(0.55); opacity:0.35; }
+}
+
+/* big balance number */
+.wd-hero-val {
+  font-size: 3.6rem; font-weight: 700; line-height: 1;
+  color: #fff; letter-spacing: -2px;
+  display: flex; align-items: center; gap: 12px;
+  filter: drop-shadow(0 0 28px rgba(0,200,255,0.35));
+}
+.wd-hero-val img {
+  width: 23px; height: 23px;
+  filer: drop-shadow(0 0 10px rgba(0,200,255,0.9));
+  animation: wdCoinGlow 3s ease-in-out infinite;
+}
+@keyframes wdCoinGlow {
+  0%,100%{ filter:drop-shadow(0 0 8px rgba(0,180,255,0.7)); }
+  50%    { filter:drop-shadow(0 0 22px rgba(0,230,255,1.0)); }
+}
+
+.wd-hero-currency {
+  font-size: 1rem; font-weight: 700; color: rgba(0,200,255,0.7);
+  letter-spacing: 1px; align-self: flex-end; margin-bottom: 8px;
+}
+
+.wd-hero-sub {
+  font-size: 0.55rem; color: rgba(180,220,255,0.38);
+  margin-top: 8px; letter-spacing: 0.4px;
+}
+
+/* Faucet Pay pill */
+.wd-fp-pill {
+  margin-top: 18px;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 30px; padding: 6px 14px 6px 6px;
+  backdrop-filter: blur(12px);
+}
+.wd-fp-dot {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg,#ff7043 0%,#b71c1c 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem;
+  box-shadow: 0 3px 12px rgba(255,80,40,0.45);
+}
+.wd-fp-info { display: flex; flex-direction: column; gap: 1px; }
+.wd-fp-name { font-size: 0.68rem; font-weight: 700; color: #ff8a65; line-height: 1; }
+.wd-fp-sub  { font-size: 0.5rem; color: rgba(255,255,255,0.35); }
+
+/* ── 2. GLASS FORM CARD ── */
+.wd-card {
+  width: calc(100% - 28px); margin: 4px 14px 0;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 22px; padding: 20px 16px 18px;
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.28),
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    inset 0 -1px 0 rgba(0,0,0,0.1);
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+/* field group */
+.wd-field { display: flex; flex-direction: column; gap: 7px; }
+.wd-label {
+  font-size: 0.55rem; font-weight: 700;
+  color: rgba(180,220,255,0.55);
+  text-transform: uppercase; letter-spacing: 1.8px;
+  display: flex; align-items: center; gap: 5px;
+}
+.wd-label::before {
+  content: ''; width: 2px; height: 9px; border-radius: 2px;
+  background: linear-gradient(180deg,#00c8ff,rgba(0,200,255,0.2));
+  display: inline-block;
+}
+
+/* glass inputs */
+.wd-input {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; padding: 13px 15px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.84rem; color: #fff; outline: none;
+  transition: border-color 0.22s, box-shadow 0.22s, background 0.22s;
+  backdrop-filter: blur(8px);
+}
+.wd-input::placeholder { color: rgba(255,255,255,0.22); }
+.wd-input:focus {
+  border-color: rgba(0,200,255,0.55);
+  box-shadow: 0 0 0 3px rgba(0,200,255,0.1), inset 0 0 12px rgba(0,200,255,0.04);
+  background: rgba(0,200,255,0.07);
+}
+
+/* quick % chips */
+.wd-chips { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; }
+.wd-chip {
+  padding: 8px 4px; text-align: center; cursor: pointer;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 11px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.64rem; font-weight: 700; color: rgba(255,255,255,0.5);
+  transition: all 0.14s; backdrop-filter: blur(6px);
+}
+.wd-chip:active { transform: scale(0.93); }
+.wd-chip:hover  {
+  background: rgba(0,200,255,0.14);
+  border-color: rgba(0,200,255,0.4);
+  color: #00e5ff;
+  box-shadow: 0 0 10px rgba(0,200,255,0.15);
+}
+.wd-chip.wd-chip-max {
+  background: rgba(0,200,255,0.12);
+  border-color: rgba(0,200,255,0.38);
+  color: #00e5ff;
+}
+
+/* amount input wrapper */
+.wd-amount-row .wd-input {
+  font-size: 1.05rem; letter-spacing: 0.4px; font-weight: 700;
+}
+
+/* glass divider */
+.wd-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+}
+
+/* ── SUBMIT BUTTON ── */
+.wd-submit {
+  width: 100%; padding: 15px;
+  border: none; border-radius: 16px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.88rem; font-weight: 700;
+  cursor: pointer; color: #fff;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: url(background.png);
+  box-shadow:
+    0 6px 28px rgba(0,150,234,0.45),
+    inset 0 1px 0 rgba(255,255,255,0.2);
+  position: relative; overflow: hidden;
+  transition: transform 0.13s, box-shadow 0.2s, filter 0.2s;
+}
+.wd-submit::before {
+  content: '';
+  position: absolute; top: 0; left: -120%; width: 80%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,55,255,9.02), transparent);
+  transform: skewX(-20deg);
+  animation: wdShimmer 3.4s ease-in-out infinite;
+ 
+}
+@keyframes wdShimmer { 0%{left:-120%} 42%{left:100%} 100%{left:150%} }
+.wd-submit:hover  { filter: brightness(1.1); box-shadow: 0 8px 34px rgba(0,150,234,0.6); }
+.wd-submit:active { transform: scale(0.97); }
+.wd-submit:disabled { opacity: 0.38; cursor: not-allowed; transform: none !important; filter: none; }
+
+/* meta row */
+.wd-meta {
+  display: flex; align-items: center; justify-content: center;
+  gap: 5px; font-size: 0.57rem; color: rgba(255,255,255,0.25); flex-wrap: wrap;
+}
+.wd-meta-dot { opacity: 0.2; }
+
+/* ── 3. SECURITY STRIP ── */
+.wd-security {
+  width: calc(100% - 28px); margin: 12px 14px 0;
+  display: flex; gap: 8px;
+}
+.wd-sec {
+  flex: 1;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 16px; padding: 13px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  backdrop-filter: blur(16px);
+  transition: background 0.2s, border-color 0.2s;
+}
+.wd-sec:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.14);
+}
+.wd-sec-ico {
+  width: 32px; height: 32px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; font-size: 1rem;
+}
+.wd-sec-ico.i-enc  { background: rgba(105,240,174,0.12); box-shadow: 0 2px 8px rgba(105,240,174,0.15); }
+.wd-sec-ico.i-fast { background: rgba(255,215,64,0.12);  box-shadow: 0 2px 8px rgba(255,215,64,0.15); }
+.wd-sec-ico.i-free { background: rgba(0,200,255,0.12);   box-shadow: 0 2px 8px rgba(0,200,255,0.15); }
+.wd-sec-t { font-size: 0.61rem; font-weight: 700; color: rgba(255,255,255,0.85); }
+.wd-sec-s { font-size: 0.5rem; color: rgba(255,255,255,0.35); text-align: center; line-height: 1.4; }
+
+/* ── 4.  ── */
+.wd-hist-wrap { width: 100%; padding: 20px 14px 0; }
+.wd-hist-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.wd-hist-title {
+  font-size: 0.58rem; font-weight: 700;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase; letter-spacing: 1.8px;
+  display: flex; align-items: center; gap: 7px;
+}
+.wd-hist-title::before {
+  content: ''; display: inline-block;
+  width: 3px; height: 14px; border-radius: 2px;
+  background: linear-gradient(180deg, #00c8ff, transparent);
+}
+.wd-hist-count {
+  font-size: 0.54rem; font-weight: 700;
+  color: rgba(0,200,255,0.6);
+  background: rgba(0,200,255,0.08);
+  border: 1px solid rgba(0,200,255,0.18);
+  border-radius: 20px; padding: 2px 9px;
+}
+
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+.history-empty {
+  text-align: center; font-size: 0.7rem; color: rgba(255,255,255,0.5);
+  padding: 30px 20px; line-height: 1.8;
+  background: rgba(0,0,0,0.73);
+  border: 1px dashed rgba(255,255,255,0.38);
+  border-radius: 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  text-shadow: 0 5px 8px navy;
+}
+.history-empty::before { content: '📭'; font-size: 2rem; opacity: 0.3; }
+
+.history-item {
+  background: rgba(255,255,255,0.055);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 16px; padding: 13px 14px 13px 17px;
+  display: flex; align-items: center; justify-content: space-between;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  position: relative; overflow: hidden;
+  transition: background 0.2s, border-color 0.2s;
+}
+.history-item:active { background: rgba(255,255,255,0.08); }
+/* accent left bar */
+.history-item::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, rgba(0,200,255,0.85), rgba(0,200,255,0.05));
+  border-radius: 16px 0 0 16px;
+}
+.history-item.done::before {
+  background: linear-gradient(180deg, rgba(105,240,174,0.9), rgba(105,240,174,0.05));
+}
+/* top shine line */
+.history-item::after {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.1) 50%, transparent 90%);
+}
+.hi-left { display: flex; flex-direction: column; gap: 4px; }
+.hi-left .hi-account { font-size: 0.75rem; font-weight: 700; color: rgba(255,255,255,0.9); }
+.hi-left .hi-date    { font-size: 0.57rem; color: rgba(255,255,255,0.35); }
+.hi-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.hi-right .hi-amount {
+  font-size: 0.9rem; font-weight: 700; color: #fff;
+  display: flex; align-items: center; gap: 4px; justify-content: flex-end;
+}
+.hi-right .hi-status { font-size: 0.55rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; display: inline-block; }
+.hi-status.pending { background: rgba(255,215,64,0.1);  color: #ffd740; border: 1px solid rgba(255,215,64,0.2); }
+.hi-status.done    { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
+
+/* ── COIN REWARD ANIMATION ── */
+@keyframes rewardTextFloat {
+  0%   { opacity: 1; transform: translateX(-50%) translateY(0) scale(0.85); }
+  20%  { opacity: 1; transform: translateX(-50%) translateY(-8px) scale(1.12); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-50px) scale(0.9); }
+}
+.reward-text {
+  position: absolute;
+  left: 50%; top: 12%;
+  pointer-events: none;
+  z-index: 51;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.86rem; font-weight: 700;
+  color: #ffd740;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.8), 0 0 16px rgba(255,215,64,0.6);
+  white-space: nowrap;
+  animation: rewardTextFloat 0.9s cubic-bezier(.22,.68,0,1.1) forwards;
+  will-change: transform, opacity;
+}
+
+.ton-fly-coin {
+  position: fixed;
+  width: 54px; height: 54px;
+  pointer-events: none;
+  z-index: 9999;
+  border-radius: 50%;
+  filter: drop-shadow(0 0 14px rgba(0,152,234,0.9)) drop-shadow(0 0 28px rgba(0,152,234,0.5));
+  will-change: transform, opacity, left, top, width, height;
+  transition: none;
+}
+
+@keyframes balancePop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.3); color: #ffd740; }
+  100% { transform: scale(1); }
+}
+.balance-pop { animation: balancePop 0.45s cubic-bezier(.34,1.56,.64,1) forwards; }
+
+/* ── SMART HINT BANNER ── */
+#smart-hint-bar {
+  position: fixed;
+  bottom: calc(var(--nb-h) + 10px);
+  left: 50%; transform: translateX(-50%) translateY(20px);
+  z-index: 400;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(8,4,0,0.93);
+  border: 1px solid rgba(255,215,64,0.28);
+  border-radius: 22px; padding: 9px 18px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.76rem; font-weight: 700;
+  color: #fff8e1;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,215,64,0.08);
+  pointer-events: none;
+  max-width: calc(100vw - 40px);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.35s cubic-bezier(.34,1.56,.64,1);
+  backdrop-filter: blur(12px);
+}
+#smart-hint-bar.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+#smart-hint-bar .sh-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--gold); flex-shrink: 0;
+  animation: shDotPulse 1.4s ease-in-out infinite;
+}
+@keyframes shDotPulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.7); }
+}
+
+#toast {
+  position: fixed; bottom: calc(var(--nb-h) + 14px); left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: rgba(6,3,0,0.92); border: 1px solid rgba(255,255,255,0.09);
+  color: #fff; padding: 11px 24px; border-radius: 28px;
+  font-size: 0.82rem; font-weight: 700;
+  z-index: 999; pointer-events: none;
+  transition: transform 0.28s cubic-bezier(.22,1.4,.36,1), opacity 0.22s;
+  opacity: 0; white-space: nowrap;
+  box-shadow: 0 6px 28px rgba(0,0,0,0.5); backdrop-filter: blur(10px);
+}
+#toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+@media (max-width: 380px) {
+  .cell .c-inner .c-emoji { font-size: 2.5rem; }
+  .farm-header h1 { font-size: 1.45rem; }
+  .bal-left .amount { font-size: 1.35rem; }
+  .nb-btn span { font-size: 0.5rem; }
+}
+
+/* ── TOOLTIP HINTS ── */
+.hint-bubble {
+  position: fixed;
+  z-index: 500;
+  background: rgba(10,6,2,0.94);
+  border: 1px solid rgba(255,215,64,0.35);
+  border-radius: 14px;
+  padding: 10px 16px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #fff8e1;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,215,64,0.1);
+  pointer-events: none;
+  max-width: 220px;
+  text-align: center;
+  line-height: 1.5;
+  animation: hintIn 0.32s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+.hint-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -7px; left: 50%;
+  transform: translateX(-50%);
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid rgba(255,215,64,0.35);
+}
+.hint-bubble.hint-fade { animation: hintOut 0.28s ease forwards; }
+@keyframes hintIn  { 0%{opacity:0;transform:translateY(8px) scale(0.93)} 100%{opacity:1;transform:translateY(0) scale(1)} }
+@keyframes hintOut { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-6px) scale(0.95)} }
+.user-fhoto img{
+  width: 65px;
+  height: 65px;
+  border-radius: 50%;
+  position: absolute;
+  left: 43%;
+  top: 15%;
+  z-index: 5;
+}
+.loadAd{
+  display: inline-flex;
+  align-items: center;
+  column-gap: 10px;
+ 
+}
+</style>
+</head>
+<body>
+
+<!-- PAGE: FARM -->
+<div id="page-farm" class="page active">
+
+  <!-- HUD BAR -->
+  <div class="farm-hud pg-item">
+    <div class="hud-balance">
+      <span class="hud-bal-lbl"></span>
+      <div class="hud-bal-val">
+        <span id="bal-val" style="font-size: 22px;">0.0000</span>
+        <img src="asesst/toncoin.png" alt="TON">
+      </div>
+      <svg class="hud-sparkline" id="sparkline" width="4" height="2" viewBox="0 0 44 22">
+        <polyline id="sparkline-line" points="0,20 7,20 14,20 21,20 28,20 35,20 44,20"
+          fill="none" stroke="rgba(0,152,234,0.55)" stroke-width="1.5"
+          stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="hud-pills">
+      <div class="hud-pill hp-seed">🌱 <span id="seeds-val">3</span></div>
+      <div class="hud-pill hp-water">💧 <span id="water-badge">3</span></div>
+    </div>
+  </div>
+
+  <!-- USER PHOTO below HUD -->
+  <div class="hud-user-photo pg-item">
+    <img src="user.jpg" alt="user">
+  </div>
+
+  <!-- HERO: scene + plots overlaid -->
+  <div class="farm-hero pg-item">
+    <div class="farm-hero-bg"></div>
+    <div class="farm-hero-overlay"></div>
+    <div class="farm-hero-title">
+      <img src="asesst/tomate.png" > Tomato Farm
+    </div>
+    <div class="farm-hero-sub">Tap a plot · Water to 2× · Harvest when glowing</div>
+    
+
+    <!-- plots live inside the hero -->
+    <div class="farm-plots-wrap">
+      <div class="farm-label">🌾 Your Plots🌾</div>
+      <div class="farm-grid" id="farm-grid"></div>
+    </div>
+  </div>
+
+  <!-- EDGE GLOW overlay -->
+  <div class="edge-glow" id="edge-glow"></div>
+
+  <!-- QUICK ACTIONS -->
+  <div class="farm-actions pg-item">
+    <button class="farm-btn fb-water" id="btn-water" onclick="setFarmMode('water')">
+      💧 Water <span class="w-badge" id="water-badge-btn">3</span>
+    </button>
+    <button class="farm-btn fb-harvest" onclick="harvestAll()">🚜 Harvest All</button>
+  </div>
+
+  <div id="farm-mode-hint" class="pg-item">👆 Tap any plot to plant a tomato</div>
+
+  <!-- FARM STATS collapsible -->
+  <div class="farm-stats-wrap pg-item">
+    <button class="farm-stats-toggle" id="stats-toggle" onclick="toggleFarmStats()">
+      <span>📊 Farm Stats</span>
+      <span class="fs-chevron">▾</span>
+    </button>
+    <div class="farm-stats-body" id="stats-body">
+      <div class="fs-item">
+        <span class="fs-val" id="stat-harvests">0</span>
+        <span class="fs-lbl">Harvests</span>
+      </div>
+      <div class="fs-item">
+        <span class="fs-val" id="stat-today">0.0000</span>
+        <span class="fs-lbl">Earned Today</span>
+      </div>
+      <div class="fs-item">
+        <span class="fs-val" id="stat-eta">—</span>
+        <span class="fs-lbl">Next Harvest</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- hidden compat elements for updateStats refs -->
+  <div style="display:none">
+    <span id="day-val">1</span>
+    <span id="slots-val">0/3</span>
+    <span id="wd-bal-hidden">0.0000</span>
+  </div>
+</div>
+
+<!-- PAGE: TASKS -->
+<div id="page-tasks" class="page">
+  <div class="page-header pg-item">
+    <h2><img src="asesst/task.gif" width="28"> Tasks</h2>
+    <p>Complete tasks to earn bonus seeds</p>
+  </div>
+
+  <div class="task-card pg-item" id="task-earn-channel">
+    <div class="task-icon">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.43 13.67l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.718.889z"/>
+      </svg>
+    </div>
+    <div class="task-body">
+      <div class="task-title">Join Earn Channel</div>
+      <div class="task-desc">Subscribe on Telegram to unlock rewards</div>
+      <div class="task-meta">
+        <div class="task-reward">+10 🌱 Seeds</div>
+      </div>
+    </div>
+    <div class="task-action">
+      <button class="task-btn" id="task-btn-ec" onclick="handleEarnChannelTask()">
+        <div class="task-btn-progress" id="task-prog-ec"></div>
+        <span id="task-txt-ec">Join</span>
+      </button>
+      <div class="task-status" id="task-status-ec">✅ Done</div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: STORE -->
+<div id="page-store" class="page">
+
+  <!-- Hero -->
+  <div class="store-hero pg-item">
+    <div class="store-hero-title">🛒 Store</div>
+    <div class="store-hero-sub">Watch ads · Earn resources · Grow faster</div>
+  </div>
+
+  <!-- Resources bar -->
+  <div class="store-res-bar pg-item">
+    <div class="store-res-pill rp-seed">
+      <div class="rp-ico-wrap">🌱</div>
+      <div class="rp-info">
+        <div class="rp-lbl">Seeds</div>
+        <div class="rp-val" id="store-seeds-val">3</div>
+      </div>
+    </div>
+    <div class="store-res-pill rp-water">
+      <div class="rp-ico-wrap">💧</div>
+      <div class="rp-info">
+        <div class="rp-lbl">Water</div>
+        <div class="rp-val" id="store-water-val">3</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seeds section -->
+  <div class="store-section pg-item">
+    <div class="store-section-txt">🌱 Seed Packs</div>
+    <div class="store-section-line"></div>
+  </div>
+
+  <!-- Quick Watch -->
+  <div class="store-item si-green pg-item">
+    <div class="store-item-top">
+      <div class="si-icon-wrap"><img src="asesst/watch.gif" width="50"></div>
+      <div class="si-info">
+        <div class="si-title">Quick Watch</div>
+        <div class="si-desc">One short ad · 30 sec · instant seed</div>
+      </div>
+      <div class="si-badge">+1 🌱</div>
+    </div>
+    <div class="store-item-bottom">
+      <div class="store-item-divider"></div>
+      <button class="ad-btn ad-btn-1" id="ad-btn-1" onclick="watchAd(1)">
+        <div class="btn-progress" id="prog-1"></div>
+        <span class="btn-txt" id="txt-1">▶ Watch Ad → Get 1 Seed</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Seed Bundle -->
+  <div class="store-item si-blue pg-item">
+    <div class="store-item-top">
+      <div class="si-icon-wrap"><img src="asesst/ads.gif" width="50"></div>
+      <div class="si-info">
+        <div class="si-title">Seed Bundle</div>
+        <div class="si-desc">Three ads · triple your planting power</div>
+      </div>
+      <div class="si-badge">+3 🌱</div>
+    </div>
+    <div class="store-item-bottom">
+      <div class="store-item-divider"></div>
+      <button class="ad-btn ad-btn-3" id="ad-btn-3" onclick="watchAd(3)">
+        <div class="btn-progress" id="prog-3"></div>
+        <span class="btn-txt" id="txt-3">▶▶ Watch 3 Ads → Get 3 Seeds</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Water section -->
+  <div class="store-section pg-item">
+    <div class="store-section-txt">💧 Water Supply</div>
+    <div class="store-section-line"></div>
+  </div>
+
+  <!-- Water Bundle -->
+  <div class="store-item si-cyan pg-item">
+    <div class="store-item-top">
+      <div class="si-icon-wrap" style="font-size:1.25rem">💧</div>
+      <div class="si-info">
+        <div class="si-title">Water Bundle</div>
+        <div class="si-desc">Watch 2 ads · halve your harvest wait time</div>
+      </div>
+      <div class="si-badge">+3 💧</div>
+    </div>
+    <div class="store-item-bottom">
+      <div class="store-item-divider"></div>
+      <button class="ad-btn ad-btn-w" id="ad-btn-w" onclick="watchWaterAd()">
+        <div class="btn-progress" id="prog-w"></div>
+        <span class="btn-txt" id="txt-w">💧 Watch 2 Ads → Get 3 Waters</span>
+      </button>
+      <div class="water-prog-row" id="water-ad-progress">
+        <span class="water-prog-label">Progress</span>
+        <div class="water-dots">
+          <div class="wd-dot" id="wdot-1"></div>
+          <div class="wd-dot" id="wdot-2"></div>
+        </div>
+        <span class="water-prog-label">2 ads</span>
+        <span id="water-ad-count" style="display:none">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- legacy hidden refs -->
+  <div style="display:none">
+    <div class="seed-banner"><div class="sb-left"><div class="sb-val" id="store-seeds-val-legacy">3</div></div></div>
+    <div class="water-banner"><div class="wb-left"><div class="wb-val" id="store-water-val-legacy">3</div></div></div>
+    <div class="store-card"></div>
+  </div>
+
+</div>
+
+<!-- PAGE: INVITE -->
+<div id="page-invite" class="page">
+
+  <!-- ① HERO -->
+  <div class="inv-hero pg-item">
+    <div class="inv-hero-icon"><img src="asesst/blue.gif" width="40"></div>
+    <div class="inv-hero-title">Invite Friends</div>
+    <div class="inv-hero-sub">
+      Share your link and earn passively<br>from every harvest your friends make
+    </div>
+    <div class="inv-rate-badge">
+      <div class="inv-rate-dot"></div>
+      <div class="inv-rate-text">5% Commission</div>
+      <div class="inv-rate-sub">· per friend · forever</div>
+    </div>
+  </div>
+
+  <!-- ② STATS ROW -->
+  <div class="inv-stats pg-item">
+    <div class="inv-stat s-gold">
+      <span class="inv-stat-ico">👥</span>
+      <div class="inv-stat-val" id="ref-friends">0</div>
+      <div class="inv-stat-lbl">Friends</div>
+    </div>
+    <div class="inv-stat s-blue">
+      <span class="inv-stat-ico"><img src="asesst/toncoin.png" width="23"></span>
+      <div class="inv-stat-val">
+        <span id="ref-earned-val">0.0000</span>
+        <img src="asesst/toncoin.png" alt="TON">
+      </div>
+      <div class="inv-stat-lbl">Ref. Earned</div>
+    </div>
+    <div class="inv-stat s-green">
+      <span class="inv-stat-ico">📈</span>
+      <div class="inv-stat-val">
+        <span id="ref-estimate">0.0000</span>
+        <img src="asesst/toncoin.png" alt="TON">
+      </div>
+      <div class="inv-stat-lbl">Est./Friend</div>
+    </div>
+  </div>
+
+  <!-- ③ LINK CARD -->
+  <div class="inv-link-card pg-item">
+
+    <div class="inv-section-label">Your Referral Link</div>
+
+    <div class="inv-link-row">
+      <input class="inv-link-input" id="ref-link" type="text"
+             value="https://t.me/TomatoFarmBot?start=ref_xxxxxx" readonly>
+      <button class="inv-copy-btn" onclick="copyLink()">
+        <img src="asesst/copy.png" width="25"> Copy
+      </button>
+    </div>
+
+    <div class="inv-rule"></div>
+
+    <button class="inv-share-btn" onclick="shareLink()">
+      <img src="asesst/share.gif" width="20"> Share Invite Link
+    </button>
+
+  </div>
+
+  <!-- ④ HOW IT WORKS -->
+  <div class="inv-how pg-item">
+    <div class="inv-how-title">How It Works</div>
+
+    <div class="inv-how-step">
+      <div class="inv-how-num n1">1</div>
+      <div class="inv-how-txt">
+        <b>Share your link</b>
+        <span>Send it to friends on Telegram or any platform</span>
+      </div>
+    </div>
+    <div class="inv-how-sep"></div>
+
+    <div class="inv-how-step">
+      <div class="inv-how-num n2">2</div>
+      <div class="inv-how-txt">
+        <b>Friend joins & farms</b>
+        <span>They plant tomatoes and harvest TON rewards</span>
+      </div>
+    </div>
+    <div class="inv-how-sep"></div>
+
+    <div class="inv-how-step">
+      <div class="inv-how-num n3">3</div>
+      <div class="inv-how-txt">
+        <b>You earn 5% automatically</b>
+        <span>Every harvest they make adds to your balance</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- PAGE: WITHDRAW -->
+<div id="page-withdraw" class="page">
+
+  <!-- ① HERO BALANCE -->
+  <div class="wd-hero pg-item">
+    <div class="wd-hero-eyebrow">
+      <div class="wd-hero-eyebrow-dot"></div>
+      Available Balance
+    </div>
+    <div class="wd-hero-val">
+      <img src="asesst/toncoin.png" width="2" alt="TON">
+      <span id="wd-bal" style="font-size: 23px;">0.0000</span>
+      <span class="wd-hero-currency">TON</span>
+    </div>
+    <div class="wd-hero-sub">Syncs live after every harvest</div>
+    <div class="wd-fp-pill">
+      <div class="wd-fp-dot">⚡</div>
+      <div class="wd-fp-info">
+        <div class="wd-fp-name">Faucet Pay</div>
+        <div class="wd-fp-sub">Instant TON micro-payments</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② GLASS FORM CARD -->
+  <div class="wd-card pg-item">
+
+    <!-- Email field -->
+    <div class="wd-field">
+      <label class="wd-label">Faucet Pay Email</label>
+      <input class="wd-input" id="wd-fastpay" type="email"
+             placeholder="your@email.com" autocomplete="email">
+    </div>
+
+    <!-- Amount field -->
+    <div class="wd-field">
+      <label class="wd-label">Amount (TON)</label>
+      <div class="wd-chips">
+        <button class="wd-chip" onclick="setWdPct(0.25)">25%</button>
+        <button class="wd-chip" onclick="setWdPct(0.5)">50%</button>
+        <button class="wd-chip" onclick="setWdPct(0.75)">75%</button>
+        <button class="wd-chip wd-chip-max" onclick="setWdPct(1)">MAX</button>
+      </div>
+      <div class="wd-amount-row">
+        <input class="wd-input" id="wd-amount" type="number"
+               placeholder="0.0000" step="0.0001" min="0">
+      </div>
+    </div>
+
+    <div class="wd-rule"></div>
+
+    <!-- Submit -->
+    <button class="wd-submit" onclick="submitWithdraw()">
+      ⚡ Withdraw via Faucet Pay
+    </button>
+
+    <!-- Meta -->
+    <div class="wd-meta">
+      <span>Min 0.0010 <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"></span>
+      <span class="wd-meta-dot">·</span>
+      <span>Processed in 24h</span>
+      <span class="wd-meta-dot">·</span>
+      <span>Zero fees</span>
+    </div>
+
+  </div>
+
+  <!-- ③ SECURITY STRIP -->
+  <div class="wd-security pg-item">
+    <div class="wd-sec">
+      <div class="wd-sec-ico i-enc">🔒</div>
+      <div class="wd-sec-t">Encrypted</div>
+      <div class="wd-sec-s">SSL secured</div>
+    </div>
+    <div class="wd-sec">
+      <div class="wd-sec-ico i-fast">⚡</div>
+      <div class="wd-sec-t">Fast</div>
+      <div class="wd-sec-s">Within 24h</div>
+    </div>
+    <div class="wd-sec">
+      <div class="wd-sec-ico i-free"><img src="asesst/toncoin.png" width="17" ></div>
+      <div class="wd-sec-t">No Fees</div>
+      <div class="wd-sec-s">100% yours</div>
+    </div>
+  </div>
+
+  <!-- ④ HISTORY -->
+  <div class="wd-hist-wrap pg-item">
+    <div class="wd-hist-head">
+      <div class="wd-hist-title">Withdrawal History</div>
+      <div class="wd-hist-count" id="wd-hist-count">0 records</div>
+    </div>
+    <div class="history-list" id="history-list">
+      <div class="history-empty">No withdrawals yet<br>Your history will appear here</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- NAVBAR -->
+<nav id="navbar">
+  <button class="nb-btn active" onclick="switchPage('farm')" id="nb-farm">
+    <svg viewBox="0 0 24 24"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+    <span>Farm</span>
+  </button>
+  <button class="nb-btn" onclick="switchPage('tasks')" id="nb-tasks">
+    <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
+    <span>Tasks</span>
+  </button>
+  <button class="nb-btn" onclick="switchPage('store')" id="nb-store">
+    <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+    <span>Store</span>
+  </button>
+  <button class="nb-btn" onclick="switchPage('invite')" id="nb-invite">
+    <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6"/><path d="M16 11l3 3-3 3M19 14h-6"/></svg>
+    <span>Invite</span>
+  </button>
+  <button class="nb-btn" onclick="switchPage('withdraw')" id="nb-withdraw">
+    <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><circle cx="7" cy="15" r="1.2" fill="currentColor" stroke="none"/></svg>
+    <span>Withdraw</span>
+  </button>
+</nav>
+
+<div id="toast"></div>
+<div id="smart-hint-bar"><span class="sh-dot"></span><span id="sh-text"></span></div>
+
+<script>
+'use strict';
+
+const TOMATO  = { reward: 0.0001, growTime: 30 };
+const LIMIT   = 3;
+const REF_PCT = 0.05;
+
+let balance         = 0.0;
+let referralBalance = 0.0;
+let referralFriends = 0;
+let seeds           = 3;
+let waterCount      = 3;
+let waterAdQueue    = 0;
+let day             = 1;
+let farmMode        = 'plant';
+let tickCount       = 0;
+let totalHarvests   = 0;
+let todayEarnings   = 0.0;
+const harvestHistory = []; // last 7 harvest amounts for sparkline
+const withdrawHistory = [];
+
+/* ── SPARKLINE ── */
+function updateSparkline() {
+  const line = document.getElementById('sparkline-line');
+  if (!line) return;
+  const W = 44, H = 22, pad = 2;
+  const pts = harvestHistory.slice(-7);
+  if (pts.length < 2) return;
+  const max = Math.max(...pts) || 1;
+  const step = (W - pad * 2) / (pts.length - 1);
+  const coords = pts.map((v, i) => {
+    const x = pad + i * step;
+    const y = H - pad - ((v / max) * (H - pad * 2));
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  line.setAttribute('points', coords.join(' '));
+  line.setAttribute('stroke', 'rgba(0,152,234,0.75)');
+}
+
+/* ── SCREEN EDGE GLOW ── */
+function flashEdgeGlow() {
+  const el = document.getElementById('edge-glow');
+  if (!el) return;
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 400);
+}
+
+/* ── FARM STATS TOGGLE ── */
+function toggleFarmStats() {
+  const btn  = document.getElementById('stats-toggle');
+  const body = document.getElementById('stats-body');
+  const open = body.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+const cells = [
+  { state:'empty', progress:0, watered:false },
+  { state:'empty', progress:0, watered:false },
+  { state:'empty', progress:0, watered:false },
+];
+
+/* ═══════════════════════════
+   SOUND ENGINE (Web Audio API)
+═══════════════════════════ */
+let audioCtx = null;
+function getACtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playSound(type) {
+  try {
+    const ctx = getACtx();
+    const now = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.22, now);
+    master.connect(ctx.destination);
+
+    if (type === 'plant') {
+      // soft earthy thud + quick rustle
+      const osc = ctx.createOscillator();
+      const g   = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(200, now);
+      osc.frequency.exponentialRampToValueAtTime(80, now + 0.18);
+      g.gain.setValueAtTime(0.9, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(g); g.connect(master);
+      osc.start(now); osc.stop(now + 0.22);
+
+      // rustle (noise burst)
+      const buf = ctx.createBuffer(1, ctx.sampleRate * 0.12, ctx.sampleRate);
+      const d   = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+      const ns = ctx.createBufferSource();
+      const ng = ctx.createGain();
+      const nf = ctx.createBiquadFilter();
+      nf.type = 'bandpass'; nf.frequency.value = 800; nf.Q.value = 0.8;
+      ng.gain.setValueAtTime(0.18, now + 0.05);
+      ng.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      ns.buffer = buf; ns.connect(nf); nf.connect(ng); ng.connect(master);
+      ns.start(now + 0.05);
+    }
+
+    else if (type === 'water') {
+      // bubbly drip: 3 quick droplets
+      [0, 0.08, 0.16].forEach((delay, idx) => {
+        const osc = ctx.createOscillator();
+        const g   = ctx.createGain();
+        const freq = 900 - idx * 80;
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + delay);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.55, now + delay + 0.1);
+        g.gain.setValueAtTime(0.0, now + delay);
+        g.gain.linearRampToValueAtTime(0.7, now + delay + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.14);
+        osc.connect(g); g.connect(master);
+        osc.start(now + delay); osc.stop(now + delay + 0.15);
+      });
+    }
+
+    else if (type === 'harvest') {
+      // bright cheerful "ding" chord
+      [[660, 0], [830, 0.04], [990, 0.08]].forEach(([freq, delay]) => {
+        const osc = ctx.createOscillator();
+        const g   = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+        g.gain.setValueAtTime(0.0, now + delay);
+        g.gain.linearRampToValueAtTime(0.55, now + delay + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.45);
+        osc.connect(g); g.connect(master);
+        osc.start(now + delay); osc.stop(now + delay + 0.48);
+      });
+    }
+
+    else if (type === 'reward') {
+      // ascending sparkle: 5 quick notes
+      [523, 659, 784, 1047, 1319].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const g   = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const t = now + i * 0.07;
+        g.gain.setValueAtTime(0.0, t);
+        g.gain.linearRampToValueAtTime(0.5, t + 0.025);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        osc.connect(g); g.connect(master);
+        osc.start(t); osc.stop(t + 0.25);
+      });
+    }
+
+    else if (type === 'error') {
+      // low dull buzz
+      const osc = ctx.createOscillator();
+      const g   = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(60, now + 0.18);
+      g.gain.setValueAtTime(0.3, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc.connect(g); g.connect(master);
+      osc.start(now); osc.stop(now + 0.2);
+    }
+
+    else if (type === 'ready') {
+      // gentle 2-tone ping when crop is ready
+      [[880, 0], [1108, 0.12]].forEach(([freq, delay]) => {
+        const osc = ctx.createOscillator();
+        const g   = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        g.gain.setValueAtTime(0.0, now + delay);
+        g.gain.linearRampToValueAtTime(0.4, now + delay + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.35);
+        osc.connect(g); g.connect(master);
+        osc.start(now + delay); osc.stop(now + delay + 0.38);
+      });
+    }
+
+  } catch(e) { /* silently ignore if AudioContext unavailable */ }
+}
+
+/* ═══════════════════════════
+   TOOLTIP HINT SYSTEM
+═══════════════════════════ */
+const shownHints = new Set();
+
+function showHint(key, text, anchorEl, offsetY = -14) {
+  if (shownHints.has(key)) return;
+  shownHints.add(key);
+
+  const rect = anchorEl.getBoundingClientRect();
+  const tip  = document.createElement('div');
+  tip.className = 'hint-bubble';
+  tip.textContent = text;
+  document.body.appendChild(tip);
+
+  // position above anchor center
+  const tipW = 220;
+  let left = rect.left + rect.width / 2 - tipW / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - tipW - 8));
+  const top = rect.top + offsetY - 56;
+  tip.style.left  = left + 'px';
+  tip.style.top   = Math.max(8, top) + 'px';
+  tip.style.width = tipW + 'px';
+
+  setTimeout(() => {
+    tip.classList.add('hint-fade');
+    setTimeout(() => tip.remove(), 300);
+  }, 2800);
+}
+
+/* ═══════════════════════════
+   NAVIGATION
+═══════════════════════════ */
+function switchPage(name) {
+  document.querySelectorAll('.page').forEach(p  => p.classList.remove('active'));
+  document.querySelectorAll('.nb-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('nb-'   + name).classList.add('active');
+
+  runPageAnim(document.getElementById('page-' + name));
+
+  if (name === 'withdraw') syncWithdrawPage();
+  if (name === 'store') {
+    document.getElementById('store-seeds-val').textContent = seeds;
+    document.getElementById('store-water-val').textContent = waterCount;
+    setTimeout(() => showHint('store-visit', '📺 Watch ads to get seeds & water!\nWater = faster harvest 💧',
+      document.querySelector('.seed-banner'), 10), 600);
+  }
+  if (name === 'invite') {
+    syncInvitePage();
+    setTimeout(() => showHint('invite-visit', '💰 Share your link!\nYou earn 5% of every friend\'s harvest 🤝',
+      document.querySelector('.inv-link-card'), 10), 600);
+  }
+  if (name === 'farm') {
+    setTimeout(() => showHint('farm-first', '👆 Tap any empty plot to plant your first tomato!',
+      document.getElementById('farm-grid'), 10), 800);
+  }
+}
+
+function syncWithdrawPage() {
+  document.getElementById('wd-bal').textContent = balance.toFixed(4);
+  renderHistory();
+}
+
+function setWdPct(pct) {
+  document.getElementById('wd-amount').value = (balance * pct).toFixed(4);
+}
+
+function syncInvitePage() {
+  document.getElementById('ref-friends').textContent    = referralFriends;
+  document.getElementById('ref-earned-val').textContent = referralBalance.toFixed(4);
+  const est = referralFriends > 0 ? referralBalance / referralFriends : 0;
+  document.getElementById('ref-estimate').textContent   = est.toFixed(4);
+}
+
+setInterval(() => {
+  tickCount++;
+  let changed = false;
+  cells.forEach(c => {
+    if (c.state === 'growing') {
+      c.progress += c.watered ? 2 : 1;
+      changed = true;
+      if (c.progress >= TOMATO.growTime) {
+        c.state = 'ready'; c.progress = TOMATO.growTime;
+        playSound('ready');
+        setTimeout(showSmartHint, 400);
+      }
+    }
+  });
+  if (tickCount % 30 === 0) {
+    day++;
+    todayEarnings = 0.0;
+    cells.forEach(c => { if (c.state !== 'empty') c.watered = false; });
+    updateStats();
+  }
+  if (changed) renderFarm();
+}, 1000);
+
+function buildFarm() {
+  const grid = document.getElementById('farm-grid');
+  cells.forEach((_, i) => {
+    const el = document.createElement('div');
+    el.className = 'cell';
+    el.id = 'cell-' + i;
+    el.innerHTML = `
+      <div class="cell-shadow"></div>
+      <div class="c-ring"></div>
+      <div class="c-water">💧</div>
+      <div class="c-countdown" id="cd-${i}" style="display:none"></div>
+      <div class="c-inner"><span class="c-emoji">🟫</span></div>
+      <div class="c-lbl">empty</div>
+      <div class="c-prog"><div class="c-fill" style="width:0%"></div></div>
+    `;
+    el.onclick = () => handleCellClick(i);
+    grid.appendChild(el);
+  });
+}
+
+function renderFarm() {
+  cells.forEach((c, i) => {
+    const el     = document.getElementById('cell-' + i);
+    const inner  = el.querySelector('.c-inner');
+    const lbl    = el.querySelector('.c-lbl');
+    const fill   = el.querySelector('.c-fill');
+    const cd     = document.getElementById('cd-' + i);
+    const keep   = ['pop','shake','harvesting'].filter(k => el.classList.contains(k));
+    el.className = 'cell ' + keep.join(' ');
+
+    if (c.state !== 'empty' && c.watered) el.classList.add('watered');
+    if (c.state === 'ready') el.classList.add('ready');
+    if (cd) cd.style.display = 'none';
+
+    if (c.state === 'empty') {
+      inner.innerHTML  = '<span class="c-emoji"></span>';
+      lbl.textContent  = 'empty';
+      fill.style.width = '0%';
+    } else {
+      const pct = Math.min(100, Math.round((c.progress / TOMATO.growTime) * 100));
+      fill.style.background = '';
+      fill.style.width = pct + '%';
+      if (c.state === 'ready') {
+        inner.innerHTML = '<img src="asesst/tomate.png" alt="tomato">';
+        lbl.textContent = '✅ ready!';
+      } else {
+        inner.innerHTML = `<span class="c-emoji">${pct < 45 ? '🌱' : '🌿'}</span>`;
+        lbl.textContent = pct + '%';
+      }
+    }
+  });
+  updateStats();
+}
+
+function updateStats() {
+  const balStr = balance.toFixed(4);
+  document.getElementById('bal-val').textContent   = balStr;
+  document.getElementById('day-val').textContent   = day;
+  document.getElementById('seeds-val').textContent = seeds;
+  const active = cells.filter(c => c.state !== 'empty').length;
+  document.getElementById('slots-val').textContent = active + '/3';
+  const storeEl = document.getElementById('store-seeds-val');
+  if (storeEl) storeEl.textContent = seeds;
+  const storeWEl = document.getElementById('store-water-val');
+  if (storeWEl) storeWEl.textContent = waterCount;
+
+  // HUD water badges (there are two: hud pill + btn badge)
+  const badgeEl = document.getElementById('water-badge');
+  if (badgeEl) badgeEl.textContent = waterCount;
+  const badgeBtnEl = document.getElementById('water-badge-btn');
+  if (badgeBtnEl) badgeBtnEl.textContent = waterCount;
+  const btnW = document.getElementById('btn-water');
+  if (btnW) btnW.disabled = waterCount <= 0;
+
+  // Farm stats panel
+  const harvEl = document.getElementById('stat-harvests');
+  if (harvEl) harvEl.textContent = totalHarvests;
+  const todayEl = document.getElementById('stat-today');
+  if (todayEl) todayEl.textContent = todayEarnings.toFixed(4);
+  const etaEl = document.getElementById('stat-eta');
+  if (etaEl) {
+    const growing = cells.find(c => c.state === 'growing');
+    if (growing) {
+      const rem = Math.ceil((TOMATO.growTime - growing.progress) / (growing.watered ? 2 : 1));
+      etaEl.textContent = rem + 's';
+    } else {
+      etaEl.textContent = '—';
+    }
+  }
+
+  updateSparkline();
+}
+
+function setFarmMode(m) {
+  if (m === 'water') {
+    // toggle: if already in water mode, switch back to plant
+    if (farmMode === 'water') { setFarmMode('plant'); return; }
+    const hasGrowing = cells.some(c => c.state === 'growing');
+    if (!hasGrowing) {
+      toast('🌱 يجب أن تزرع أولاً قبل استخدام الماء!');
+      playSound('error');
+      return;
+    }
+  }
+  farmMode = m;
+  const hint = document.getElementById('farm-mode-hint');
+  const btn  = document.getElementById('btn-water');
+  if (m === 'water') {
+    hint.textContent = '💧 Tap a growing plot to water it';
+    hint.className   = 'water-mode';
+    btn.classList.add('active-mode');
+  } else {
+    hint.textContent = '👆 Tap any plot to plant a tomato';
+    hint.className   = '';
+    btn.classList.remove('active-mode');
+  }
+}
+
+function triggerAnim(el, cls, ms = 470) {
+  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), ms);
+}
+
+/* ═══════════════════════════
+   COIN REWARD ANIMATION
+═══════════════════════════ */
+function spawnCoinBurst(cellEl, rewardAmt) {
+  // floating "+0.0001" text above cell
+  const txt = document.createElement('div');
+  txt.className   = 'reward-text';
+  txt.textContent = `+${rewardAmt.toFixed(4)}`;
+  cellEl.appendChild(txt);
+  txt.addEventListener('animationend', () => txt.remove(), { once: true });
+
+  const balEl   = document.getElementById('bal-val');
+  const balRect  = balEl.getBoundingClientRect();
+  const targetX  = balRect.left + balRect.width  / 2;
+  const targetY  = balRect.top  + balRect.height / 2;
+
+  const cellRect = cellEl.getBoundingClientRect();
+  const cx = window.innerWidth  / 2;
+  const cy = window.innerHeight / 2;
+  const coinCount = 6;
+
+  for (let k = 0; k < coinCount; k++) {
+    setTimeout(() => {
+      const coin = document.createElement('img');
+      coin.src       = 'asesst/toncoin.png';
+      coin.className = 'ton-fly-coin';
+
+      // start: random position inside cell
+      const startX = cellRect.left + cellRect.width  * (0.2 + Math.random() * 0.6);
+      const startY = cellRect.top  + cellRect.height * (0.15 + Math.random() * 0.5);
+
+      coin.style.width     = '26px';
+      coin.style.height    = '26px';
+      coin.style.left      = startX + 'px';
+      coin.style.top       = startY + 'px';
+      coin.style.opacity   = '0';
+      coin.style.transform = 'scale(0.5)';
+      document.body.appendChild(coin);
+
+      // Phase 1 — burst from cell with small random kick (300ms)
+      requestAnimationFrame(() => {
+        const bx = (Math.random() - 0.5) * 52;
+        const by = -(18 + Math.random() * 32);
+        coin.style.transition = 'opacity 0.18s ease, transform 0.3s cubic-bezier(.34,1.56,.64,1), left 0.3s ease-out, top 0.3s ease-out';
+        coin.style.opacity    = '1';
+        coin.style.transform  = 'scale(1.2)';
+        coin.style.left       = (startX + bx) + 'px';
+        coin.style.top        = (startY + by) + 'px';
+      });
+
+      // Phase 2 — converge to screen center, grow big (550ms)
+      setTimeout(() => {
+        coin.style.transition = [
+          'left 0.55s cubic-bezier(.4,0,.2,1)',
+          'top 0.55s cubic-bezier(.4,0,.2,1)',
+          'width 0.55s cubic-bezier(.34,1.56,.64,1)',
+          'height 0.55s cubic-bezier(.34,1.56,.64,1)',
+          'transform 0.55s cubic-bezier(.34,1.56,.64,1)'
+        ].join(', ');
+        coin.style.left      = (cx - 27) + 'px';
+        coin.style.top       = (cy - 27) + 'px';
+        coin.style.width     = '54px';
+        coin.style.height    = '54px';
+        coin.style.transform = 'scale(1)';
+      }, 320);
+
+      // Phase 3 — hold at center 600ms, then fly to balance staggered
+      setTimeout(() => {
+        const flyDelay = k * 120;
+        setTimeout(() => {
+          coin.style.transition = [
+            'left 1.3s cubic-bezier(.4,0,.2,1)',
+            'top 1.3s cubic-bezier(.4,0,.2,1)',
+            'width 1.3s cubic-bezier(.4,0,.2,1)',
+            'height 1.3s cubic-bezier(.4,0,.2,1)',
+            'opacity 0.4s ease-in 0.95s',
+            'transform 1.3s ease-in'
+          ].join(', ');
+          coin.style.left      = (targetX - 11) + 'px';
+          coin.style.top       = (targetY - 11) + 'px';
+          coin.style.width     = '22px';
+          coin.style.height    = '22px';
+          coin.style.opacity   = '0';
+          coin.style.transform = 'scale(0.5)';
+
+          if (k === coinCount - 1) {
+            setTimeout(() => {
+              balEl.classList.remove('balance-pop');
+              void balEl.offsetWidth;
+              balEl.classList.add('balance-pop');
+              balEl.addEventListener('animationend', () => balEl.classList.remove('balance-pop'), { once: true });
+            }, 1300);
+          }
+          setTimeout(() => coin.remove(), 1450);
+        }, flyDelay);
+      }, 320 + 550 + 600);
+
+    }, k * 80); // stagger each coin 80ms apart
+  }
+}
+
+/* ═══════════════════════════
+   SMART HINT SYSTEM
+═══════════════════════════ */
+let _shTimer    = null;
+let _lastHintId = null;
+
+function getSmartHint() {
+  const readyCount   = cells.filter(c => c.state === 'ready').length;
+  const growingCount = cells.filter(c => c.state === 'growing').length;
+  const wateredCount = cells.filter(c => c.state === 'growing' && c.watered).length;
+  const unwateredGrowing = growingCount - wateredCount;
+
+  // Priority order
+  if (readyCount > 0) {
+    return { id: 'harvest-now', text: `✂️ Harvest now! ${readyCount} tomato${readyCount > 1 ? 's' : ''} ready` };
+  }
+  if (seeds === 0 && growingCount === 0) {
+    return { id: 'need-seeds', text: '🛒 Watch an ad in Store to get seeds!' };
+  }
+  if (growingCount === 0 && seeds > 0) {
+    return { id: 'plant-now', text: '🌱 Tap an empty plot to plant a tomato' };
+  }
+  if (unwateredGrowing > 0 && waterCount > 0) {
+    return { id: 'water-now', text: '💧 Water your crops to grow 2× faster!' };
+  }
+  if (unwateredGrowing > 0 && waterCount === 0) {
+    return { id: 'get-water', text: '🛒 Get water from Store → Watch 2 ads' };
+  }
+  return null;
+}
+
+function showSmartHint() {
+  const hint = getSmartHint();
+  if (!hint) return;
+  // don't repeat the same hint consecutively
+  if (hint.id === _lastHintId) return;
+  _lastHintId = hint.id;
+
+  const bar  = document.getElementById('smart-hint-bar');
+  const text = document.getElementById('sh-text');
+  text.textContent = hint.text;
+  bar.classList.add('visible');
+
+  clearTimeout(_shTimer);
+  _shTimer = setTimeout(() => {
+    bar.classList.remove('visible');
+  }, 3200);
+}
+
+
+function handleCellClick(i) {
+  const c  = cells[i];
+  const el = document.getElementById('cell-' + i);
+
+  if (farmMode === 'water') {
+    // ready cells always harvest regardless of mode
+    if (c.state === 'ready') { harvestCell(i); return; }
+
+    if (c.state === 'empty') {
+      // switch back to plant mode and plant
+      setFarmMode('plant');
+      // fall through to plant logic below
+    } else {
+      // growing cell — water it
+      if (c.watered) { toast('✅ Already watered!'); return; }
+      if (waterCount <= 0) {
+        playSound('error');
+        toast('💧 No water! Get more from Store.');
+        triggerAnim(el, 'shake');
+        return;
+      }
+      c.watered = true;
+      waterCount--;
+      playSound('water');
+      renderFarm();
+      toast('💧 Watered! Growing 2× faster');
+      showHint('water-first', '💧 Watered crops grow twice as fast!\nCheck back sooner for harvest 🌿', el, -10);
+      showSmartHint();
+      return;
+    }
+  }
+
+  if (c.state === 'ready')   { harvestCell(i); return; }
+  if (c.state === 'growing') {
+    toast('⏳ Still growing…');
+    showHint('still-growing', '⏳ Be patient — or water it 💧\nto double the growth speed!', el, -10);
+    return;
+  }
+
+  const active = cells.filter(x => x.state !== 'empty').length;
+  if (active >= LIMIT) {
+    cells.forEach((x, j) => { if (x.state !== 'empty') triggerAnim(document.getElementById('cell-' + j), 'shake', 470); });
+    playSound('error');
+    toast('❌ All 3 plots are busy!');
+    return;
+  }
+
+  if (seeds <= 0) {
+    triggerAnim(el, 'shake', 470);
+    playSound('error');
+    toast('🌱 No seeds! Go to Store to get more.');
+    showHint('no-seeds', '🛒 Go to Store → Watch an ad\nto earn free seeds!',
+      document.getElementById('nb-store'), 0);
+    return;
+  }
+
+  seeds--;
+  c.state = 'growing'; c.progress = 0; c.watered = false;
+  playSound('plant');
+  triggerAnim(el, 'pop', 440);
+  renderFarm();
+  setFarmMode('plant');
+
+  // first-plant hint: suggest watering
+  showHint('plant-first', '🌱 Planted! Now try watering it 💧\nto make it grow 2× faster!', el, -10);
+  showSmartHint();
+}
+
+function harvestCell(i) {
+  const c  = cells[i];
+  const el = document.getElementById('cell-' + i);
+  if (c.state !== 'ready') return;
+  el.classList.add('harvesting');
+  playSound('harvest');
+  spawnCoinBurst(el, TOMATO.reward);
+  balance += TOMATO.reward;
+  todayEarnings += TOMATO.reward;
+  totalHarvests++;
+  harvestHistory.push(TOMATO.reward);
+  if (harvestHistory.length > 7) harvestHistory.shift();
+  if (referralFriends > 0) referralBalance += TOMATO.reward * REF_PCT * referralFriends;
+  flashEdgeGlow();
+  updateStats();
+  showHint('harvest-first', `✅ Harvested! +0.0001 💎 TON earned.\nPlant again to keep earning!`, el, -10);
+  setTimeout(() => {
+    el.classList.remove('harvesting');
+    c.state = 'empty'; c.progress = 0; c.watered = false;
+    renderFarm();
+    showSmartHint();
+  }, 480);
+}
+
+function harvestAll() {
+  const ready = cells.reduce((a, c, i) => (c.state === 'ready' ? [...a, i] : a), []);
+  if (!ready.length) { toast('⏳ No tomatoes ready yet!'); return; }
+  ready.forEach(i => harvestCell(i));
+  toast(`✂️ Harvested ${ready.length} tomato${ready.length > 1 ? 'es' : ''}!`);
+}
+
+const adCooldown = { 1: false, 3: false, w: false };
+
+function watchAd(count) {
+  if (adCooldown[count]) return;
+  const btnEl  = document.getElementById('ad-btn-' + count);
+  const txtEl  = document.getElementById('txt-'    + count);
+  const progEl = document.getElementById('prog-'   + count);
+  adCooldown[count] = true;
+  btnEl.disabled = true;
+  btnEl.classList.add('loading');
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> loading ad..</span>`;
+  progEl.style.width = '0%';
+  void progEl.offsetWidth;
+  setTimeout(() => {
+    seeds += count;
+    updateStats();
+    playSound('reward');
+    btnEl.classList.remove('loading');
+    btnEl.disabled = false;
+    progEl.style.width = '0%';
+    txtEl.textContent = count === 1 ? '▶ Watch Ad → Get 1 Seed' : '▶▶ Watch 3 Ads → Get 3 Seeds';
+    toast(`🌱 +${count} Seed${count > 1 ? 's' : ''} added!`);
+    showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
+      document.getElementById('nb-farm'), 0);
+    setTimeout(() => { adCooldown[count] = false; }, 4000);
+  }, count === 1 ? 2800 : 3200);
+}
+
+function watchWaterAd() {
+  if (adCooldown.w) return;
+  const btnEl  = document.getElementById('ad-btn-w');
+  const txtEl  = document.getElementById('txt-w');
+  const progEl = document.getElementById('prog-w');
+  const cntEl  = document.getElementById('water-ad-count');
+  adCooldown.w = true;
+  btnEl.disabled = true;
+  btnEl.classList.add('loading-w');
+  progEl.style.width = '0%';
+  void progEl.offsetWidth;
+  const nextQueue = waterAdQueue + 1;
+  txtEl.textContent = `📺 Watching ad ${nextQueue}/2…`;
+  setTimeout(() => {
+    waterAdQueue++;
+    if (cntEl) cntEl.textContent = waterAdQueue;
+    // update dots
+    for (let i = 1; i <= 2; i++) {
+      const d = document.getElementById('wdot-' + i);
+      if (d) d.classList.toggle('filled', i <= waterAdQueue);
+    }
+    btnEl.classList.remove('loading-w');
+    progEl.style.width = '0%';
+    if (waterAdQueue >= 2) {
+      waterAdQueue = 0;
+      if (cntEl) cntEl.textContent = '0';
+      // reset dots
+      for (let i = 1; i <= 2; i++) {
+        const d = document.getElementById('wdot-' + i);
+        if (d) d.classList.remove('filled');
+      }
+      waterCount += 3;
+      updateStats();
+      playSound('reward');
+      txtEl.textContent = '💧 Watch 2 Ads → Get 3 Waters';
+      toast('💧 +3 Waters added! Go water your crops!');
+      showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
+        document.getElementById('nb-farm'), 0);
+    } else {
+      txtEl.textContent = `💧 Watch 2 Ads → Get 3 Waters (1/2 done ✓)`;
+      toast('📺 Ad 1/2 done! Watch one more for 3 Waters.');
+    }
+    btnEl.disabled = false;
+    setTimeout(() => { adCooldown.w = false; }, 3000);
+  }, 2800);
+}
+
+function copyLink() {
+  navigator.clipboard?.writeText(document.getElementById('ref-link').value).catch(() => {});
+  playSound('reward');
+  toast('📋 Referral link copied!');
+}
+
+function shareLink() {
+  toast('🚀 Sharing not available in preview mode.');
+}
+
+function submitWithdraw() {
+  const account = document.getElementById('wd-fastpay').value.trim();
+  const amount  = parseFloat(document.getElementById('wd-amount').value);
+  if (!account)               { playSound('error'); toast('❌ Enter your Faucet Pay email!'); return; }
+  if (!amount || amount <= 0) { playSound('error'); toast('❌ Enter a valid amount!'); return; }
+  if (amount < 0.001)         { playSound('error'); toast('❌ Minimum is 0.0010'); return; }
+  if (amount > balance)       { playSound('error'); toast('❌ Insufficient balance!'); return; }
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
+    + ' ' + now.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+
+  withdrawHistory.unshift({ account, amount, date: dateStr, status: 'pending' });
+  balance -= amount;
+  playSound('harvest');
+  updateStats();
+  document.getElementById('wd-fastpay').value = '';
+  document.getElementById('wd-amount').value  = '';
+  document.getElementById('wd-bal').textContent = balance.toFixed(4);
+  renderHistory();
+  toast('✅ Withdrawal request submitted!');
+  showHint('withdraw-done', '✅ Request sent!\nProcessed within 24 hours ⚡',
+    document.querySelector('.withdraw-bal'), 10);
+}
+
+function renderHistory() {
+  const list    = document.getElementById('history-list');nnip
+  const countEl = document.getElementById('wd-hist-count');
+  if (countEl) countEl.textContent =
+    withdrawHistory.length
+      ? withdrawHistory.length + (withdrawHistory.length === 1 ? ' record' : ' records')
+      : '0 records';
+  if (!withdrawHistory.length) {
+    list.innerHTML = '<div class="history-empty">No withdrawals yet<br>Your history will appear here</div>';
+    return;
+  }
+  list.innerHTML = withdrawHistory.map(h => `
+    <div class="history-item ${h.status}">
+      <div class="hi-left">
+        <div class="hi-account">⚡ ${h.account}</div>
+        <div class="hi-date">${h.date}</div>
+      </div>
+      <div class="hi-right">
+        <div class="hi-amount">${h.amount.toFixed(4)} <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"></div>
+        <span class="hi-status ${h.status}">${h.status === 'pending' ? '⏳ Pending' : '✅ Done'}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2700);
+}
+
+/* ═══════════════════════════
+   TASKS
+═══════════════════════════ */
+const taskState = { earnChannel: 'idle' }; // idle | joined | done
+
+function handleEarnChannelTask() {
+  if (taskState.earnChannel === 'done') return;
+
+  const btn    = document.getElementById('task-btn-ec');
+  const txt    = document.getElementById('task-txt-ec');
+  const prog   = document.getElementById('task-prog-ec');
+  const status = document.getElementById('task-status-ec');
+
+  if (taskState.earnChannel === 'idle') {
+    window.open('https://t.me/YourEarnChannel', '_blank');
+    taskState.earnChannel = 'joined';
+    txt.textContent  = 'Verify';
+    btn.style.background  = 'linear-gradient(135deg,#f57f17,#e65100)';
+    btn.style.boxShadow   = '0 3px 12px rgba(245,127,23,0.4)';
+    toast('📢 Joined! Tap Verify to claim your seeds.');
+    return;
+  }
+
+  if (taskState.earnChannel === 'joined') {
+    btn.disabled = true;
+    btn.classList.add('verifying');
+    prog.style.width = '0%';
+    void prog.offsetWidth;
+    txt.innerHTML = `
+    <img src="asesst/loading.gif" width="23" height="24">`;
+    txt.style.height = '7px';
+    txt.style.display= 'flex';
+    txt.style.justifyContent = 'center';
+    txt.style.alignItems = 'center';
+    
+
+    setTimeout(() => {
+      btn.classList.remove('verifying');
+      taskState.earnChannel = 'done';
+      btn.style.display = 'none';
+      status.classList.add('show');
+      status.innerHTML = `
+      <img src="asesst/vertify.png" width="22" >`
+      seeds += 10;
+      updateStats();
+      playSound('reward');
+      toast('🎉 +10 Seeds claimed! Go plant them!');
+      showSmartHint();
+    }, 3600);
+  }
+}
+
+buildFarm();
+renderFarm();
+
+/* ── INITIAL FARM PAGE ANIMATION ──
+   Triggers the same pg-item entrance for the farm page on first load */
+function runPageAnim(pageEl) {
+  const items = pageEl.querySelectorAll('.pg-item');
+  items.forEach(el => {
+    el.style.transition = 'none';
+    el.style.transform  = 'translateY(-200px)';
+    el.style.opacity    = '0';
+  });
+  void pageEl.offsetWidth;
+  items.forEach((el, i) => {
+    const d = (i * 0.08).toFixed(2) + 's';
+    el.style.transition = `transform 1.2s cubic-bezier(.22,1,.36,1) ${d}, opacity 0.8s ease ${d}`;
+    el.style.transform  = 'translateY(0)';
+    el.style.opacity    = '1';
+  });
+}
+
+// Trigger on initial load after a tick so DOM is fully painted
+requestAnimationFrame(() => {
+  runPageAnim(document.getElementById('page-farm'));
+});
+
+// Show first-visit farm hint after short delay
+setTimeout(() => showHint('farm-first',
+  '👆 Tap any empty plot to plant your first tomato!',
+  document.getElementById('farm-grid'), 10), 1200);
+</script>
+</body>
+</html>
