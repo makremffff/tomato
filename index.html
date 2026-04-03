@@ -1489,6 +1489,7 @@ body::before {
     <div class="farm-hud-left">
       <img class="farm-hud-avatar" id="hud-avatar" src="user.jpg" alt="user">
       <div class="farm-hud-balance">
+        <span class="farm-hud-bal-lbl" id="hud-username" style="color:rgba(245,198,62,0.85);font-size:0.52rem;letter-spacing:0.5px;">Player</span>
         <span class="farm-hud-bal-lbl">Balance</span>
         <div class="farm-hud-bal-val">
           <span id="bal-val">0.0000</span>
@@ -1956,48 +1957,92 @@ body::before {
 /* ═══════════════════════════
    TELEGRAM WEBAPP INIT
 ═══════════════════════════ */
-const tg      = window.Telegram?.WebApp;
-const tgUser  = tg?.initDataUnsafe?.user || {};
-const TG_ID   = tgUser.id || '';
 
-// ── Set user avatar ──
+// --- Step 1: تفعيل WebApp وطلب expand ---
+const tg = (function() {
+  try {
+    const app = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (app) {
+      app.ready();
+      app.expand();
+    }
+    return app;
+  } catch(e) {
+    return null;
+  }
+})();
+
+// --- Step 2: جلب بيانات المستخدم من initDataUnsafe أولاً ---
+// initDataUnsafe متاح فوراً بدون أي انتظار داخل Telegram WebApp
+const tgUser = (function() {
+  try {
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      return tg.initDataUnsafe.user;
+    }
+    // محاولة ثانية عبر parse يدوي لـ initData إذا كانت initDataUnsafe فارغة
+    if (tg && tg.initData && tg.initData.length > 0) {
+      const params = new URLSearchParams(tg.initData);
+      const userStr = params.get('user');
+      if (userStr) {
+        return JSON.parse(decodeURIComponent(userStr));
+      }
+    }
+    return {};
+  } catch(e) {
+    return {};
+  }
+})();
+
+const TG_ID         = tgUser.id         ? String(tgUser.id)        : '';
+const TG_FIRST      = tgUser.first_name ? String(tgUser.first_name): '';
+const TG_LAST       = tgUser.last_name  ? String(tgUser.last_name) : '';
+const TG_USERNAME   = tgUser.username   ? String(tgUser.username)  : '';
+const TG_PHOTO      = tgUser.photo_url  ? String(tgUser.photo_url) : '';
+const TG_FULLNAME   = [TG_FIRST, TG_LAST].filter(Boolean).join(' ') || 'Player';
+
+// --- Step 3: عرض الصورة بكل حالاتها ---
 (function setAvatar() {
   const avatarEl = document.getElementById('hud-avatar');
   if (!avatarEl) return;
 
-  // Try photo_url from initDataUnsafe first
-  const photo = tgUser.photo_url;
-  if (photo) {
-    avatarEl.crossOrigin = 'anonymous';
-    avatarEl.src = photo;
-    avatarEl.onerror = () => {
-      // Fallback: try fetching via Telegram getFile proxy
-      const userId = tgUser.id;
-      if (userId) {
-        // Use a UI avatar service as secondary fallback
-        avatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent((tgUser.first_name || '') + '+' + (tgUser.last_name || ''))}&background=0098ea&color=fff&size=96&bold=true`;
-        avatarEl.onerror = () => { avatarEl.src = 'user.jpg'; };
-      } else {
-        avatarEl.src = 'user.jpg';
-      }
-    };
-    return;
+  function tryInitialsAvatar() {
+    const initials = [TG_FIRST, TG_LAST].filter(Boolean).join('+') || 'Player';
+    const url = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(initials)
+              + '&background=0098ea&color=fff&size=128&bold=true&rounded=true';
+    avatarEl.removeAttribute('crossOrigin');
+    avatarEl.onerror = function() { avatarEl.src = 'user.jpg'; avatarEl.onerror = null; };
+    avatarEl.src = url;
   }
 
-  // No photo_url — generate initials avatar
-  const name = [tgUser.first_name, tgUser.last_name].filter(Boolean).join('+') || 'User';
-  avatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0098ea&color=fff&size=96&bold=true`;
-  avatarEl.onerror = () => { avatarEl.src = 'user.jpg'; };
+  if (TG_PHOTO) {
+    // photo_url موجودة — نضعها مباشرة بدون crossOrigin لأن Telegram CDN لا يدعمه
+    avatarEl.onerror = function() {
+      avatarEl.onerror = null;
+      tryInitialsAvatar();
+    };
+    avatarEl.src = TG_PHOTO;
+  } else {
+    tryInitialsAvatar();
+  }
 })();
 
-// ── Set referral link ──
-(function setRefLink() {
-  const el = document.getElementById('ref-link');
-  if (!el) return;
-  const link = TG_ID
-    ? `https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_${TG_ID}`
-    : 'https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_';
-  el.value = link;
+// ── Set referral link + HUD name + ID ──
+(function setUserInfo() {
+  // رابط الإحالة
+  const refEl = document.getElementById('ref-link');
+  if (refEl) {
+    refEl.value = TG_ID
+      ? `https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_${TG_ID}`
+      : 'https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_';
+  }
+
+  // اسم المستخدم في HUD
+  const nameEl = document.getElementById('hud-username');
+  if (nameEl) {
+    let display = TG_FIRST || 'Player';
+    if (TG_USERNAME) display += ' @' + TG_USERNAME;
+    nameEl.innerHTML = display;
+  }
 })();
 
 const TOMATO  = { reward: 0.0001, growTime: 30 };
