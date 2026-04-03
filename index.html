@@ -6,6 +6,7 @@
 <title>Tomato Farm</title>
 <!-- ✅ FIX: Telegram SDK must load FIRST before any inline script uses window.Telegram -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&display=swap');
 
@@ -2054,18 +2055,19 @@ console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!T
 
 // --- Step 4: تحديث HUD (اسم + ID + رابط الإحالة) ---
 (function setUserInfo() {
-  // ① اسم المستخدم في HUD
+  // ① اسم المستخدم في HUD — اسم أول فقط بدون @username أو ID
   const nameEl = document.getElementById('hud-username');
   if (nameEl) {
-    let display = TG_FIRST || TG_USERNAME || 'Player';
-    if (TG_USERNAME && TG_FIRST) display += ' @' + TG_USERNAME;
+    // نعرض الاسم الأول فقط، بدون @username
+    const display = TG_FIRST || 'Player';
     nameEl.textContent = display;
   }
 
-  // ② عرض الـ ID في HUD (إن وُجد العنصر)
+  // ② إخفاء عنصر الـ ID تماماً
   const idEl = document.getElementById('hud-user-id');
   if (idEl) {
-    idEl.textContent = TG_ID ? '#' + TG_ID : '';
+    idEl.style.display = 'none';
+    idEl.textContent = '';
   }
 
   // ③ رابط الإحالة
@@ -2086,7 +2088,6 @@ let referralBalance = 0.0;
 let referralFriends = 0;
 let seeds           = 3;
 let waterCount      = 3;
-let waterAdQueue    = 0;
 let day             = 1;
 let farmMode        = 'plant';
 let tickCount       = 0;
@@ -2733,79 +2734,203 @@ function harvestAll() {
   toast(`✂️ Harvested ${ready.length} tomato${ready.length > 1 ? 'es' : ''}!`);
 }
 
-const adCooldown = { 1: false, 3: false, w: false };
+/* ═══════════════════════════════════════════════════════
+   ADSGRAM — نظام الإعلانات الحقيقي
+   الإعلانات تُشغَّل ورا بعض تلقائياً (chain) بدون ضغط إضافي
+   Block IDs: استبدل YOUR_SEED_BLOCK_ID و YOUR_WATER_BLOCK_ID
+   بالـ blockId من لوحة تحكم Adsgram
+═══════════════════════════════════════════════════════ */
+const ADSGRAM_SEED_BLOCK_ID  = '20679';   // ← ضع blockId بتاع Seeds
+const ADSGRAM_WATER_BLOCK_ID = '20679';  // ← ضع blockId بتاع Water
 
+// Controllers — نُهيِّئها مرة واحدة
+let _adcSeed  = null;
+let _adcWater = null;
+
+function getAdcSeed() {
+  if (!_adcSeed && window.Adsgram) {
+    _adcSeed = window.Adsgram.init({ blockId: ADSGRAM_SEED_BLOCK_ID });
+  }
+  return _adcSeed;
+}
+
+function getAdcWater() {
+  if (!_adcWater && window.Adsgram) {
+    _adcWater = window.Adsgram.init({ blockId: ADSGRAM_WATER_BLOCK_ID });
+  }
+  return _adcWater;
+}
+
+const adCooldown = { seed: false, water: false };
+
+/* ── Seeds: يشغّل 3 إعلانات ورا بعض ثم يكافئ بـ 3 بذور ── */
 function watchAd(count) {
-  if (adCooldown[count]) return;
+  // count = 1 أو 3 — نحن نشغّل دائماً "count" إعلانات بشكل متسلسل
+  if (adCooldown.seed) return;
   const btnEl  = document.getElementById('ad-btn-' + count);
   const txtEl  = document.getElementById('txt-'    + count);
   const progEl = document.getElementById('prog-'   + count);
-  adCooldown[count] = true;
-  btnEl.disabled = true;
+
+  const adc = getAdcSeed();
+  if (!adc) {
+    // Adsgram لم يُحمَّل (خارج تيليغرام) — محاكاة للديفيلوب
+    _simulateAds(count, () => {
+      seeds += count;
+      updateStats();
+      playSound('reward');
+      _resetSeedBtn(count, btnEl, txtEl, progEl);
+      toast(`🌱 +${count} Seed${count > 1 ? 's' : ''} added!`);
+      showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
+        document.getElementById('nb-farm'), 0);
+    }, () => {
+      _resetSeedBtn(count, btnEl, txtEl, progEl);
+      toast('⚠️ Ad not available, try again later.');
+    });
+    return;
+  }
+
+  adCooldown.seed = true;
+  btnEl.disabled  = true;
   btnEl.classList.add('loading');
-  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> loading ad..</span>`;
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad 1/${count}…</span>`;
   progEl.style.width = '0%';
-  void progEl.offsetWidth;
-  setTimeout(() => {
-    seeds += count;
-    updateStats();
-    playSound('reward');
-    btnEl.classList.remove('loading');
-    btnEl.disabled = false;
-    progEl.style.width = '0%';
-    txtEl.textContent = count === 1 ? '▶ Watch Ad → Get 1 Seed' : '▶▶ Watch 3 Ads → Get 3 Seeds';
-    toast(`🌱 +${count} Seed${count > 1 ? 's' : ''} added!`);
-    showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
-      document.getElementById('nb-farm'), 0);
-    setTimeout(() => { adCooldown[count] = false; }, 4000);
-  }, count === 1 ? 2800 : 3200);
+
+  let watched = 0;
+
+  function showNextAd() {
+    adc.show()
+      .then(() => {
+        watched++;
+        if (watched < count) {
+          txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${watched + 1}/${count}…</span>`;
+          // تشغيل الإعلان التالي فوراً بعد انتهاء الأول
+          showNextAd();
+        } else {
+          // كل الإعلانات اتمشاهدت ✅
+          seeds += count;
+          updateStats();
+          playSound('reward');
+          _resetSeedBtn(count, btnEl, txtEl, progEl);
+          toast(`🌱 +${count} Seed${count > 1 ? 's' : ''} added!`);
+          showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
+            document.getElementById('nb-farm'), 0);
+          setTimeout(() => { adCooldown.seed = false; }, 4000);
+        }
+      })
+      .catch(() => {
+        // المستخدم أغلق أو حصل خطأ
+        _resetSeedBtn(count, btnEl, txtEl, progEl);
+        adCooldown.seed = false;
+        if (watched > 0) toast(`🌱 Watched ${watched}/${count} ads — try again for full reward.`);
+        else toast('⚠️ Ad not available, try again later.');
+      });
+  }
+
+  showNextAd();
 }
 
+function _resetSeedBtn(count, btnEl, txtEl, progEl) {
+  btnEl.classList.remove('loading');
+  btnEl.disabled = false;
+  progEl.style.width = '0%';
+  txtEl.textContent = count === 1 ? '▶ Watch Ad → Get 1 Seed' : '▶▶ Watch 3 Ads → Get 3 Seeds';
+}
+
+/* ── Water: يشغّل 2 إعلانات ورا بعض ثم يكافئ بـ 3 مياه ── */
 function watchWaterAd() {
-  if (adCooldown.w) return;
+  if (adCooldown.water) return;
   const btnEl  = document.getElementById('ad-btn-w');
   const txtEl  = document.getElementById('txt-w');
   const progEl = document.getElementById('prog-w');
   const cntEl  = document.getElementById('water-ad-count');
-  adCooldown.w = true;
+  const TOTAL  = 2; // عدد الإعلانات المطلوبة
+
+  const adc = getAdcWater();
+  if (!adc) {
+    // محاكاة للديفيلوب
+    _simulateAds(TOTAL, () => {
+      _giveWaterReward(txtEl, progEl, cntEl, btnEl);
+    }, () => {
+      _resetWaterBtn(txtEl, progEl, btnEl);
+      toast('⚠️ Ad not available, try again later.');
+    });
+    return;
+  }
+
+  adCooldown.water = true;
   btnEl.disabled = true;
   btnEl.classList.add('loading-w');
   progEl.style.width = '0%';
-  void progEl.offsetWidth;
-  const nextQueue = waterAdQueue + 1;
-  txtEl.textContent = `📺 Watching ad ${nextQueue}/2…`;
-  setTimeout(() => {
-    waterAdQueue++;
-    if (cntEl) cntEl.textContent = waterAdQueue;
-    // update dots
-    for (let i = 1; i <= 2; i++) {
+
+  let watched = 0;
+
+  function _updateDots(n) {
+    for (let i = 1; i <= TOTAL; i++) {
       const d = document.getElementById('wdot-' + i);
-      if (d) d.classList.toggle('filled', i <= waterAdQueue);
+      if (d) d.classList.toggle('filled', i <= n);
     }
-    btnEl.classList.remove('loading-w');
-    progEl.style.width = '0%';
-    if (waterAdQueue >= 2) {
-      waterAdQueue = 0;
-      if (cntEl) cntEl.textContent = '0';
-      // reset dots
-      for (let i = 1; i <= 2; i++) {
-        const d = document.getElementById('wdot-' + i);
-        if (d) d.classList.remove('filled');
-      }
-      waterCount += 3;
-      updateStats();
-      playSound('reward');
-      txtEl.textContent = '💧 Watch 2 Ads → Get 3 Waters';
-      toast('💧 +3 Waters added! Go water your crops!');
-      showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
-        document.getElementById('nb-farm'), 0);
-    } else {
-      txtEl.textContent = `💧 Watch 2 Ads → Get 3 Waters (1/2 done ✓)`;
-      toast('📺 Ad 1/2 done! Watch one more for 3 Waters.');
-    }
-    btnEl.disabled = false;
-    setTimeout(() => { adCooldown.w = false; }, 3000);
-  }, 2800);
+    if (cntEl) cntEl.textContent = n;
+  }
+
+  function showNextWaterAd() {
+    txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${watched + 1}/${TOTAL}…</span>`;
+    adc.show()
+      .then(() => {
+        watched++;
+        _updateDots(watched);
+        if (watched < TOTAL) {
+          // الإعلان التالي فوراً
+          showNextWaterAd();
+        } else {
+          _giveWaterReward(txtEl, progEl, cntEl, btnEl);
+        }
+      })
+      .catch(() => {
+        _resetWaterBtn(txtEl, progEl, btnEl);
+        adCooldown.water = false;
+        if (watched > 0) toast(`📺 Watched ${watched}/${TOTAL} — try again to complete.`);
+        else toast('⚠️ Ad not available, try again later.');
+      });
+  }
+
+  showNextWaterAd();
+}
+
+function _giveWaterReward(txtEl, progEl, cntEl, btnEl) {
+  waterCount += 3;
+  updateStats();
+  playSound('reward');
+  _resetWaterBtn(txtEl, progEl, btnEl);
+  // reset dots
+  for (let i = 1; i <= 2; i++) {
+    const d = document.getElementById('wdot-' + i);
+    if (d) d.classList.remove('filled');
+  }
+  if (cntEl) cntEl.textContent = '0';
+  toast('💧 +3 Waters added! Go water your crops!');
+  showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
+    document.getElementById('nb-farm'), 0);
+  setTimeout(() => { adCooldown.water = false; }, 3000);
+}
+
+function _resetWaterBtn(txtEl, progEl, btnEl) {
+  btnEl.classList.remove('loading-w');
+  btnEl.disabled = false;
+  progEl.style.width = '0%';
+  txtEl.textContent = '💧 Watch 2 Ads → Get 3 Waters';
+}
+
+/* ── محاكاة للإعلانات خارج تيليغرام (للتطوير فقط) ── */
+function _simulateAds(count, onSuccess, onError) {
+  let i = 0;
+  function next() {
+    i++;
+    setTimeout(() => {
+      if (i < count) { next(); }
+      else { onSuccess(); }
+    }, 1500);
+  }
+  next();
 }
 
 function copyLink() {
