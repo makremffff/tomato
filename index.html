@@ -1578,7 +1578,7 @@ body::before {
       <div class="task-title">Join Earn Channel</div>
       <div class="task-desc">Subscribe on Telegram to unlock rewards</div>
       <div class="task-meta">
-        <div class="task-reward">+10 🌱 Seeds</div>
+        <div class="task-reward">+0.005 <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"> TON</div>
       </div>
     </div>
     <div class="task-action">
@@ -1587,6 +1587,29 @@ body::before {
         <span id="task-txt-ec">Join</span>
       </button>
       <div class="task-status" id="task-status-ec">✅ Done</div>
+    </div>
+  </div>
+
+  <!-- NEW CHANNEL: E-Money Algeria -->
+  <div class="task-card pg-item" id="task-emoney-channel">
+    <div class="task-icon">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.43 13.67l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.718.889z"/>
+      </svg>
+    </div>
+    <div class="task-body">
+      <div class="task-title">E-Money Algeria</div>
+      <div class="task-desc">Join our partner channel to earn bonus TON</div>
+      <div class="task-meta">
+        <div class="task-reward">+0.005 <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"> TON</div>
+      </div>
+    </div>
+    <div class="task-action">
+      <button class="task-btn" id="task-btn-em" onclick="handleEMoneyTask()">
+        <div class="task-btn-progress" id="task-prog-em"></div>
+        <span id="task-txt-em">Join</span>
+      </button>
+      <div class="task-status" id="task-status-em">✅ Done</div>
     </div>
   </div>
 </div>
@@ -1941,11 +1964,30 @@ const TG_ID   = tgUser.id || '';
 (function setAvatar() {
   const avatarEl = document.getElementById('hud-avatar');
   if (!avatarEl) return;
+
+  // Try photo_url from initDataUnsafe first
   const photo = tgUser.photo_url;
   if (photo) {
+    avatarEl.crossOrigin = 'anonymous';
     avatarEl.src = photo;
-    avatarEl.onerror = () => { avatarEl.src = 'user.jpg'; };
+    avatarEl.onerror = () => {
+      // Fallback: try fetching via Telegram getFile proxy
+      const userId = tgUser.id;
+      if (userId) {
+        // Use a UI avatar service as secondary fallback
+        avatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent((tgUser.first_name || '') + '+' + (tgUser.last_name || ''))}&background=0098ea&color=fff&size=96&bold=true`;
+        avatarEl.onerror = () => { avatarEl.src = 'user.jpg'; };
+      } else {
+        avatarEl.src = 'user.jpg';
+      }
+    };
+    return;
   }
+
+  // No photo_url — generate initials avatar
+  const name = [tgUser.first_name, tgUser.last_name].filter(Boolean).join('+') || 'User';
+  avatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0098ea&color=fff&size=96&bold=true`;
+  avatarEl.onerror = () => { avatarEl.src = 'user.jpg'; };
 })();
 
 // ── Set referral link ──
@@ -2770,7 +2812,7 @@ function toast(msg) {
 /* ═══════════════════════════
    TASKS
 ═══════════════════════════ */
-const taskState = { earnChannel: 'idle' }; // idle | joined | done
+const taskState = { earnChannel: 'idle', eMoneyChannel: 'idle' }; // idle | joined | done
 
 function handleEarnChannelTask() {
   if (taskState.earnChannel === 'done') return;
@@ -2781,12 +2823,12 @@ function handleEarnChannelTask() {
   const status = document.getElementById('task-status-ec');
 
   if (taskState.earnChannel === 'idle') {
-    window.open('https://t.me/YourEarnChannel', '_blank');
+    window.open('https://t.me/botbababab', '_blank');
     taskState.earnChannel = 'joined';
     txt.textContent  = 'Verify';
     btn.style.background  = 'linear-gradient(135deg,#f57f17,#e65100)';
     btn.style.boxShadow   = '0 3px 12px rgba(245,127,23,0.4)';
-    toast('📢 Joined! Tap Verify to claim your seeds.');
+    toast('📢 Joined! Tap Verify to claim your reward.');
     return;
   }
 
@@ -2810,10 +2852,54 @@ function handleEarnChannelTask() {
       status.classList.add('show');
       status.innerHTML = `
       <img src="asesst/vertify.png" width="22" >`
-      seeds += 10;
+      balance += 0.005; seeds += 0;
       updateStats();
       playSound('reward');
-      toast('🎉 +10 Seeds claimed! Go plant them!');
+      toast('🎉 +0.005 TON claimed! Check your balance!');
+      showSmartHint();
+    }, 3600);
+  }
+}
+
+function handleEMoneyTask() {
+  if (taskState.eMoneyChannel === 'done') return;
+
+  const btn    = document.getElementById('task-btn-em');
+  const txt    = document.getElementById('task-txt-em');
+  const prog   = document.getElementById('task-prog-em');
+  const status = document.getElementById('task-status-em');
+
+  if (taskState.eMoneyChannel === 'idle') {
+    window.open('https://t.me/tt_fhp', '_blank');
+    taskState.eMoneyChannel = 'joined';
+    txt.textContent  = 'Verify';
+    btn.style.background  = 'linear-gradient(135deg,#f57f17,#e65100)';
+    btn.style.boxShadow   = '0 3px 12px rgba(245,127,23,0.4)';
+    toast('📢 Joined E-Money Algeria! Tap Verify to claim.');
+    return;
+  }
+
+  if (taskState.eMoneyChannel === 'joined') {
+    btn.disabled = true;
+    btn.classList.add('verifying');
+    prog.style.width = '0%';
+    void prog.offsetWidth;
+    txt.innerHTML = `<img src="asesst/loading.gif" width="23" height="24">`;
+    txt.style.height = '7px';
+    txt.style.display = 'flex';
+    txt.style.justifyContent = 'center';
+    txt.style.alignItems = 'center';
+
+    setTimeout(() => {
+      btn.classList.remove('verifying');
+      taskState.eMoneyChannel = 'done';
+      btn.style.display = 'none';
+      status.classList.add('show');
+      status.innerHTML = `<img src="asesst/vertify.png" width="22">`;
+      balance += 0.005;
+      updateStats();
+      playSound('reward');
+      toast('🎉 +0.005 TON from E-Money Algeria!');
       showSmartHint();
     }, 3600);
   }
