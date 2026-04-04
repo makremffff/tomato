@@ -215,7 +215,7 @@ body::before {
    Layout: [Avatar+Name] [Balance CENTER] [Resources]
 ══════════════════════════════════════════ */
 .farm-hud {
-  position: sticky; top: 0px; z-index: 80;
+  position: sticky; top: 2px; z-index: 80;
   width: 90%;
   padding: 10px 14px 12px;
   display: grid;
@@ -224,9 +224,9 @@ body::before {
   gap: 10px;
   background: rgba(266,886,303,0.0.9);
   border-bottom: 1px solid rgba(245,198,62,0.13);
-  backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(32px);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(32px);
   box-shadow: 0 1px 0 rgba(255,255,255,0.03), 0 8px 32px rgba(0,0,0,0.4);
-  border-radius: 0 0 26px 25px;
+  border-radius:  26px 25px;
 }
 
 /* subtle gold shimmer on top */
@@ -1078,7 +1078,10 @@ body::before {
   -webkit-backdrop-filter: blur(20px);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
   position: relative; overflow: hidden;
-  height: 60px;
+  height: 70px;
+  align-content: center;
+  translate: 0 -8px;
+ 
 }
 .inv-stat::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
@@ -1087,6 +1090,7 @@ body::before {
 .inv-stat-ico {
   font-size: 0.95rem; margin-bottom: 4px; display: block;
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+ 
 }
 .inv-stat-val {
   font-size: 0.92rem; font-weight: 700; color: #fff; line-height: 1;
@@ -1996,7 +2000,7 @@ body::before {
       <div class="inv-stat-lbl">Friends</div>
     </div>
     <div class="inv-stat s-blue">
-      <span class="inv-stat-ico"><img src="asesst/toncoin.png" width="23"></span>
+      <span class="inv-stat-ico"><img src="asesst/toncoin.png" width="16"></span>
       <div class="inv-stat-val">
         <span id="ref-earned-val">0.0000</span>
         <img src="asesst/toncoin.png" alt="TON">
