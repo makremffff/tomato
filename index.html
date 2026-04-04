@@ -216,14 +216,14 @@ body::before {
 ══════════════════════════════════════════ */
 .farm-hud {
   position: sticky; top: 2px; z-index: 80;
-  width: 95%;
+  width: 96%;
   padding: 10px 14px 12px;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
   background: rgba(266,886,303,0.0.9);
-  border-bottom: 1px solid rgba(245,198,62,0.13);
+  border: 1px solid rgba(0,1008,200,0.2);
   backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(32px);
   box-shadow: 0 1px 0 rgba(255,255,255,0.03), 0 8px 32px rgba(0,0,0,0.4);
   border-radius:  26px 25px;
@@ -242,8 +242,8 @@ body::before {
   display: flex; align-items: center; gap: 9px;
 }
 .farm-hud-avatar {
-  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
-  border: 2px solid rgba(245,198,62,0.45);
+  width: 45px; height: 45px; border-radius: 40%; flex-shrink: 0;
+  border: 1px solid rgba(245,198,62,0.35);
   box-shadow: 0 0 0 3px rgba(245,198,62,0.09), 0 3px 12px rgba(0,0,0,0.55);
   object-fit: cover;
 }
@@ -252,7 +252,7 @@ body::before {
   translate: 0 -7px;
 }
 .hud-verify-badge {
-  width: 16px; height: 16px; flex-shrink: 0;
+  width: 22px; height: 16px; flex-shrink: 0;
 }
 .farm-hud-userinfo {
   display: flex; flex-direction: column; gap: 1px;
@@ -1473,7 +1473,7 @@ body::before {
   font-size: 0.88rem; font-weight: 700;
   cursor: pointer; color: #fff;
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  background: url(background.png);
+  background: rgba(0, 0, 200, 0.5);
   box-shadow:
     0 6px 28px rgba(0,150,234,0.45),
     inset 0 1px 0 rgba(255,255,255,0.2);
@@ -1483,7 +1483,7 @@ body::before {
 .wd-submit::before {
   content: '';
   position: absolute; top: 0; left: -120%; width: 80%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,55,255,9.02), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,505,255,0.9), transparent);
   transform: skewX(-20deg);
   animation: wdShimmer 3.4s ease-in-out infinite;
  
