@@ -216,7 +216,7 @@ body::before {
 ══════════════════════════════════════════ */
 .farm-hud {
   position: sticky; top: 2px; z-index: 80;
-  width: 90%;
+  width: 95%;
   padding: 10px 14px 12px;
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -247,6 +247,13 @@ body::before {
   box-shadow: 0 0 0 3px rgba(245,198,62,0.09), 0 3px 12px rgba(0,0,0,0.55);
   object-fit: cover;
 }
+.farm-hud-name-row {
+  display: flex; align-items: center; gap: 4px;
+  translate: 0 -7px;
+}
+.hud-verify-badge {
+  width: 16px; height: 16px; flex-shrink: 0;
+}
 .farm-hud-userinfo {
   display: flex; flex-direction: column; gap: 1px;
 }
@@ -256,9 +263,10 @@ body::before {
   line-height: 1; letter-spacing: 0.2px;
   max-width: 70px; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
+  
 }
 .farm-hud-level {
-  font-size: 0.46rem; color: rgba(236,231,222,0.35);
+  font-size: 0.46rem; color: rgba(236,231,222,0.95);
   letter-spacing: 1px;
 }
 
@@ -318,84 +326,145 @@ body::before {
 .hud-pill-count { font-size: 0.7rem; font-weight: 700; }
 .hud-pill-label { font-size: 0.42rem; opacity: 0.7; letter-spacing: 0.5px; }
 
-/* ── FARM CARD (plots container) ── */
+/* ══════════════════════════════════════
+   FARM CARD — Premium Game UI
+══════════════════════════════════════ */
 .farm-card {
-  width: calc(100% - 24px);
-  background: rgba(3,9,25,0.04);
-  border: 1px solid rgba(5,266,0,0.18);
-  border-radius: 26px;
-  padding: 14px 12px 16px;
-  backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(28px);
+  width: calc(100% - 28px);
+  background:
+    linear-gradient(170deg,
+      rgba(18, 38, 20, 0.94) 0%,
+      rgba(10, 24, 12, 0.97) 55%,
+      rgba(6, 16, 8, 0.99) 100%);
+  border: 1px solid rgba(245,198,62,0.28);
+  border-radius: 24px;
+  padding: 12px 12px 14px;
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   box-shadow:
-    0 2px 0 rgba(255,255,255,0.05) inset,
-    0 -1px 0 rgba(0,0,0,0.3) inset,
-    0 16px 48px rgba(0,0,0,0.5),
-    0 0 0 1px rgba(245,198,62,0.06);
+    inset 0 1px 0 rgba(255,235,120,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.5),
+    inset 1px 0 0 rgba(255,255,255,0.03),
+    0 24px 64px rgba(0,0,0,0.70),
+    0 0 0 1px rgba(0,0,0,0.45),
+    0 0 40px rgba(94,207,136,0.06);
   display: flex; flex-direction: column; align-items: center; gap: 10px;
   position: relative; overflow: hidden;
-  animation: cardBorderPulse 4s ease-in-out infinite;
-  height: 35%;
-}
-@keyframes cardBorderPulse {
-  0%, 100% { box-shadow: 0 2px 0 rgba(255,255,255,0.05) inset, 0 -1px 0 rgba(0,0,0,0.3) inset, 0 16px 48px rgba(0,0,0,0.5), 0 0 20px rgba(245,198,62,0.04); }
-  50%       { box-shadow: 0 2px 0 rgba(255,255,255,0.05) inset, 0 -1px 0 rgba(0,0,0,0.3) inset, 0 16px 48px rgba(0,0,0,0.5), 0 0 28px rgba(245,198,62,0.12); }
-}
-/* gold ambient glow top */
-.farm-card::before {
-  content: '';
-  position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
-  width: 300px; height: 100px;
-  background: radial-gradient(ellipse, rgba(245,198,62,0.09) 0%, transparent 70%);
-  pointer-events: none; z-index: 0;
-}
-/* shimmer sweep */
-.farm-card::after {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent 5%, rgba(245,198,62,0.3) 50%, transparent 95%);
-  pointer-events: none;
-}
-.farm-card-header {
-  display: flex; align-items: center; gap: 8px; position: relative; z-index: 1;
-}
-.farm-card-title {
-  font-size: 1.05rem; font-weight: 700;
-  background: linear-gradient(135deg, #f7d05a 0%, #f5c63e 40%, #e0900a 70%, #f5c63e 100%);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  filter: drop-shadow(0 0 6px rgba(245,198,62,0.3));
-}
-.farm-card-sub {
-  font-size: 0.46rem; color: rgba(240,237,232,0.28);
-  text-align: center; letter-spacing: 1px; position: relative; z-index: 1;
-  text-transform: uppercase;
-}
-.farm-label {
-  display: none;
-}
-.farm-grid {
-  display: grid; grid-template-columns: repeat(3,1fr); gap: 12px;
-  width: 100%; position: relative; z-index: 1;
 }
 
-/* ══ CELL — 3D Professional ══ */
+/* gold shimmer top edge */
+.farm-card::before {
+  content: '';
+  position: absolute; top: 0; left: 12%; right: 12%; height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(245,198,62,0.70) 40%,
+    rgba(255,230,100,0.90) 50%,
+    rgba(245,198,62,0.70) 60%,
+    transparent 100%);
+  pointer-events: none; z-index: 2;
+}
+
+/* green depth glow bottom */
+.farm-card::after {
+  content: '';
+  position: absolute; bottom: -10px; left: 10%; right: 10%; height: 40px;
+  background: radial-gradient(ellipse, rgba(94,207,136,0.12) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ── header ── */
+.farm-card-header {
+  display: flex; align-items: center; justify-content: center;
+  gap: 7px; position: relative; z-index: 1; width: 100%;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(245,198,62,0.10);
+}
+.farm-card-header img { width: 20px; height: 20px; }
+
+.farm-card-title {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 2.5px;
+  background: linear-gradient(135deg, #ffe47a 0%, #f5c63e 45%, #d4900e 80%, #f5c63e 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  filter: drop-shadow(0 1px 6px rgba(245,198,62,0.4));
+}
+
+.farm-card-sub { display: none; }
+.farm-label    { display: none; }
+
+/* ── grid ── */
+.farm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  width: 100%;
+  position: relative; z-index: 1;
+}
+
+/* ══════════════════════════════════════
+   CELL — Rich Soil, Game-Grade 3D
+══════════════════════════════════════ */
 .cell {
-  aspect-ratio: 1; width: 100%;
+  aspect-ratio: 1 / 1;
+  width: 100%;
   background:
-    linear-gradient(60deg, var(--soil-c) 0%, var(--soil-a) 40%, var(--soil-b) 100%);
-  border: 1px solid rgba(180,120,40,0.45);
-  border-bottom: 3px solid rgba(50,20,5,0.8);
-  border-radius: 18px;
+    linear-gradient(155deg,
+      #8b4a1a 0%,
+      #6b3410 25%,
+      #4e2008 55%,
+      #3a1505 80%,
+      #2c0f03 100%);
+  border-top:    1px solid rgba(200,130,50,0.55);
+  border-left:   1px solid rgba(170,100,35,0.35);
+  border-right:  1px solid rgba(100,50,10,0.45);
+  border-bottom: 3px solid rgba(15,5,0,0.95);
+  border-radius: 15px;
   cursor: pointer; position: relative;
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 3px;
+  align-items: center; justify-content: center; gap: 2px;
   box-shadow:
-    0 1px 0 rgba(255,255,255,0.06) inset,
-    0 6px 0 rgba(35,12,0,0.55),
-    0 10px 22px rgba(0,0,0,0.55);
-  transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), border-color 0.18s, box-shadow 0.18s;
+    inset 0 2px 0 rgba(255,200,100,0.10),
+    inset 0 -2px 4px rgba(0,0,0,0.5),
+    inset 2px 0 4px rgba(0,0,0,0.15),
+    0 5px 0 rgba(12,4,0,0.80),
+    0 8px 20px rgba(0,0,0,0.55),
+    0 0 0 1px rgba(0,0,0,0.3);
+  transition: transform 0.18s cubic-bezier(.34,1.56,.64,1),
+              border-color 0.18s, box-shadow 0.18s;
   overflow: visible; user-select: none;
   will-change: transform;
-  
+}
+
+/* top sheen */
+.cell::after {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 40%;
+  background: linear-gradient(180deg,
+    rgba(255,200,120,0.10) 0%,
+    rgba(255,180,80,0.04) 50%,
+    transparent 100%);
+  border-radius: 14px 14px 0 0;
+  pointer-events: none; z-index: 0;
+}
+
+.cell:hover {
+  transform: translateY(-4px) scale(1.02);
+  border-top-color: rgba(94,207,136,0.75);
+  border-left-color: rgba(94,207,136,0.45);
+  box-shadow:
+    inset 0 2px 0 rgba(160,255,180,0.12),
+    inset 0 -2px 4px rgba(0,0,0,0.45),
+    0 7px 0 rgba(8,3,0,0.85),
+    0 14px 28px rgba(0,0,0,0.6),
+    0 0 16px rgba(94,207,136,0.18);
+}
+
+.cell:active {
+  transform: translateY(2px) scale(0.97);
+  box-shadow:
+    inset 0 1px 0 rgba(255,200,100,0.06),
+    inset 0 3px 6px rgba(0,0,0,0.6),
+    0 2px 0 rgba(8,3,0,0.9),
+    0 4px 10px rgba(0,0,0,0.45);
 }
 .farm-state-bar {
   width: calc(100% - 28px);
@@ -403,7 +472,7 @@ body::before {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px; padding: 11px 16px;
+  border-radius: 6px; padding: 11px 16px;
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
 }
@@ -526,27 +595,7 @@ body::before {
   display: none;
 }
 
-/* ══ CELL — 3D Professional ══ */
-.cell {
-  /* بدل aspect-ratio ثابت، نخلي الخلية تملأ الارتفاع */
-  width: 100%;
-  min-height: 90px;
-  background:
-    linear-gradient(160deg, var(--soil-c) 0%, var(--soil-a) 45%, var(--soil-b) 100%);
-  border: 1px solid rgba(180,120,40,0.45);
-  border-bottom: 3px solid rgba(50,20,5,0.8);
-  border-radius: 18px;
-  cursor: pointer; position: relative;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 3px;
-  box-shadow:
-    0 1px 0 rgba(255,255,255,0.06) inset,
-    0 6px 0 rgba(35,12,0,0.55),
-    0 10px 22px rgba(0,0,0,0.55);
-  transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), border-color 0.18s, box-shadow 0.18s;
-  overflow: visible; user-select: none;
-  will-change: transform;
-}
+/* ══ CELL duplicate — intentionally blank, defined above ══ */
 /* top sheen — pure CSS, no blur */
 .cell::after {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 45%;
@@ -831,17 +880,17 @@ body::before {
   white-space: nowrap;
 }
 
-/* ── STORE ITEM CARD (glass) ── */
+/* ── STORE ITEM CARD — same color as inv-how ── */
 .store-item {
   width: calc(100% - 28px); margin: 0 14px 12px;
   border-radius: 20px; overflow: visible; position: relative;
-  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(4px);
-  background: rgba(255,205,255,0.04);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  background: rgba(255,25,255,0.20);
+  border: 1px solid rgba(255,255,255,0.08);
   box-shadow: 0 8px 28px rgba(0,0,0,0.28),
               inset 0 1px 0 rgba(255,255,255,0.09),
               inset 0 -1px 0 rgba(0,0,0,0.08);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-  /* clip children to border-radius without hiding shadows */
   -webkit-mask-image: -webkit-radial-gradient(white, black);
   mask: none;
 }
@@ -859,17 +908,12 @@ body::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
   border-radius: 20px 0 0 20px; z-index: 2; pointer-events: none;
 }
-.si-green { border: 1px solid rgba(168,224,99,0.15); }
+.si-green { border-color: rgba(168,224,99,0.22); }
 .si-green::after { background: linear-gradient(180deg, #a8e063, rgba(168,224,99,0.1)); }
-.si-blue  { border: 1px solid rgba(41,182,246,0.15); }
+.si-blue  { border-color: rgba(41,182,246,0.22); }
 .si-blue::after  { background: linear-gradient(180deg, #29b6f6, rgba(41,182,246,0.1)); }
-.si-cyan  { border: 1px solid rgba(0,188,212,0.18); }
+.si-cyan  { border-color: rgba(0,188,212,0.25); }
 .si-cyan::after  { background: linear-gradient(180deg, #00bcd4, rgba(0,188,212,0.1)); }
-
-/* inner glow tint per color */
-.si-green { background: linear-gradient(135deg, rgba(168,224,99,0.05) 0%, rgba(255,255,255,0.02) 100%); }
-.si-blue  { background: linear-gradient(135deg, rgba(41,182,246,0.05) 0%, rgba(255,255,255,0.02) 100%); }
-.si-cyan  { background: linear-gradient(135deg, rgba(0,188,212,0.05)  0%, rgba(255,255,255,0.02) 100%); }
 
 .store-item-top {
   display: flex; align-items: center; gap: 12px;
@@ -1704,8 +1748,10 @@ body::before {
     <div class="farm-hud-left">
       <img class="farm-hud-avatar" id="hud-avatar" src="user.jpg" alt="user">
       <div class="farm-hud-userinfo">
-        <span class="farm-hud-username" id="hud-username">Player</span>
-        <span><img src="asesst/vertify.png" width="25" ></span>
+        <div class="farm-hud-name-row">
+          <img src="asesst/vertify.png" class="hud-verify-badge" alt="✓">
+          <span class="farm-hud-username" id="hud-username">Player</span>
+        </div>
         <span class="farm-hud-level">🌱 Farmer</span>
       </div>
       <span id="hud-user-id" style="display:none"></span>
