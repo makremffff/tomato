@@ -1342,6 +1342,7 @@ body::before {
   color: #fff; letter-spacing: -2px;
   display: flex; align-items: center; gap: 12px;
   filter: drop-shadow(0 0 28px rgba(0,200,255,0.35));
+  letter-spacing: 1px;
 }
 .wd-hero-val img {
   width: 23px; height: 23px;
@@ -1734,9 +1735,101 @@ body::before {
   column-gap: 10px;
  
 }
+
+.loading-page{
+  margin: 0;
+  background: url(file.png)no-repeat center center;
+  background-size: 100% 100%;
+  height: 100vh;
+  color: white;
+  tex-transform: uppercase;
+  overflow: hidden;
+  font-family: fantasy;
+  overflow: auto;
+backdrop-filter: blur(3px);
+ transition: 4s;
+ backgrund: #000;
+ position: fixed;
+ inset: 0;
+ z-index: 99999;
+}
+
+.loading-page::before{
+  content: "";
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  position: fixed;
+  animation: filte 12s linear infinite alternate-reverse;
+  transition: 3s;
+}
+@keyframes filte{
+  10%{
+   background: rgba(0, 0, 0, 0.2);
+  }
+  40%{
+   background: rgba(0, 0, 0, 0.3);
+  }
+  50%{
+   background: rgba(0, 0, 0, 0.4);
+  }
+  60%{
+  background: rgba(0, 0, 0, 0.5);
+  }
+  70%{
+  background: rgba(0, 0, 0, 0.6);
+  }
+  100%{
+  background: rgba(0, 0, 0, 1.9);
+  }
+}
+
+.load-page{
+position: absolute;
+top: 0%;
+left: 0%;
+width: 100%;
+display: flex;
+flex-direction: column;
+align-items: center;
+background: rgba(0, 0, 100, 0.2);
+row-gap: 70px;
+backdrop-filter: blur(1px);
+box-shadow: 0 3px 13px rgba(0, 200, 0, 0.3);
+color: aqua;
+font-weight: bold;
+height: 100vh;
+z-index: 1;
+}
+.load-page img{
+position: absolute;
+top: 30%;
+left: 25%;
+}
+#onlineimg{
+  position: absolute;
+  left: 44%;
+  top: 40%;
+}
+
+.loading-page.hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.8s ease, visibility 0.8s ease;
+}
+
 </style>
 </head>
 <body>
+<div class="loading-page" id="loading-page">
+
+  <div class="load-page">
+  <span id="onlineimg"><img src="asesst/online.gif" width="60"></span>
+  <span><img src="asesst/loading.gif" width="190" ></span>
+  
+  </div>
+  </div>
+
 
 <!-- PAGE: FARM -->
 <div id="page-farm" class="page active">
@@ -2564,7 +2657,8 @@ function playSound(type) {
       g2.gain.linearRampToValueAtTime(0.65, now + 0.135);
       g2.gain.exponentialRampToValueAtTime(0.001, now + 0.72);
       n2.connect(g2); g2.connect(master);
-      n2.start(now + 0.12); n2.stop(now + 0.75);
+      n2.start(now + 0.12); n2
+      .stop(now + 0.75);
 
       // نغمة 3 — Sol (بعد 0.24s)
       const n3 = ctx.createOscillator(); const g3 = ctx.createGain();
@@ -3253,7 +3347,7 @@ function watchWaterAd() {
         if (watched < TOTAL) {
           // انتظر 6 ثواني قبل تشغيل الإعلان التالي
           let remaining = 6;
-          txtEl.innerHTML = `<span class="loadAd">⏳ Next ad in ${remaining}s…</span>`;
+          txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23" > Next ad in ${remaining}s…</span>`;
           const countdown = setInterval(() => {
             remaining--;
             if (remaining <= 0) {
@@ -3294,6 +3388,7 @@ function _giveWaterReward(txtEl, progEl, cntEl, btnEl) {
     document.getElementById('nb-farm'), 0);
   setTimeout(() => { adCooldown.water = false; }, 3000);
 }
+
 
 function _resetWaterBtn(txtEl, progEl, btnEl) {
   btnEl.classList.remove('loading-w');
@@ -3510,15 +3605,25 @@ function runPageAnim(pageEl) {
   });
 }
 
-// Trigger on initial load after a tick so DOM is fully painted
-requestAnimationFrame(() => {
-  runPageAnim(document.getElementById('page-farm'));
-});
-
-// Show first-visit farm hint after short delay
-setTimeout(() => showHint('farm-first',
-  '👆 Tap any empty plot to plant your first tomato!',
-  document.getElementById('farm-grid'), 10), 1200);
+(function(){
+  var p = document.getElementById('loading-page');
+  if (!p) return;
+  document.body.style.pointerEvents = 'none';
+  p.style.pointerEvents = 'all';
+  setTimeout(function(){
+    p.classList.add('hide');
+    document.body.style.pointerEvents = '';
+    // ── Trigger farm entrance animation AFTER loading screen fades out ──
+    setTimeout(function(){
+      runPageAnim(document.getElementById('page-farm'));
+      // Show first-visit hint shortly after animation starts
+      setTimeout(() => showHint('farm-first',
+        '👆 Tap any empty plot to plant your first tomato!',
+        document.getElementById('farm-grid'), 10), 800);
+    }, 100); // small offset so fade-out and slide-in don't overlap
+    setTimeout(function(){ p.remove(); }, 900);
+  }, 9000);
+})();
 </script>
 </body>
 </html>
