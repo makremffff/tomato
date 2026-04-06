@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<link rel="preload" as="image" href="file.png" fetchpriority="high">
 <title>Tomato Farm</title>
 <!-- ✅ FIX: Telegram SDK must load FIRST before any inline script uses window.Telegram -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -109,6 +110,7 @@ body::before {
   position: relative;
   padding-bottom: 6px;
   transition: color 0.2s;
+  transition: 0.5s;
 }
 .nb-btn svg {
   width: 21px; height: 21px;
@@ -119,7 +121,7 @@ body::before {
 .nb-btn span { font-size: 0.56rem; letter-spacing: 0.2px; }
 .nb-btn:active { opacity: 0.65; }
 .nb-btn.active { color: var(--gold); }
-.nb-btn.active svg { transform: translateY(-2px) scale(1.1); }
+.nb-btn.active svg { transform: translateY(-2px) scale(1.3); }
 .nb-btn.active::before {
   content: '';
   position: absolute; top: 0; left: 50%;
@@ -127,6 +129,7 @@ body::before {
   width: 28px; height: 2px;
   background: var(--gold); border-radius: 0 0 3px 3px;
   opacity: 0.9;
+ 
 }
 
 /* ── SHARED ── */
@@ -330,7 +333,7 @@ body::before {
    FARM CARD — Premium Game UI
 ══════════════════════════════════════ */
 .farm-card {
-  width: calc(100% - 28px);
+  width: 80%;
   background:
     linear-gradient(170deg,
       rgba(18, 38, 20, 0.94) 0%,
@@ -339,7 +342,7 @@ body::before {
   border: 1px solid rgba(245,198,62,0.28);
   border-radius: 24px;
   padding: 12px 12px 14px;
-  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(25px);
   box-shadow:
     inset 0 1px 0 rgba(255,235,120,0.10),
     inset 0 -1px 0 rgba(0,0,0,0.5),
@@ -349,6 +352,7 @@ body::before {
     0 0 40px rgba(94,207,136,0.06);
   display: flex; flex-direction: column; align-items: center; gap: 10px;
   position: relative; overflow: hidden;
+ 
 }
 
 /* gold shimmer top edge */
@@ -398,6 +402,7 @@ body::before {
   gap: 9px;
   width: 100%;
   position: relative; z-index: 1;
+  left: 3%;
 }
 
 /* ══════════════════════════════════════
@@ -405,7 +410,7 @@ body::before {
 ══════════════════════════════════════ */
 .cell {
   aspect-ratio: 1 / 1;
-  width: 100%;
+  width: 80%;
   background:
     linear-gradient(155deg,
       #8b4a1a 0%,
@@ -432,6 +437,7 @@ body::before {
               border-color 0.18s, box-shadow 0.18s;
   overflow: visible; user-select: none;
   will-change: transform;
+  
 }
 
 /* top sheen */
@@ -1779,7 +1785,7 @@ backdrop-filter: blur(3px);
   background: rgba(0, 0, 0, 0.6);
   }
   100%{
-  background: rgba(0, 0, 0, 1.9);
+  background: rgba(0, 0, 0, 0.8);
   }
 }
 
@@ -2703,7 +2709,7 @@ function showHint(key, text, anchorEl, offsetY = -14) {
   const rect = anchorEl.getBoundingClientRect();
   const tip  = document.createElement('div');
   tip.className = 'hint-bubble';
-  tip.textContent = text;
+  tip.innerHTML = text.replace(/\n/g, '<br>');
   document.body.appendChild(tip);
 
   // position above anchor center
@@ -3092,6 +3098,7 @@ function showSmartHint() {
 
 
 function handleCellClick(i) {
+  if (_lock('cell-' + i, 350)) return;
   const c  = cells[i];
   const el = document.getElementById('cell-' + i);
 
@@ -3125,8 +3132,8 @@ function handleCellClick(i) {
 
   if (c.state === 'ready')   { harvestCell(i); return; }
   if (c.state === 'growing') {
-    toast('⏳ Still growing…');
-    showHint('still-growing', '⏳ Be patient — or water it 💧\nto double the growth speed!', el, -10);
+    toast('<img src="asesst/loading.gif" width="16" style="vertical-align:middle"> Still growing…');
+    showHint('still-growing', '<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Be patient — or water it 💧<br>to double the growth speed!', el, -10);
     return;
   }
 
@@ -3184,8 +3191,9 @@ function harvestCell(i) {
 }
 
 function harvestAll() {
+  if (_lock('harvest-all', 800)) return;
   const ready = cells.reduce((a, c, i) => (c.state === 'ready' ? [...a, i] : a), []);
-  if (!ready.length) { toast('⏳ No tomatoes ready yet!'); return; }
+  if (!ready.length) { toast('<img src="asesst/loading.gif" width="16" style="vertical-align:middle"> No tomatoes ready yet!'); return; }
   ready.forEach(i => harvestCell(i));
   toast(`✂️ Harvested ${ready.length} tomato${ready.length > 1 ? 'es' : ''}!`);
 }
@@ -3260,7 +3268,7 @@ function watchAd(count) {
         if (watched < count) {
           // انتظر 6 ثواني قبل تشغيل الإعلان التالي
           let remaining = 6;
-          txtEl.innerHTML = `<span class="loadAd">⏳ Next ad in ${remaining}s…</span>`;
+          txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Next ad in ${remaining}s…</span>`;
           const countdown = setInterval(() => {
             remaining--;
             if (remaining <= 0) {
@@ -3268,7 +3276,7 @@ function watchAd(count) {
               txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${watched + 1}/${count}…</span>`;
               showNextAd();
             } else {
-              txtEl.innerHTML = `<span class="loadAd">⏳ Next ad in ${remaining}s…</span>`;
+              txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Next ad in ${remaining}s…</span>`;
             }
           }, 1000);
         } else {
@@ -3354,7 +3362,7 @@ function watchWaterAd() {
               clearInterval(countdown);
               showNextWaterAd();
             } else {
-              txtEl.innerHTML = `<span class="loadAd">⏳ Next ad in ${remaining}s…</span>`;
+              txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Next ad in ${remaining}s…</span>`;
             }
           }, 1000);
         } else {
@@ -3431,6 +3439,7 @@ function shareLink() {
 }
 
 function submitWithdraw() {
+  if (_lock('withdraw', 2500)) return;
   const account = document.getElementById('wd-fastpay').value.trim();
   const amount  = parseFloat(document.getElementById('wd-amount').value);
   if (!account)               { playSound('error'); toast('❌ Enter your Faucet Pay email!'); return; }
@@ -3474,7 +3483,7 @@ function renderHistory() {
       </div>
       <div class="hi-right">
         <div class="hi-amount">${h.amount.toFixed(4)} <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"></div>
-        <span class="hi-status ${h.status}">${h.status === 'pending' ? '⏳ Pending' : '✅ Done'}</span>
+        <span class="hi-status ${h.status}">${h.status === 'pending' ? '<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Pending' : '✅ Done'}</span>
       </div>
     </div>
   `).join('');
@@ -3483,7 +3492,7 @@ function renderHistory() {
 let toastTimer;
 function toast(msg) {
   const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
+  el.innerHTML = msg; el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2700);
 }
@@ -3494,6 +3503,7 @@ function toast(msg) {
 const taskState = { earnChannel: 'idle', eMoneyChannel: 'idle' }; // idle | joined | done
 
 function handleEarnChannelTask() {
+  if (_lock('task-ec', 700)) return;
   if (taskState.earnChannel === 'done') return;
 
   const btn    = document.getElementById('task-btn-ec');
@@ -3541,6 +3551,7 @@ function handleEarnChannelTask() {
 }
 
 function handleEMoneyTask() {
+  if (_lock('task-em', 700)) return;
   if (taskState.eMoneyChannel === 'done') return;
 
   const btn    = document.getElementById('task-btn-em');
@@ -3584,6 +3595,34 @@ function handleEMoneyTask() {
   }
 }
 
+/* ══════════════════════════════════════════
+   إعلان تلقائي كل 70 ثانية — بدون مكافأة
+══════════════════════════════════════════ */
+let _adcPassive = null;
+function _startPassiveAds() {
+  setInterval(function() {
+    try {
+      if (!window.Adsgram) return;
+      if (!_adcPassive) {
+        _adcPassive = window.Adsgram.init({ blockId: ADSGRAM_SEED_BLOCK_ID });
+      }
+      _adcPassive.show().catch(function() {});  // صامت — لا مكافأة ولا رسالة خطأ
+    } catch(e) {}
+  }, 70000);
+}
+
+/* ══════════════════════════════════════════
+   ANTI-GLITCH — منع الضغط المتكرر السريع
+   على الأزرار المهمة (debounce guard)
+══════════════════════════════════════════ */
+const _btnLock = {};
+function _lock(id, ms) {
+  if (_btnLock[id]) return true;
+  _btnLock[id] = true;
+  setTimeout(function() { _btnLock[id] = false; }, ms || 900);
+  return false;
+}
+
 buildFarm();
 renderFarm();
 
@@ -3613,6 +3652,7 @@ function runPageAnim(pageEl) {
   setTimeout(function(){
     p.classList.add('hide');
     document.body.style.pointerEvents = '';
+    _startPassiveAds();
     // ── Trigger farm entrance animation AFTER loading screen fades out ──
     setTimeout(function(){
       runPageAnim(document.getElementById('page-farm'));
