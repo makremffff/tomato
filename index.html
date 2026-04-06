@@ -4,6 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <link rel="preload" as="image" href="file.png" fetchpriority="high">
+<link rel="preload" as="image" href="asesst/loading.gif" fetchpriority="high">
+<link rel="preload" as="image" href="asesst/online.gif" fetchpriority="high">
+<link rel="preload" as="image" href="asesst/ads.gif" fetchpriority="high">
+<link rel="preload" as="image" href="asesst/toncoin.png" fetchpriority="high">
+<link rel="preload" as="image" href="asesst/tomate.png" fetchpriority="high">
+<link rel="preload" as="image" href="asesst/vertify.png" fetchpriority="high">
+<link rel="preload" as="image" href="asesst/paln.png" fetchpriority="high">
+<link rel="preload" as="image" href="asesst/grow.png" fetchpriority="high">
+<link rel="preload" as="image" href="user.jpg" fetchpriority="high">
 <title>Tomato Farm</title>
 <!-- ✅ FIX: Telegram SDK must load FIRST before any inline script uses window.Telegram -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -383,7 +392,7 @@ body::before {
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(245,198,62,0.10);
 }
-.farm-card-header img { width: 20px; height: 20px; }
+.farm-card-header img { width: 36px; height: 36px; }
 
 .farm-card-title {
   font-size: 0.72rem; font-weight: 700; letter-spacing: 2.5px;
@@ -635,7 +644,7 @@ body::before {
 .cell .c-inner {
   position: relative; z-index: 1;
   display: flex; align-items: center; justify-content: center;
-  width: 74%; height: 74%;
+  width: 90%; height: 90%;
   filter: drop-shadow(0 3px 5px rgba(0,0,0,0.55));
 }
 .cell .c-inner .c-emoji { font-size: 2.9rem; line-height: 1; }
@@ -648,8 +657,8 @@ body::before {
   position: relative; z-index: 5; top: -8px;
 }
 .cell .c-prog {
-  position: absolute; bottom: 5px; left: 8px; right: 8px;
-  height: 4px; background: rgba(0,0,0,0.35);
+  position: #42445Aabsolute; bottom: 2px; left: 8px; right: 8px;
+  height: 4px; background: rgba(200,00,400,0.01);
   border-radius: 4px; overflow: hidden; z-index: 1;
 }
 .cell .c-fill { height: 100%; background: linear-gradient(90deg, var(--green), #2db86a); border-radius: 4px; transition: width 0.5s ease; }
@@ -1890,7 +1899,7 @@ left: 25%;
   <!-- FARM CARD: plots -->
   <div class="farm-card pg-item">
     <div class="farm-card-header">
-      <img src="asesst/tomate.png" width="30" alt="tomato">
+      <img src="asesst/tomato.png" width="30" alt="tomato">
       <span class="farm-card-title">Tomato Farm</span>
     </div>
     <div class="farm-card-sub">Tap · Water · Harvest</div>
@@ -2848,7 +2857,9 @@ function renderFarm() {
         inner.innerHTML = '<img src="asesst/tomate.png" alt="tomato">';
         lbl.textContent = '✅ ready!';
       } else {
-        inner.innerHTML = `<span class="c-emoji">${pct < 45 ? '🌱' : '🌿'}</span>`;
+        inner.innerHTML = pct < 45
+          ? '<img src="asesst/plan.png" alt="seedling">'
+          : '<img src="asesst/grow.png" alt="growing">';
         lbl.textContent = pct + '%';
       }
     }
