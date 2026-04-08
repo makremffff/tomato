@@ -2478,8 +2478,9 @@ console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!T
   // ① اسم المستخدم في HUD — اسم أول فقط بدون @username أو ID
   const nameEl = document.getElementById('hud-username');
   if (nameEl) {
-    // نعرض الاسم الأول فقط، بدون @username
-    const display = TG_FIRST || 'Player';
+    // نعرض أول 4 حروف فقط من الاسم + "..." إذا كان أطول
+    const full    = TG_FIRST || TG_USERNAME || 'Play';
+    const display = full.length > 4 ? full.slice(0, 4) + '…' : full;
     nameEl.textContent = display;
   }
 
@@ -3139,99 +3140,32 @@ function handleCellClick(i) {
   const el = document.getElementById('cell-' + i);
 
   if (farmMode === 'water') {
-    // ready cells always harvest regardless of mode
-    if (c.state === 'ready') { harvestCell(i); return; }
-
+    if (c.state === 'ready') { fetchApi({ type: 'harvest', data: { cellIndex: i } }); return; }
     if (c.state === 'empty') {
-      // switch back to plant mode and plant
       setFarmMode('plant');
-      // fall through to plant logic below
+      // fall through to plant
     } else {
-      // growing cell — water it
-      if (c.watered) { toast('✅ Already watered!'); return; }
-      if (waterCount <= 0) {
-        playSound('error');
-        toast('💧 No water! Get more from Store.');
-        triggerAnim(el, 'shake');
-        return;
-      }
-      c.watered = true;
-      waterCount--;
-      playSound('water');
-      renderFarm();
-      toast('💧 Watered! Growing 2× faster');
-      showHint('water-first', '💧 Watered crops grow twice as fast!\nCheck back sooner for harvest 🌿', el, -10);
-      showSmartHint();
-      return;
+      fetchApi({ type: 'water', data: { cellIndex: i } }); return;
     }
   }
 
-  if (c.state === 'ready')   { harvestCell(i); return; }
+  if (c.state === 'ready')   { fetchApi({ type: 'harvest', data: { cellIndex: i } }); return; }
   if (c.state === 'growing') {
     toast('<img src="asesst/loading.gif" width="16" style="vertical-align:middle"> Still growing…');
-    showHint('still-growing', '<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Be patient — or water it 💧<br>to double the growth speed!', el, -10);
+    showHint('still-growing','<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Be patient — or water it 💧<br>to double the growth speed!', el, -10);
     return;
   }
 
-  const active = cells.filter(x => x.state !== 'empty').length;
-  if (active >= LIMIT) {
-    cells.forEach((x, j) => { if (x.state !== 'empty') triggerAnim(document.getElementById('cell-' + j), 'shake', 470); });
-    playSound('error');
-    toast('❌ All 3 plots are busy!');
-    return;
-  }
-
-  if (seeds <= 0) {
-    triggerAnim(el, 'shake', 470);
-    playSound('error');
-    toast('🌱 No seeds! Go to Store to get more.');
-    showHint('no-seeds', '🛒 Go to Store → Watch an ad\nto earn free seeds!',
-      document.getElementById('nb-store'), 0);
-    return;
-  }
-
-  seeds--;
-  c.state = 'growing'; c.progress = 0; c.watered = false;
-  playSound('plant');
-  triggerAnim(el, 'pop', 440);
-  renderFarm();
-  setFarmMode('plant');
-
-  // first-plant hint: suggest watering
-  showHint('plant-first', '🌱 Planted! Now try watering it 💧\nto make it grow 2× faster!', el, -10);
-  showSmartHint();
+  fetchApi({ type: 'plant', data: { cellIndex: i } });
 }
 
 function harvestCell(i) {
-  const c  = cells[i];
-  const el = document.getElementById('cell-' + i);
-  if (c.state !== 'ready') return;
-  el.classList.add('harvesting');
-  playSound('harvest');
-  spawnCoinBurst(el, TOMATO.reward);
-  balance += TOMATO.reward;
-  todayEarnings += TOMATO.reward;
-  totalHarvests++;
-  harvestHistory.push(TOMATO.reward);
-  if (harvestHistory.length > 7) harvestHistory.shift();
-  if (referralFriends > 0) referralBalance += TOMATO.reward * REF_PCT * referralFriends;
-  flashEdgeGlow();
-  updateStats();
-  showHint('harvest-first', `✅ Harvested! +0.0001 💎 TON earned.\nPlant again to keep earning!`, el, -10);
-  setTimeout(() => {
-    el.classList.remove('harvesting');
-    c.state = 'empty'; c.progress = 0; c.watered = false;
-    renderFarm();
-    showSmartHint();
-  }, 480);
+  fetchApi({ type: 'harvest', data: { cellIndex: i } });
 }
 
 function harvestAll() {
   if (_lock('harvest-all', 800)) return;
-  const ready = cells.reduce((a, c, i) => (c.state === 'ready' ? [...a, i] : a), []);
-  if (!ready.length) { toast('<img src="asesst/loading.gif" width="16" style="vertical-align:middle"> No tomatoes ready yet!'); return; }
-  ready.forEach(i => harvestCell(i));
-  toast(`✂️ Harvested ${ready.length} tomato${ready.length > 1 ? 'es' : ''}!`);
+  fetchApi({ type: 'harvestAll' });
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -3266,8 +3200,12 @@ const adCooldown = { seed: false, water: false };
 let _adSeedInProgress  = false;
 let _adWaterInProgress = false;
 
-/* ── Seeds: يشغّل 3 إعلانات ورا بعض ثم يكافئ بـ 3 بذور ── */
+/* ── Seeds ad: واجهة موحّدة عبر fetchApi ── */
 function watchAd(count) {
+  fetchApi({ type: 'watchAdSeed', data: { count } });
+}
+
+function _runWatchAd(count) {
   // count = 1 أو 3 — نحن نشغّل دائماً "count" إعلانات بشكل متسلسل
   if (adCooldown.seed || _adSeedInProgress) return;
   _adSeedInProgress = true;
@@ -3356,8 +3294,12 @@ function _resetSeedBtn(count, btnEl, txtEl, progEl) {
   txtEl.textContent = count === 1 ? '▶ Watch Ad → Get 1 Seed' : '▶▶ Watch 5 Ads → Get 7 Seeds';
 }
 
-/* ── Water: يشغّل 2 إعلانات ورا بعض ثم يكافئ بـ 3 مياه ── */
+/* ── Water ad: واجهة موحّدة عبر fetchApi ── */
 function watchWaterAd() {
+  fetchApi({ type: 'watchAdWater' });
+}
+
+function _runWatchWaterAd() {
   if (adCooldown.water || _adWaterInProgress) return;
   _adWaterInProgress = true;
   const btnEl  = document.getElementById('ad-btn-w');
@@ -3492,26 +3434,7 @@ function submitWithdraw() {
   if (_lock('withdraw', 2500)) return;
   const account = document.getElementById('wd-fastpay').value.trim();
   const amount  = parseFloat(document.getElementById('wd-amount').value);
-  if (!account)               { playSound('error'); toast('❌ Enter your Faucet Pay email!'); return; }
-  if (!amount || amount <= 0) { playSound('error'); toast('❌ Enter a valid amount!'); return; }
-  if (amount < 0.05)          { playSound('error'); toast('❌ Minimum withdrawal is 0.05 TON!'); return; }
-  if (amount > balance)       { playSound('error'); toast('❌ Insufficient balance!'); return; }
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
-    + ' ' + now.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
-
-  withdrawHistory.unshift({ account, amount, date: dateStr, status: 'pending' });
-  balance -= amount;
-  playSound('harvest');
-  updateStats();
-  document.getElementById('wd-fastpay').value = '';
-  document.getElementById('wd-amount').value  = '';
-  document.getElementById('wd-bal').textContent = balance.toFixed(4);
-  renderHistory();
-  toast('✅ Withdrawal request submitted!');
-  showHint('withdraw-done', '✅ Request sent!\nProcessed within 24 hours ⚡',
-    document.querySelector('.withdraw-bal'), 10);
+  fetchApi({ type: 'withdraw', data: { account, amount } });
 }
 
 function renderHistory() {
@@ -3554,95 +3477,12 @@ const taskState = { earnChannel: 'idle', eMoneyChannel: 'idle' }; // idle | join
 
 function handleEarnChannelTask() {
   if (_lock('task-ec', 700)) return;
-  if (taskState.earnChannel === 'done') return;
-
-  const btn    = document.getElementById('task-btn-ec');
-  const txt    = document.getElementById('task-txt-ec');
-  const prog   = document.getElementById('task-prog-ec');
-  const status = document.getElementById('task-status-ec');
-
-  if (taskState.earnChannel === 'idle') {
-    window.open('https://t.me/botbababab', '_blank');
-    taskState.earnChannel = 'joined';
-    txt.textContent  = 'Verify';
-    btn.style.background  = 'linear-gradient(135deg,#f57f17,#e65100)';
-    btn.style.boxShadow   = '0 3px 12px rgba(245,127,23,0.4)';
-    toast('📢 Joined! Tap Verify to claim your reward.');
-    return;
-  }
-
-  if (taskState.earnChannel === 'joined') {
-    btn.disabled = true;
-    btn.classList.add('verifying');
-    prog.style.width = '0%';
-    void prog.offsetWidth;
-    txt.innerHTML = `
-    <img src="asesst/loading.gif" width="23" height="24">`;
-    txt.style.height = '7px';
-    txt.style.display= 'flex';
-    txt.style.justifyContent = 'center';
-    txt.style.alignItems = 'center';
-    
-
-    setTimeout(() => {
-      btn.classList.remove('verifying');
-      taskState.earnChannel = 'done';
-      btn.style.display = 'none';
-      status.classList.add('show');
-      status.innerHTML = `
-      <img src="asesst/vertify.png" width="22" >`
-      balance += 0.005; seeds += 0;
-      updateStats();
-      playSound('reward');
-      toast('🎉 +0.005 TON claimed! Check your balance!');
-      showSmartHint();
-    }, 3600);
-  }
+  fetchApi({ type: 'taskEarnChannel' });
 }
 
 function handleEMoneyTask() {
   if (_lock('task-em', 700)) return;
-  if (taskState.eMoneyChannel === 'done') return;
-
-  const btn    = document.getElementById('task-btn-em');
-  const txt    = document.getElementById('task-txt-em');
-  const prog   = document.getElementById('task-prog-em');
-  const status = document.getElementById('task-status-em');
-
-  if (taskState.eMoneyChannel === 'idle') {
-    window.open('https://t.me/tt_fhp', '_blank');
-    taskState.eMoneyChannel = 'joined';
-    txt.textContent  = 'Verify';
-    btn.style.background  = 'linear-gradient(135deg,#f57f17,#e65100)';
-    btn.style.boxShadow   = '0 3px 12px rgba(245,127,23,0.4)';
-    toast('📢 Joined E-Money Algeria! Tap Verify to claim.');
-    return;
-  }
-
-  if (taskState.eMoneyChannel === 'joined') {
-    btn.disabled = true;
-    btn.classList.add('verifying');
-    prog.style.width = '0%';
-    void prog.offsetWidth;
-    txt.innerHTML = `<img src="asesst/loading.gif" width="23" height="24">`;
-    txt.style.height = '7px';
-    txt.style.display = 'flex';
-    txt.style.justifyContent = 'center';
-    txt.style.alignItems = 'center';
-
-    setTimeout(() => {
-      btn.classList.remove('verifying');
-      taskState.eMoneyChannel = 'done';
-      btn.style.display = 'none';
-      status.classList.add('show');
-      status.innerHTML = `<img src="asesst/vertify.png" width="22">`;
-      balance += 0.005;
-      updateStats();
-      playSound('reward');
-      toast('🎉 +0.005 TON from E-Money Algeria!');
-      showSmartHint();
-    }, 3600);
-  }
+  fetchApi({ type: 'taskEMoney' });
 }
 
 /* ══════════════════════════════════════════
@@ -3671,6 +3511,177 @@ function _lock(id, ms) {
   _btnLock[id] = true;
   setTimeout(function() { _btnLock[id] = false; }, ms || 900);
   return false;
+}
+
+/* ══════════════════════════════════════════════════════════
+   FETCH API — بوابة مركزية لكل الأكشنات
+   الاستخدام: fetchApi({ type: 'actionName', data: {...} })
+   ✅ يوحّد طريقة التعامل مع API
+   ✅ يسهّل إضافة أكشنات جديدة بدون ملفات إضافية
+   ✅ تحكّم مركزي بالأخطاء والمعالجة
+══════════════════════════════════════════════════════════ */
+async function fetchApi({ type, data = {} }) {
+  try {
+    /* ── إذا أردت ربط سيرفر حقيقي، فعّل هذا الجزء: ──
+    const res = await fetch('/api/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, data, userId: TG_ID })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+    ─────────────────────────────────────────────────── */
+
+    // ── معالجة محلية (بدون سيرفر) ──
+    return await _dispatchAction(type, data);
+
+  } catch (err) {
+    console.error('[fetchApi] error:', type, err);
+    toast('⚠️ خطأ: ' + (err.message || type));
+    return { ok: false, error: err.message };
+  }
+}
+
+/* مُوزِّع الأكشنات — يستدعي الدالة المناسبة لكل type */
+async function _dispatchAction(type, data) {
+  switch (type) {
+
+    /* ── مزرعة ── */
+    case 'plant': {
+      const { cellIndex } = data;
+      const c  = cells[cellIndex];
+      const el = document.getElementById('cell-' + cellIndex);
+      const active = cells.filter(x => x.state !== 'empty').length;
+      if (active >= LIMIT)  { playSound('error'); toast('❌ All 3 plots are busy!'); return { ok: false }; }
+      if (seeds <= 0)       { triggerAnim(el,'shake',470); playSound('error'); toast('🌱 No seeds! Go to Store.'); return { ok: false }; }
+      seeds--;
+      c.state = 'growing'; c.progress = 0; c.watered = false;
+      playSound('plant');
+      triggerAnim(el, 'pop', 440);
+      renderFarm(); setFarmMode('plant');
+      showHint('plant-first','🌱 Planted! Now try watering it 💧\nto make it grow 2× faster!', el, -10);
+      showSmartHint();
+      return { ok: true };
+    }
+
+    case 'water': {
+      const { cellIndex } = data;
+      const c  = cells[cellIndex];
+      const el = document.getElementById('cell-' + cellIndex);
+      if (c.watered)       { toast('✅ Already watered!'); return { ok: false }; }
+      if (waterCount <= 0) { playSound('error'); toast('💧 No water! Get more from Store.'); triggerAnim(el,'shake'); return { ok: false }; }
+      c.watered = true; waterCount--;
+      playSound('water'); renderFarm();
+      toast('💧 Watered! Growing 2× faster');
+      showHint('water-first','💧 Watered crops grow twice as fast!\nCheck back sooner for harvest 🌿', el, -10);
+      showSmartHint();
+      return { ok: true };
+    }
+
+    case 'harvest': {
+      const { cellIndex } = data;
+      const c  = cells[cellIndex];
+      const el = document.getElementById('cell-' + cellIndex);
+      if (c.state !== 'ready') return { ok: false };
+      el.classList.add('harvesting');
+      playSound('harvest');
+      spawnCoinBurst(el, TOMATO.reward);
+      balance += TOMATO.reward; todayEarnings += TOMATO.reward; totalHarvests++;
+      harvestHistory.push(TOMATO.reward);
+      if (harvestHistory.length > 7) harvestHistory.shift();
+      if (referralFriends > 0) referralBalance += TOMATO.reward * REF_PCT * referralFriends;
+      flashEdgeGlow(); updateStats();
+      showHint('harvest-first','✅ Harvested! +0.0001 💎 TON earned.\nPlant again to keep earning!', el, -10);
+      setTimeout(() => {
+        el.classList.remove('harvesting');
+        c.state = 'empty'; c.progress = 0; c.watered = false;
+        renderFarm(); showSmartHint();
+      }, 480);
+      return { ok: true };
+    }
+
+    case 'harvestAll': {
+      const ready = cells.reduce((a, c, i) => (c.state === 'ready' ? [...a, i] : a), []);
+      if (!ready.length) { toast('<img src="asesst/loading.gif" width="16" style="vertical-align:middle"> No tomatoes ready yet!'); return { ok: false }; }
+      ready.forEach(i => fetchApi({ type: 'harvest', data: { cellIndex: i } }));
+      toast(`✂️ Harvested ${ready.length} tomato${ready.length > 1 ? 'es' : ''}!`);
+      return { ok: true };
+    }
+
+    /* ── سحب ── */
+    case 'withdraw': {
+      const { account, amount } = data;
+      if (!account)            { playSound('error'); toast('❌ Enter your Faucet Pay email!'); return { ok: false }; }
+      if (!amount || amount<=0){ playSound('error'); toast('❌ Enter a valid amount!'); return { ok: false }; }
+      if (amount < 0.05)       { playSound('error'); toast('❌ Minimum withdrawal is 0.05 TON!'); return { ok: false }; }
+      if (amount > balance)    { playSound('error'); toast('❌ Insufficient balance!'); return { ok: false }; }
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})
+                    + ' ' + now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      withdrawHistory.unshift({ account, amount, date: dateStr, status: 'pending' });
+      balance -= amount;
+      playSound('harvest'); updateStats();
+      document.getElementById('wd-fastpay').value = '';
+      document.getElementById('wd-amount').value  = '';
+      document.getElementById('wd-bal').textContent = balance.toFixed(4);
+      renderHistory();
+      toast('✅ Withdrawal request submitted!');
+      showHint('withdraw-done','✅ Request sent!\nProcessed within 24 hours ⚡',
+        document.querySelector('.withdraw-bal'), 10);
+      return { ok: true };
+    }
+
+    /* ── تاسكات ── */
+    case 'taskEarnChannel':  return _runChannelTask('earnChannel',  'https://t.me/botbababab',  0.005, '🎉 +0.005 TON claimed! Check your balance!'); 
+    case 'taskEMoney':       return _runChannelTask('eMoneyChannel','https://t.me/tt_fhp',      0.005, '🎉 +0.005 TON from E-Money Algeria!');
+
+    /* ── إعلانات ── */
+    case 'watchAdSeed':  _runWatchAd(data.count); return { ok: true };
+    case 'watchAdWater': _runWatchWaterAd();       return { ok: true };
+
+    default:
+      console.warn('[fetchApi] unknown action:', type);
+      return { ok: false, error: 'unknown action: ' + type };
+  }
+}
+
+/* ── مساعد: تشغيل تاسك قناة تيليغرام ── */
+function _runChannelTask(key, url, reward, successMsg) {
+  return new Promise(resolve => {
+    const btn    = document.getElementById('task-btn-' + (key==='earnChannel'?'ec':'em'));
+    const txt    = document.getElementById('task-txt-' + (key==='earnChannel'?'ec':'em'));
+    const prog   = document.getElementById('task-prog-'+ (key==='earnChannel'?'ec':'em'));
+    const status = document.getElementById('task-status-'+(key==='earnChannel'?'ec':'em'));
+
+    if (taskState[key] === 'done') { resolve({ ok: false }); return; }
+
+    if (taskState[key] === 'idle') {
+      window.open(url, '_blank');
+      taskState[key] = 'joined';
+      txt.textContent = 'Verify';
+      btn.style.background = 'linear-gradient(135deg,#f57f17,#e65100)';
+      btn.style.boxShadow  = '0 3px 12px rgba(245,127,23,0.4)';
+      toast('📢 Joined! Tap Verify to claim your reward.');
+      resolve({ ok: true, state: 'joined' }); return;
+    }
+
+    if (taskState[key] === 'joined') {
+      btn.disabled = true; btn.classList.add('verifying');
+      prog.style.width = '0%'; void prog.offsetWidth;
+      txt.innerHTML = `<img src="asesst/loading.gif" width="23" height="24">`;
+      txt.style.cssText = 'height:7px;display:flex;justify-content:center;align-items:center';
+      setTimeout(() => {
+        btn.classList.remove('verifying');
+        taskState[key] = 'done';
+        btn.style.display = 'none';
+        status.classList.add('show');
+        status.innerHTML = `<img src="asesst/vertify.png" width="22">`;
+        balance += reward; updateStats();
+        playSound('reward'); toast(successMsg); showSmartHint();
+        resolve({ ok: true, state: 'done' });
+      }, 3600);
+    }
+  });
 }
 
 buildFarm();
