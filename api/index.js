@@ -1,36 +1,12 @@
-/**
- * ╔══════════════════════════════════════════════════════════════╗
- * ║           🍅 TOMATO FARM — /api/index.js                    ║
- * ║   Supabase REST API (fetch مباشرة — بدون supabase-js)       ║
- * ║   يتوافق مع fetchApi({ type, data }) من index.html          ║
- * ╚══════════════════════════════════════════════════════════════╝
- *
- * ENV المطلوبة:
- *   NEXT_PUBLIC_SUPABASE_URL      = https://xxxx.supabase.co
- *   NEXT_PUBLIC_SUPABASE_ANON_KEY = eyJ...
- *
- * جداول Supabase المطلوبة:
- *   users          (telegram_id, first_name, last_name, username, photo_url,
- *                   balance, seeds, water_count, total_harvests, today_earnings,
- *                   referral_friends, referral_balance, day, created_at)
- *   cells          (telegram_id, cell_index, state, progress, watered)
- *   withdraw_requests (telegram_id, account, amount, status, created_at)
- *   tasks          (telegram_id, task_key, state)   -- idle | joined | done
- */
-
 'use strict';
 
-// ══════════════════════════════════════════
-// 1. إعداد Supabase REST
-// ══════════════════════════════════════════
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  throw new Error('[API] Missing SUPABASE_URL or SUPABASE_ANON_KEY in env');
+  throw new Error('[API] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in environment variables');
 }
 
-/** رؤوس مشتركة لكل طلب */
 const HEADERS = {
   'Content-Type':  'application/json',
   'apikey':        SUPABASE_KEY,
@@ -38,388 +14,484 @@ const HEADERS = {
   'Prefer':        'return=representation',
 };
 
-// ══════════════════════════════════════════
-// 2. مساعدات REST المركزية
-// ══════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
+// REST HELPERS
+// ─────────────────────────────────────────────────────────────
 
-/**
- * بناء URL الجدول مع filters اختيارية
- * مثال: tableUrl('users', { telegram_id: 'eq.123' })
- */
-function tableUrl(table, filters = {}) {
-  const base   = `${SUPABASE_URL}/rest/v1/${table}`;
+function tableUrl(table, filters) {
+  const base = `${SUPABASE_URL}/rest/v1/${table}`;
+  if (!filters || Object.keys(filters).length === 0) return base;
   const params = new URLSearchParams(filters);
-  return params.toString() ? `${base}?${params}` : base;
+  return `${base}?${params.toString()}`;
 }
 
-/** SELECT — يرجع [] */
-async function dbSelect(table, filters = {}, options = {}) {
-  const url = tableUrl(table, filters);
-  const headers = { ...HEADERS };
-  if (options.single) headers['Accept'] = 'application/vnd.pgrst.object+json';
-  const res = await fetch(url, { method: 'GET', headers });
-  if (!res.ok) await throwDbError(res, `SELECT ${table}`);
+async function throwDbError(res, label) {
+  let detail = '';
+  try {
+    const body = await res.json();
+    detail = JSON.stringify(body);
+  } catch (_) {
+    detail = res.statusText || 'unknown error';
+  }
+  throw new Error(`[DB] ${label} failed (${res.status}): ${detail}`);
+}
+
+async function dbSelect(table, filters, options) {
+  const safeFilters  = filters  || {};
+  const safeOptions  = options  || {};
+  const url     = tableUrl(table, safeFilters);
+  const headers = Object.assign({}, HEADERS);
+  if (safeOptions.single) {
+    headers['Accept'] = 'application/vnd.pgrst.object+json';
+  }
+  const res = await fetch(url, { method: 'GET', headers: headers });
+  if (!res.ok) {
+    await throwDbError(res, 'SELECT ' + table);
+  }
   return res.json();
 }
 
-/** INSERT — يرجع الصف المُدرج */
 async function dbInsert(table, body) {
   const res = await fetch(tableUrl(table), {
     method:  'POST',
     headers: HEADERS,
     body:    JSON.stringify(body),
   });
-  if (!res.ok) await throwDbError(res, `INSERT ${table}`);
+  if (!res.ok) {
+    await throwDbError(res, 'INSERT ' + table);
+  }
   return res.json();
 }
 
-/** UPSERT — يدرج أو يُحدِّث */
-async function dbUpsert(table, body, onConflict = 'id') {
-  const res = await fetch(tableUrl(table) + `?on_conflict=${onConflict}`, {
+async function dbUpsert(table, body, onConflict) {
+  const conflict = onConflict || 'id';
+  const url = tableUrl(table) + '?on_conflict=' + conflict;
+  const headers = Object.assign({}, HEADERS, {
+    'Prefer': 'resolution=merge-duplicates,return=representation',
+  });
+  const res = await fetch(url, {
     method:  'POST',
-    headers: { ...HEADERS, Prefer: 'resolution=merge-duplicates,return=representation' },
+    headers: headers,
     body:    JSON.stringify(body),
   });
-  if (!res.ok) await throwDbError(res, `UPSERT ${table}`);
+  if (!res.ok) {
+    await throwDbError(res, 'UPSERT ' + table);
+  }
   return res.json();
 }
 
-/** UPDATE — يرجع الصف المُعدَّل */
 async function dbUpdate(table, filters, body) {
   const res = await fetch(tableUrl(table, filters), {
     method:  'PATCH',
     headers: HEADERS,
     body:    JSON.stringify(body),
   });
-  if (!res.ok) await throwDbError(res, `UPDATE ${table}`);
+  if (!res.ok) {
+    await throwDbError(res, 'UPDATE ' + table);
+  }
   return res.json();
 }
 
-/** رمي خطأ قاعدة بيانات مع تفاصيل */
-async function throwDbError(res, label) {
-  let detail = '';
-  try { detail = JSON.stringify(await res.json()); } catch (_) {}
-  throw new Error(`[DB] ${label} failed (${res.status}): ${detail}`);
-}
+// ─────────────────────────────────────────────────────────────
+// BUSINESS HELPERS
+// ─────────────────────────────────────────────────────────────
 
-// ══════════════════════════════════════════
-// 3. مساعدات الأعمال (Business Helpers)
-// ══════════════════════════════════════════
-
-/** جلب مستخدم أو إنشاؤه إذا لم يكن موجوداً */
 async function getOrCreateUser(tgUser) {
-  const { telegram_id, first_name, last_name, username, photo_url } = tgUser;
+  const telegram_id = tgUser.telegram_id;
+  const first_name  = tgUser.first_name  || '';
+  const last_name   = tgUser.last_name   || '';
+  const username    = tgUser.username    || '';
+  const photo_url   = tgUser.photo_url   || '';
 
-  const rows = await dbSelect('users', { telegram_id: `eq.${telegram_id}` });
+  const rows = await dbSelect('users', { telegram_id: 'eq.' + telegram_id });
 
   if (rows.length > 0) {
-    // تحديث بيانات الملف الشخصي من تيليغرام (قد تتغير)
-    const [updated] = await dbUpdate(
+    const updated = await dbUpdate(
       'users',
-      { telegram_id: `eq.${telegram_id}` },
-      { first_name, last_name, username, photo_url }
+      { telegram_id: 'eq.' + telegram_id },
+      { first_name: first_name, last_name: last_name, username: username, photo_url: photo_url }
     );
-    return updated;
+    return updated[0] || updated;
   }
 
-  // مستخدم جديد — القيم الافتراضية
-  const [created] = await dbInsert('users', {
-    telegram_id,
-    first_name:        first_name || '',
-    last_name:         last_name  || '',
-    username:          username   || '',
-    photo_url:         photo_url  || '',
-    balance:           0,
-    seeds:             3,
-    water_count:       3,
-    total_harvests:    0,
-    today_earnings:    0,
-    referral_friends:  0,
-    referral_balance:  0,
-    day:               1,
+  const created = await dbInsert('users', {
+    telegram_id:      telegram_id,
+    first_name:       first_name,
+    last_name:        last_name,
+    username:         username,
+    photo_url:        photo_url,
+    balance:          0,
+    seeds:            3,
+    water_count:      3,
+    total_harvests:   0,
+    today_earnings:   0,
+    referral_friends: 0,
+    referral_balance: 0,
+    day:              1,
   });
-  return created;
+  return Array.isArray(created) ? created[0] : created;
 }
 
-/** جلب خلايا المزرعة (3 خلايا) أو إنشاؤها */
 async function getUserCells(telegram_id) {
-  const rows = await dbSelect('cells', { telegram_id: `eq.${telegram_id}` });
+  const rows = await dbSelect('cells', { telegram_id: 'eq.' + telegram_id });
   if (rows.length === 3) return rows;
 
-  // إنشاء الخلايا الافتراضية
-  const defaults = [0, 1, 2].map(i => ({
-    telegram_id,
-    cell_index: i,
-    state:      'empty',
-    progress:   0,
-    watered:    false,
-  }));
-  return dbInsert('cells', defaults);
+  const defaults = [0, 1, 2].map(function(i) {
+    return {
+      telegram_id: telegram_id,
+      cell_index:  i,
+      state:       'empty',
+      progress:    0,
+      watered:     false,
+    };
+  });
+  const inserted = await dbInsert('cells', defaults);
+  return Array.isArray(inserted) ? inserted : defaults;
 }
 
-// ══════════════════════════════════════════
-// 4. معالجات الأكشنات
-//    كل دالة: handler(telegram_id, data) → { ok, ...payload }
-// ══════════════════════════════════════════
+async function getUser(telegram_id) {
+  const rows = await dbSelect('users', { telegram_id: 'eq.' + telegram_id });
+  if (!rows || rows.length === 0) {
+    throw new Error('user_not_found');
+  }
+  return rows[0];
+}
 
-/** ── getState: يرجع حالة اللعبة كاملة ── */
+async function getCell(telegram_id, cellIndex) {
+  const rows = await dbSelect('cells', {
+    telegram_id: 'eq.' + telegram_id,
+    cell_index:  'eq.' + cellIndex,
+  });
+  return rows && rows.length > 0 ? rows[0] : null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACTION HANDLERS
+// ─────────────────────────────────────────────────────────────
+
 async function actionGetState(telegram_id) {
-  const [user, cells] = await Promise.all([
-    dbSelect('users', { telegram_id: `eq.${telegram_id}` }, { single: true }),
-    getUserCells(telegram_id),
-  ]);
-  return { ok: true, user, cells };
+  const rows = await dbSelect('users', { telegram_id: 'eq.' + telegram_id });
+  if (!rows || rows.length === 0) {
+    return { ok: false, error: 'user_not_found' };
+  }
+  const user  = rows[0];
+  const cells = await getUserCells(telegram_id);
+  return { ok: true, user: user, cells: cells };
 }
 
-/** ── plant: زرع بذرة في خلية ── */
-async function actionPlant(telegram_id, { cellIndex }) {
-  const [user, cells] = await Promise.all([
-    dbSelect('users', { telegram_id: `eq.${telegram_id}` }, { single: true }),
+async function actionPlant(telegram_id, data) {
+  var cellIndex = data && data.cellIndex !== undefined ? data.cellIndex : null;
+  if (cellIndex === null || cellIndex === undefined) {
+    return { ok: false, error: 'missing_cellIndex' };
+  }
+
+  var results = await Promise.all([
+    getUser(telegram_id),
     getUserCells(telegram_id),
   ]);
+  var user  = results[0];
+  var cells = results[1];
 
-  const active = cells.filter(c => c.state !== 'empty').length;
-  if (active >= 3)     return { ok: false, error: 'all_plots_busy' };
-  if (user.seeds <= 0) return { ok: false, error: 'no_seeds' };
+  var active = cells.filter(function(c) { return c.state !== 'empty'; }).length;
+  if (active >= 3)      return { ok: false, error: 'all_plots_busy' };
+  if (user.seeds <= 0)  return { ok: false, error: 'no_seeds' };
 
   await Promise.all([
-    dbUpdate('users',  { telegram_id: `eq.${telegram_id}` }, { seeds: user.seeds - 1 }),
-    dbUpdate('cells',  { telegram_id: `eq.${telegram_id}`, cell_index: `eq.${cellIndex}` },
-             { state: 'growing', progress: 0, watered: false }),
+    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { seeds: user.seeds - 1 }),
+    dbUpdate('cells', { telegram_id: 'eq.' + telegram_id, cell_index: 'eq.' + cellIndex },
+      { state: 'growing', progress: 0, watered: false }),
   ]);
 
   return { ok: true, seeds: user.seeds - 1 };
 }
 
-/** ── water: سقي خلية ── */
-async function actionWater(telegram_id, { cellIndex }) {
-  const [user] = await dbSelect('users', { telegram_id: `eq.${telegram_id}` });
-  const [cell] = await dbSelect('cells', {
-    telegram_id: `eq.${telegram_id}`,
-    cell_index:  `eq.${cellIndex}`,
-  });
+async function actionWater(telegram_id, data) {
+  var cellIndex = data && data.cellIndex !== undefined ? data.cellIndex : null;
+  if (cellIndex === null || cellIndex === undefined) {
+    return { ok: false, error: 'missing_cellIndex' };
+  }
 
-  if (!cell || cell.state !== 'growing') return { ok: false, error: 'cell_not_growing' };
-  if (cell.watered)                       return { ok: false, error: 'already_watered' };
-  if (user.water_count <= 0)              return { ok: false, error: 'no_water' };
+  var user = await getUser(telegram_id);
+  var cell = await getCell(telegram_id, cellIndex);
+
+  if (!cell)                         return { ok: false, error: 'cell_not_found' };
+  if (cell.state !== 'growing')      return { ok: false, error: 'cell_not_growing' };
+  if (cell.watered)                  return { ok: false, error: 'already_watered' };
+  if (user.water_count <= 0)         return { ok: false, error: 'no_water' };
 
   await Promise.all([
-    dbUpdate('users', { telegram_id: `eq.${telegram_id}` }, { water_count: user.water_count - 1 }),
-    dbUpdate('cells', { telegram_id: `eq.${telegram_id}`, cell_index: `eq.${cellIndex}` },
-             { watered: true }),
+    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { water_count: user.water_count - 1 }),
+    dbUpdate('cells', { telegram_id: 'eq.' + telegram_id, cell_index: 'eq.' + cellIndex },
+      { watered: true }),
   ]);
 
   return { ok: true, water_count: user.water_count - 1 };
 }
 
-/** ── harvest: حصاد خلية ── */
-async function actionHarvest(telegram_id, { cellIndex }) {
-  const REWARD = 0.0001;
-  const REF_PCT = 0.05;
+async function actionHarvest(telegram_id, data) {
+  var REWARD  = 0.0001;
+  var REF_PCT = 0.05;
 
-  const [user] = await dbSelect('users', { telegram_id: `eq.${telegram_id}` });
-  const [cell] = await dbSelect('cells', {
-    telegram_id: `eq.${telegram_id}`,
-    cell_index:  `eq.${cellIndex}`,
-  });
+  var cellIndex = data && data.cellIndex !== undefined ? data.cellIndex : null;
+  if (cellIndex === null || cellIndex === undefined) {
+    return { ok: false, error: 'missing_cellIndex' };
+  }
 
-  if (!cell || cell.state !== 'ready') return { ok: false, error: 'cell_not_ready' };
+  var user = await getUser(telegram_id);
+  var cell = await getCell(telegram_id, cellIndex);
 
-  const refBonus = user.referral_friends > 0
-    ? REWARD * REF_PCT * user.referral_friends : 0;
+  if (!cell)                  return { ok: false, error: 'cell_not_found' };
+  if (cell.state !== 'ready') return { ok: false, error: 'cell_not_ready' };
+
+  var refBonus = user.referral_friends > 0
+    ? REWARD * REF_PCT * user.referral_friends
+    : 0;
+
+  var newBalance          = parseFloat((user.balance          + REWARD   ).toFixed(6));
+  var newTodayEarnings    = parseFloat((user.today_earnings   + REWARD   ).toFixed(6));
+  var newTotalHarvests    = user.total_harvests + 1;
+  var newReferralBalance  = parseFloat((user.referral_balance + refBonus ).toFixed(6));
 
   await Promise.all([
-    dbUpdate('users', { telegram_id: `eq.${telegram_id}` }, {
-      balance:          user.balance         + REWARD,
-      today_earnings:   user.today_earnings  + REWARD,
-      total_harvests:   user.total_harvests  + 1,
-      referral_balance: user.referral_balance + refBonus,
+    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, {
+      balance:          newBalance,
+      today_earnings:   newTodayEarnings,
+      total_harvests:   newTotalHarvests,
+      referral_balance: newReferralBalance,
     }),
-    dbUpdate('cells', { telegram_id: `eq.${telegram_id}`, cell_index: `eq.${cellIndex}` },
-             { state: 'empty', progress: 0, watered: false }),
+    dbUpdate('cells', { telegram_id: 'eq.' + telegram_id, cell_index: 'eq.' + cellIndex },
+      { state: 'empty', progress: 0, watered: false }),
   ]);
 
-  return { ok: true, reward: REWARD, balance: user.balance + REWARD };
+  return { ok: true, reward: REWARD, balance: newBalance };
 }
 
-/** ── harvestAll: حصاد كل الخلايا الجاهزة ── */
 async function actionHarvestAll(telegram_id) {
-  const cells = await getUserCells(telegram_id);
-  const readyCells = cells.filter(c => c.state === 'ready');
+  var cells      = await getUserCells(telegram_id);
+  var readyCells = cells.filter(function(c) { return c.state === 'ready'; });
   if (!readyCells.length) return { ok: false, error: 'no_ready_cells' };
 
-  const results = await Promise.all(
-    readyCells.map(c => actionHarvest(telegram_id, { cellIndex: c.cell_index }))
+  var results = await Promise.all(
+    readyCells.map(function(c) {
+      return actionHarvest(telegram_id, { cellIndex: c.cell_index });
+    })
   );
-  return { ok: true, harvested: results.filter(r => r.ok).length };
+
+  var harvested = results.filter(function(r) { return r.ok; }).length;
+  return { ok: true, harvested: harvested };
 }
 
-/** ── withdraw: طلب سحب ── */
-async function actionWithdraw(telegram_id, { account, amount }) {
-  if (!account)            return { ok: false, error: 'no_account' };
-  if (!amount || amount<=0)return { ok: false, error: 'invalid_amount' };
-  if (amount < 0.05)       return { ok: false, error: 'below_minimum' };
+async function actionWithdraw(telegram_id, data) {
+  var account = data && data.account ? String(data.account).trim() : '';
+  var amount  = data && data.amount  ? parseFloat(data.amount)     : 0;
 
-  const [user] = await dbSelect('users', { telegram_id: `eq.${telegram_id}` });
+  if (!account)        return { ok: false, error: 'no_account' };
+  if (!amount || amount <= 0) return { ok: false, error: 'invalid_amount' };
+  if (amount < 0.05)   return { ok: false, error: 'below_minimum' };
+
+  var user = await getUser(telegram_id);
   if (amount > user.balance) return { ok: false, error: 'insufficient_balance' };
 
+  var newBalance = parseFloat((user.balance - amount).toFixed(6));
+
   await Promise.all([
-    dbUpdate('users', { telegram_id: `eq.${telegram_id}` }, { balance: user.balance - amount }),
+    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { balance: newBalance }),
     dbInsert('withdraw_requests', {
-      telegram_id,
-      account,
-      amount,
-      status:     'pending',
-      created_at: new Date().toISOString(),
+      telegram_id: telegram_id,
+      account:     account,
+      amount:      amount,
+      status:      'pending',
+      created_at:  new Date().toISOString(),
     }),
   ]);
 
-  return { ok: true, balance: user.balance - amount };
+  return { ok: true, balance: newBalance };
 }
 
-/** ── task: تاسكات القنوات ── */
-async function actionTask(telegram_id, { taskKey }) {
-  const REWARDS = {
+async function actionTask(telegram_id, taskKey) {
+  var REWARDS = {
     taskEarnChannel: 0.005,
     taskEMoney:      0.005,
   };
 
-  const reward = REWARDS[taskKey];
+  var reward = REWARDS[taskKey];
   if (reward === undefined) return { ok: false, error: 'unknown_task' };
 
-  // جلب حالة التاسك
-  const rows = await dbSelect('tasks', {
-    telegram_id: `eq.${telegram_id}`,
-    task_key:    `eq.${taskKey}`,
-  });
+  var rows         = await dbSelect('tasks', { telegram_id: 'eq.' + telegram_id, task_key: 'eq.' + taskKey });
+  var currentState = rows && rows.length > 0 ? rows[0].state : 'idle';
 
-  const currentState = rows[0]?.state || 'idle';
   if (currentState === 'done') return { ok: false, error: 'task_already_done' };
 
   if (currentState === 'idle') {
-    // الخطوة الأولى: سجّل "joined"
     await dbUpsert('tasks', {
-      telegram_id,
-      task_key: taskKey,
-      state:    'joined',
+      telegram_id: telegram_id,
+      task_key:    taskKey,
+      state:       'joined',
     }, 'telegram_id,task_key');
     return { ok: true, state: 'joined' };
   }
 
-  // currentState === 'joined' → أعطِ المكافأة
-  const [user] = await dbSelect('users', { telegram_id: `eq.${telegram_id}` });
+  var user       = await getUser(telegram_id);
+  var newBalance = parseFloat((user.balance + reward).toFixed(6));
 
   await Promise.all([
-    dbUpdate('users', { telegram_id: `eq.${telegram_id}` }, { balance: user.balance + reward }),
-    dbUpsert('tasks', { telegram_id, task_key: taskKey, state: 'done' }, 'telegram_id,task_key'),
+    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { balance: newBalance }),
+    dbUpsert('tasks', { telegram_id: telegram_id, task_key: taskKey, state: 'done' }, 'telegram_id,task_key'),
   ]);
 
-  return { ok: true, state: 'done', reward, balance: user.balance + reward };
+  return { ok: true, state: 'done', reward: reward, balance: newBalance };
 }
 
-/** ── adReward: مكافأة الإعلانات (seeds / water) ── */
-async function actionAdReward(telegram_id, { rewardType, count }) {
-  const [user] = await dbSelect('users', { telegram_id: `eq.${telegram_id}` });
+async function actionAdReward(telegram_id, rewardType, count) {
+  var user = await getUser(telegram_id);
 
   if (rewardType === 'seeds') {
-    const seedReward = count === 5 ? 7 : count;
-    const newSeeds   = Math.min(99, user.seeds + seedReward);
-    await dbUpdate('users', { telegram_id: `eq.${telegram_id}` }, { seeds: newSeeds });
+    var seedReward = count === 5 ? 7 : (count || 1);
+    var newSeeds   = Math.min(99, user.seeds + seedReward);
+    await dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { seeds: newSeeds });
     return { ok: true, seeds: newSeeds };
   }
 
   if (rewardType === 'water') {
-    const newWater = Math.min(99, user.water_count + 3);
-    await dbUpdate('users', { telegram_id: `eq.${telegram_id}` }, { water_count: newWater });
+    var newWater = Math.min(99, user.water_count + 3);
+    await dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { water_count: newWater });
     return { ok: true, water_count: newWater };
   }
 
   return { ok: false, error: 'unknown_reward_type' };
 }
 
-/** ── tick: تحديث progress الخلايا (يُستدعى كل ثانية من العميل) ── */
 async function actionTick(telegram_id) {
-  const GROW_TIME = 30;
-  const cells = await getUserCells(telegram_id);
+  var GROW_TIME = 30;
+  var cells     = await getUserCells(telegram_id);
 
-  const updates = [];
-  let anyReady  = false;
+  var updates  = [];
+  var anyReady = false;
 
-  for (const c of cells) {
+  for (var i = 0; i < cells.length; i++) {
+    var c = cells[i];
     if (c.state !== 'growing') continue;
-    const newProgress = Math.min(GROW_TIME, c.progress + (c.watered ? 3 : 1));
-    const newState    = newProgress >= GROW_TIME ? 'ready' : 'growing';
+
+    var newProgress = Math.min(GROW_TIME, c.progress + (c.watered ? 3 : 1));
+    var newState    = newProgress >= GROW_TIME ? 'ready' : 'growing';
     if (newState === 'ready') anyReady = true;
+
     updates.push(
       dbUpdate('cells', {
-        telegram_id: `eq.${telegram_id}`,
-        cell_index:  `eq.${c.cell_index}`,
+        telegram_id: 'eq.' + telegram_id,
+        cell_index:  'eq.' + c.cell_index,
       }, { progress: newProgress, state: newState })
     );
   }
 
-  if (updates.length) await Promise.all(updates);
-  return { ok: true, anyReady };
+  if (updates.length > 0) await Promise.all(updates);
+  return { ok: true, anyReady: anyReady };
 }
 
-// ══════════════════════════════════════════
-// 5. الـ Router الرئيسي
-//    يستقبل { type, data, userId } ويوجّه للدالة المناسبة
-// ══════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
+// ACTION ROUTER
+// ─────────────────────────────────────────────────────────────
 
-const ACTION_MAP = {
-  getState:         (id, data) => actionGetState(id),
-  plant:            (id, data) => actionPlant(id, data),
-  water:            (id, data) => actionWater(id, data),
-  harvest:          (id, data) => actionHarvest(id, data),
-  harvestAll:       (id, data) => actionHarvestAll(id),
-  withdraw:         (id, data) => actionWithdraw(id, data),
-  taskEarnChannel:  (id, data) => actionTask(id, { taskKey: 'taskEarnChannel' }),
-  taskEMoney:       (id, data) => actionTask(id, { taskKey: 'taskEMoney' }),
-  watchAdSeed:      (id, data) => actionAdReward(id, { rewardType: 'seeds',  count: data?.count || 1 }),
-  watchAdWater:     (id, data) => actionAdReward(id, { rewardType: 'water' }),
-  tick:             (id, data) => actionTick(id),
-};
+async function routeAction(type, telegram_id, data) {
+  switch (type) {
+    case 'getState':
+      return actionGetState(telegram_id);
 
-/**
- * Handler الرئيسي — يصلح لـ:
- *   Next.js API Route  → export default handler
- *   Vercel Serverless  → export default handler
- *   Express            → app.post('/api/action', handler)
- */
+    case 'plant':
+      return actionPlant(telegram_id, data);
+
+    case 'water':
+      return actionWater(telegram_id, data);
+
+    case 'harvest':
+      return actionHarvest(telegram_id, data);
+
+    case 'harvestAll':
+      return actionHarvestAll(telegram_id);
+
+    case 'withdraw':
+      return actionWithdraw(telegram_id, data);
+
+    case 'taskEarnChannel':
+      return actionTask(telegram_id, 'taskEarnChannel');
+
+    case 'taskEMoney':
+      return actionTask(telegram_id, 'taskEMoney');
+
+    case 'watchAdSeed':
+      return actionAdReward(telegram_id, 'seeds', data && data.count ? data.count : 1);
+
+    case 'watchAdWater':
+      return actionAdReward(telegram_id, 'water', 0);
+
+    case 'tick':
+      return actionTick(telegram_id);
+
+    default:
+      return { ok: false, error: 'unknown action: ' + type };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// VERCEL / NEXT.JS HANDLER
+// ─────────────────────────────────────────────────────────────
+
 export default async function handler(req, res) {
-  // ── CORS ──
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST')    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Method not allowed. Use POST.' });
+  }
+
+  var body = req.body;
+
+  if (!body || typeof body !== 'object') {
+    return res.status(400).json({ ok: false, error: 'Request body must be JSON.' });
+  }
+
+  var type   = body.type   || null;
+  var data   = body.data   || {};
+  var userId = body.userId || null;
+  var tgUser = body.tgUser || null;
+
+  if (!type) {
+    return res.status(400).json({ ok: false, error: 'Missing required field: type' });
+  }
+
+  var telegram_id = null;
+
+  if (userId) {
+    telegram_id = String(userId);
+  } else if (tgUser && tgUser.id) {
+    telegram_id = String(tgUser.id);
+  }
+
+  if (!telegram_id) {
+    return res.status(401).json({ ok: false, error: 'unauthorized: missing userId or tgUser.id' });
+  }
 
   try {
-    const { type, data = {}, userId, tgUser } = req.body;
-
-    // ── التحقق من المستخدم ──
-    if (!userId && !tgUser?.id) {
-      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    if (tgUser && tgUser.id) {
+      await getOrCreateUser({
+        telegram_id: telegram_id,
+        first_name:  tgUser.first_name  || '',
+        last_name:   tgUser.last_name   || '',
+        username:    tgUser.username    || '',
+        photo_url:   tgUser.photo_url   || '',
+      });
     }
 
-    const telegram_id = userId || String(tgUser.id);
-
-    // ── تسجيل / تحديث المستخدم إذا أُرسلت بيانات تيليغرام ──
-    if (tgUser?.id) await getOrCreateUser({ telegram_id, ...tgUser });
-
-    // ── توجيه الأكشن ──
-    const fn = ACTION_MAP[type];
-    if (!fn) {
-      return res.status(400).json({ ok: false, error: `unknown action: ${type}` });
-    }
-
-    const result = await fn(telegram_id, data);
+    var result = await routeAction(type, telegram_id, data);
     return res.status(200).json(result);
 
   } catch (err) {
-    console.error('[API] Unhandled error:', err);
-    return res.status(500).json({ ok: false, error: err.message });
+    console.error('[API] Error — type:', type, '| telegram_id:', telegram_id, '| error:', err.message);
+    return res.status(500).json({ ok: false, error: err.message || 'internal_server_error' });
   }
 }
