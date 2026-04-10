@@ -1,11 +1,5 @@
-'use strict';
-
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  throw new Error('[API] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in environment variables');
-}
 
 const HEADERS = {
   'Content-Type':  'application/json',
@@ -436,7 +430,7 @@ async function routeAction(type, telegram_id, data) {
 // VERCEL / NEXT.JS HANDLER
 // ─────────────────────────────────────────────────────────────
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
