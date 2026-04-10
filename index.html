@@ -3522,17 +3522,6 @@ function _lock(id, ms) {
 ══════════════════════════════════════════════════════════ */
 async function fetchApi({ type, data = {} }) {
   try {
-    /* ── إذا أردت ربط سيرفر حقيقي، فعّل هذا الجزء: ──
-    const res = await fetch('/api/action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, data, userId: TG_ID })
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return await res.json();
-    ─────────────────────────────────────────────────── */
-
-    // ── معالجة محلية (بدون سيرفر) ──
     return await _dispatchAction(type, data);
 
   } catch (err) {
@@ -3561,6 +3550,7 @@ async function _dispatchAction(type, data) {
       renderFarm(); setFarmMode('plant');
       showHint('plant-first','🌱 Planted! Now try watering it 💧\nto make it grow 2× faster!', el, -10);
       showSmartHint();
+      saveUser();
       return { ok: true };
     }
 
@@ -3575,6 +3565,7 @@ async function _dispatchAction(type, data) {
       toast('💧 Watered! Growing 2× faster');
       showHint('water-first','💧 Watered crops grow twice as fast!\nCheck back sooner for harvest 🌿', el, -10);
       showSmartHint();
+      saveUser();
       return { ok: true };
     }
 
@@ -3596,6 +3587,7 @@ async function _dispatchAction(type, data) {
         el.classList.remove('harvesting');
         c.state = 'empty'; c.progress = 0; c.watered = false;
         renderFarm(); showSmartHint();
+        saveUser();
       }, 480);
       return { ok: true };
     }
@@ -3628,6 +3620,7 @@ async function _dispatchAction(type, data) {
       toast('✅ Withdrawal request submitted!');
       showHint('withdraw-done','✅ Request sent!\nProcessed within 24 hours ⚡',
         document.querySelector('.withdraw-bal'), 10);
+      saveUser();
       return { ok: true };
     }
 
@@ -3678,13 +3671,109 @@ function _runChannelTask(key, url, reward, successMsg) {
         status.innerHTML = `<img src="asesst/vertify.png" width="22">`;
         balance += reward; updateStats();
         playSound('reward'); toast(successMsg); showSmartHint();
+        saveUser();
         resolve({ ok: true, state: 'done' });
       }, 3600);
     }
   });
 }
 
+// ══════════════════════════════════════════════════════════
+//  DB SYNC — حفظ وتحميل من Neon عبر الباك اند
+// ══════════════════════════════════════════════════════════
+
+// ← غيّر هذا الرابط لرابط Vercel بعد النشر
+const API_BASE = 'https://tomato-v3.vercel.app/';
+
+async function _dbCall(action, data = {}) {
+  try {
+    const res = await fetch(API_BASE + '/api', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, telegram_id: TG_ID || '0', data })
+    });
+    return await res.json();
+  } catch (e) {
+    console.warn('[DB]', action, 'failed:', e.message);
+    return { ok: false };
+  }
+}
+
+async function loadUser() {
+  if (!TG_ID) return; // خارج تلغرام — شغّل محلياً
+  const result = await _dbCall('load', {
+    username:    TG_USERNAME || TG_FIRST || null,
+    referral_by: (tg?.initDataUnsafe?.start_param || '').replace('ref_', '') || null
+  });
+  if (!result.ok || !result.user) return;
+  const u = result.user;
+
+  // تطبيق البيانات على المتغيرات الموجودة
+  balance          = parseFloat(u.balance)          || 0;
+  seeds            = parseInt(u.seeds)              || 3;
+  waterCount       = parseInt(u.water_count)        || 3;
+  cells            = Array.isArray(u.cells) && u.cells.length ? u.cells
+                     : [{ state:'empty',progress:0,watered:false },
+                        { state:'empty',progress:0,watered:false },
+                        { state:'empty',progress:0,watered:false }];
+  taskState.earnChannel   = u.task_state?.earnChannel   || 'idle';
+  taskState.eMoneyChannel = u.task_state?.eMoneyChannel || 'idle';
+  withdrawHistory.length  = 0;
+  if (Array.isArray(u.wd_history)) withdrawHistory.push(...u.wd_history);
+  todayEarnings    = parseFloat(u.today_earn)       || 0;
+  totalHarvests    = parseInt(u.total_harvests)     || 0;
+  referralBalance  = parseFloat(u.referral_balance) || 0;
+  referralFriends  = parseInt(u.referral_friends)   || 0;
+  day              = parseInt(u.day)                || 1;
+
+  // إعادة ضبط اليوم لو تغيّر التاريخ
+  const today = new Date().toISOString().slice(0, 10);
+  if (u.today_date !== today) todayEarnings = 0;
+
+  renderFarm();
+  updateStats();
+  syncWithdrawPage();
+  syncInvitePage();
+  // مزامنة حالة التاسكات في الـ UI
+  _syncTaskUI('ec', taskState.earnChannel);
+  _syncTaskUI('em', taskState.eMoneyChannel);
+  console.log('[DB] User loaded:', TG_ID);
+}
+
+function saveUser() {
+  if (!TG_ID) return;
+  _dbCall('save', {
+    balance, seeds, water_count: waterCount,
+    cells, task_state: taskState,
+    wd_history: withdrawHistory,
+    today_date: new Date().toISOString().slice(0, 10),
+    today_earn: todayEarnings,
+    total_harvests: totalHarvests,
+    referral_balance: referralBalance,
+    referral_friends: referralFriends,
+    day
+  });
+}
+
+// مزامنة حالة التاسك في الـ UI بعد تحميل DB
+function _syncTaskUI(id, state) {
+  const btn    = document.getElementById('task-btn-'    + id);
+  const txt    = document.getElementById('task-txt-'    + id);
+  const status = document.getElementById('task-status-' + id);
+  if (!btn) return;
+  if (state === 'done') {
+    btn.style.display = 'none';
+    status?.classList.add('show');
+    if (status) status.innerHTML = '<img src="asesst/vertify.png" width="22">';
+  } else if (state === 'joined') {
+    if (txt) txt.textContent = 'Verify';
+    btn.style.background = 'linear-gradient(135deg,#f57f17,#e65100)';
+    btn.style.boxShadow  = '0 3px 12px rgba(245,127,23,0.4)';
+  }
+}
+
 buildFarm();
+loadUser();  // ← تحميل من DB (بعد buildFarm مباشرة)
 renderFarm();
 
 /* ── INITIAL FARM PAGE ANIMATION ──
