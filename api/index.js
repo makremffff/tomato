@@ -1,511 +1,220 @@
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// ================================================================
+//  Tomato Farm — API Backend
+//  ✅ CommonJS — بدون أي مكتبات خارجية
+//  ✅ يتصل بـ Neon عبر HTTP مباشرة (fetch مدمج في Node 18+)
+//  ✅ ضع DATABASE_URL في Environment Variables على Vercel
+// ================================================================
 
-const HEADERS = {
-  'Content-Type':  'application/json',
-  'apikey':        SUPABASE_KEY,
-  'Authorization': `Bearer ${SUPABASE_KEY}`,
-  'Prefer':        'return=representation',
-};
+const DATABASE_URL = process.env.DATABASE_URL;
 
-// ─────────────────────────────────────────────────────────────
-// REST HELPERS
-// ─────────────────────────────────────────────────────────────
+// ── دالة تنفيذ SQL على Neon عبر HTTP ────────────────────────────
+async function sql(query, params = []) {
+  // حوّل postgresql:// أو postgres:// إلى https://
+  const httpUrl = DATABASE_URL
+    .replace(/^postgresql:\/\//, 'https://')
+    .replace(/^postgres:\/\//, 'https://');
 
-function tableUrl(table, filters) {
-  const base = `${SUPABASE_URL}/rest/v1/${table}`;
-  if (!filters || Object.keys(filters).length === 0) return base;
-  const params = new URLSearchParams(filters);
-  return `${base}?${params.toString()}`;
-}
+  // Neon HTTP endpoint
+  const url = httpUrl.replace(/\/([^/?]+)(\?.*)?$/, '/v2/query$2');
 
-async function throwDbError(res, label) {
-  let detail = '';
-  try {
-    const body = await res.json();
-    detail = JSON.stringify(body);
-  } catch (_) {
-    detail = res.statusText || 'unknown error';
-  }
-  throw new Error(`[DB] ${label} failed (${res.status}): ${detail}`);
-}
-
-async function dbSelect(table, filters, options) {
-  const safeFilters  = filters  || {};
-  const safeOptions  = options  || {};
-  const url     = tableUrl(table, safeFilters);
-  const headers = Object.assign({}, HEADERS);
-  if (safeOptions.single) {
-    headers['Accept'] = 'application/vnd.pgrst.object+json';
-  }
-  const res = await fetch(url, { method: 'GET', headers: headers });
-  if (!res.ok) {
-    await throwDbError(res, 'SELECT ' + table);
-  }
-  return res.json();
-}
-
-async function dbInsert(table, body) {
-  const res = await fetch(tableUrl(table), {
-    method:  'POST',
-    headers: HEADERS,
-    body:    JSON.stringify(body),
-  });
-  if (!res.ok) {
-    await throwDbError(res, 'INSERT ' + table);
-  }
-  return res.json();
-}
-
-async function dbUpsert(table, body, onConflict) {
-  const conflict = onConflict || 'id';
-  const url = tableUrl(table) + '?on_conflict=' + conflict;
-  const headers = Object.assign({}, HEADERS, {
-    'Prefer': 'resolution=merge-duplicates,return=representation',
-  });
   const res = await fetch(url, {
-    method:  'POST',
-    headers: headers,
-    body:    JSON.stringify(body),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, params })
   });
+
   if (!res.ok) {
-    await throwDbError(res, 'UPSERT ' + table);
-  }
-  return res.json();
-}
-
-async function dbUpdate(table, filters, body) {
-  const res = await fetch(tableUrl(table, filters), {
-    method:  'PATCH',
-    headers: HEADERS,
-    body:    JSON.stringify(body),
-  });
-  if (!res.ok) {
-    await throwDbError(res, 'UPDATE ' + table);
-  }
-  return res.json();
-}
-
-// ─────────────────────────────────────────────────────────────
-// BUSINESS HELPERS
-// ─────────────────────────────────────────────────────────────
-
-async function getOrCreateUser(tgUser) {
-  const telegram_id = tgUser.telegram_id;
-  const first_name  = tgUser.first_name  || '';
-  const last_name   = tgUser.last_name   || '';
-  const username    = tgUser.username    || '';
-  const photo_url   = tgUser.photo_url   || '';
-
-  const rows = await dbSelect('users', { telegram_id: 'eq.' + telegram_id });
-
-  if (rows.length > 0) {
-    const updated = await dbUpdate(
-      'users',
-      { telegram_id: 'eq.' + telegram_id },
-      { first_name: first_name, last_name: last_name, username: username, photo_url: photo_url }
-    );
-    return updated[0] || updated;
+    const err = await res.text();
+    throw new Error('Neon HTTP error: ' + res.status + ' — ' + err);
   }
 
-  const created = await dbInsert('users', {
-    telegram_id:      telegram_id,
-    first_name:       first_name,
-    last_name:        last_name,
-    username:         username,
-    photo_url:        photo_url,
-    balance:          0,
-    seeds:            3,
-    water_count:      3,
-    total_harvests:   0,
-    today_earnings:   0,
-    referral_friends: 0,
-    referral_balance: 0,
-    day:              1,
-  });
-  return Array.isArray(created) ? created[0] : created;
+  const json = await res.json();
+  // Neon يرجع { results: [{ rows, fields }] }
+  return json.results?.[0]?.rows ?? [];
 }
 
-async function getUserCells(telegram_id) {
-  const rows = await dbSelect('cells', { telegram_id: 'eq.' + telegram_id });
-  if (rows.length === 3) return rows;
-
-  const defaults = [0, 1, 2].map(function(i) {
-    return {
-      telegram_id: telegram_id,
-      cell_index:  i,
-      state:       'empty',
-      progress:    0,
-      watered:     false,
-    };
-  });
-  const inserted = await dbInsert('cells', defaults);
-  return Array.isArray(inserted) ? inserted : defaults;
-}
-
-async function getUser(telegram_id) {
-  const rows = await dbSelect('users', { telegram_id: 'eq.' + telegram_id });
-  if (!rows || rows.length === 0) {
-    throw new Error('user_not_found');
-  }
-  return rows[0];
-}
-
-async function getCell(telegram_id, cellIndex) {
-  const rows = await dbSelect('cells', {
-    telegram_id: 'eq.' + telegram_id,
-    cell_index:  'eq.' + cellIndex,
-  });
-  return rows && rows.length > 0 ? rows[0] : null;
-}
-
-// ─────────────────────────────────────────────────────────────
-// ACTION HANDLERS
-// ─────────────────────────────────────────────────────────────
-
-async function actionGetState(telegram_id) {
-  const rows = await dbSelect('users', { telegram_id: 'eq.' + telegram_id });
-  if (!rows || rows.length === 0) {
-    return { ok: false, error: 'user_not_found' };
-  }
-  const user  = rows[0];
-  const cells = await getUserCells(telegram_id);
-  return { ok: true, user: user, cells: cells };
-}
-
-async function actionPlant(telegram_id, data) {
-  var cellIndex = data && data.cellIndex !== undefined ? data.cellIndex : null;
-  if (cellIndex === null || cellIndex === undefined) {
-    return { ok: false, error: 'missing_cellIndex' };
-  }
-
-  var results = await Promise.all([
-    getUser(telegram_id),
-    getUserCells(telegram_id),
-  ]);
-  var user  = results[0];
-  var cells = results[1];
-
-  var active = cells.filter(function(c) { return c.state !== 'empty'; }).length;
-  if (active >= 3)      return { ok: false, error: 'all_plots_busy' };
-  if (user.seeds <= 0)  return { ok: false, error: 'no_seeds' };
-
-  await Promise.all([
-    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { seeds: user.seeds - 1 }),
-    dbUpdate('cells', { telegram_id: 'eq.' + telegram_id, cell_index: 'eq.' + cellIndex },
-      { state: 'growing', progress: 0, watered: false }),
-  ]);
-
-  return { ok: true, seeds: user.seeds - 1 };
-}
-
-async function actionWater(telegram_id, data) {
-  var cellIndex = data && data.cellIndex !== undefined ? data.cellIndex : null;
-  if (cellIndex === null || cellIndex === undefined) {
-    return { ok: false, error: 'missing_cellIndex' };
-  }
-
-  var user = await getUser(telegram_id);
-  var cell = await getCell(telegram_id, cellIndex);
-
-  if (!cell)                         return { ok: false, error: 'cell_not_found' };
-  if (cell.state !== 'growing')      return { ok: false, error: 'cell_not_growing' };
-  if (cell.watered)                  return { ok: false, error: 'already_watered' };
-  if (user.water_count <= 0)         return { ok: false, error: 'no_water' };
-
-  await Promise.all([
-    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { water_count: user.water_count - 1 }),
-    dbUpdate('cells', { telegram_id: 'eq.' + telegram_id, cell_index: 'eq.' + cellIndex },
-      { watered: true }),
-  ]);
-
-  return { ok: true, water_count: user.water_count - 1 };
-}
-
-async function actionHarvest(telegram_id, data) {
-  var REWARD  = 0.0001;
-  var REF_PCT = 0.05;
-
-  var cellIndex = data && data.cellIndex !== undefined ? data.cellIndex : null;
-  if (cellIndex === null || cellIndex === undefined) {
-    return { ok: false, error: 'missing_cellIndex' };
-  }
-
-  var user = await getUser(telegram_id);
-  var cell = await getCell(telegram_id, cellIndex);
-
-  if (!cell)                  return { ok: false, error: 'cell_not_found' };
-  if (cell.state !== 'ready') return { ok: false, error: 'cell_not_ready' };
-
-  var refBonus = user.referral_friends > 0
-    ? REWARD * REF_PCT * user.referral_friends
-    : 0;
-
-  var newBalance          = parseFloat((user.balance          + REWARD   ).toFixed(6));
-  var newTodayEarnings    = parseFloat((user.today_earnings   + REWARD   ).toFixed(6));
-  var newTotalHarvests    = user.total_harvests + 1;
-  var newReferralBalance  = parseFloat((user.referral_balance + refBonus ).toFixed(6));
-
-  await Promise.all([
-    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, {
-      balance:          newBalance,
-      today_earnings:   newTodayEarnings,
-      total_harvests:   newTotalHarvests,
-      referral_balance: newReferralBalance,
-    }),
-    dbUpdate('cells', { telegram_id: 'eq.' + telegram_id, cell_index: 'eq.' + cellIndex },
-      { state: 'empty', progress: 0, watered: false }),
-  ]);
-
-  return { ok: true, reward: REWARD, balance: newBalance };
-}
-
-async function actionHarvestAll(telegram_id) {
-  var cells      = await getUserCells(telegram_id);
-  var readyCells = cells.filter(function(c) { return c.state === 'ready'; });
-  if (!readyCells.length) return { ok: false, error: 'no_ready_cells' };
-
-  var results = await Promise.all(
-    readyCells.map(function(c) {
-      return actionHarvest(telegram_id, { cellIndex: c.cell_index });
-    })
-  );
-
-  var harvested = results.filter(function(r) { return r.ok; }).length;
-  return { ok: true, harvested: harvested };
-}
-
-async function actionWithdraw(telegram_id, data) {
-  var account = data && data.account ? String(data.account).trim() : '';
-  var amount  = data && data.amount  ? parseFloat(data.amount)     : 0;
-
-  if (!account)        return { ok: false, error: 'no_account' };
-  if (!amount || amount <= 0) return { ok: false, error: 'invalid_amount' };
-  if (amount < 0.05)   return { ok: false, error: 'below_minimum' };
-
-  var user = await getUser(telegram_id);
-  if (amount > user.balance) return { ok: false, error: 'insufficient_balance' };
-
-  var newBalance = parseFloat((user.balance - amount).toFixed(6));
-
-  await Promise.all([
-    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { balance: newBalance }),
-    dbInsert('withdraw_requests', {
-      telegram_id: telegram_id,
-      account:     account,
-      amount:      amount,
-      status:      'pending',
-      created_at:  new Date().toISOString(),
-    }),
-  ]);
-
-  return { ok: true, balance: newBalance };
-}
-
-async function actionTask(telegram_id, taskKey) {
-  var REWARDS = {
-    taskEarnChannel: 0.005,
-    taskEMoney:      0.005,
-  };
-
-  var reward = REWARDS[taskKey];
-  if (reward === undefined) return { ok: false, error: 'unknown_task' };
-
-  var rows         = await dbSelect('tasks', { telegram_id: 'eq.' + telegram_id, task_key: 'eq.' + taskKey });
-  var currentState = rows && rows.length > 0 ? rows[0].state : 'idle';
-
-  if (currentState === 'done') return { ok: false, error: 'task_already_done' };
-
-  if (currentState === 'idle') {
-    await dbUpsert('tasks', {
-      telegram_id: telegram_id,
-      task_key:    taskKey,
-      state:       'joined',
-    }, 'telegram_id,task_key');
-    return { ok: true, state: 'joined' };
-  }
-
-  var user       = await getUser(telegram_id);
-  var newBalance = parseFloat((user.balance + reward).toFixed(6));
-
-  await Promise.all([
-    dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { balance: newBalance }),
-    dbUpsert('tasks', { telegram_id: telegram_id, task_key: taskKey, state: 'done' }, 'telegram_id,task_key'),
-  ]);
-
-  return { ok: true, state: 'done', reward: reward, balance: newBalance };
-}
-
-async function actionAdReward(telegram_id, rewardType, count) {
-  var user = await getUser(telegram_id);
-
-  if (rewardType === 'seeds') {
-    var seedReward = count === 5 ? 7 : (count || 1);
-    var newSeeds   = Math.min(99, user.seeds + seedReward);
-    await dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { seeds: newSeeds });
-    return { ok: true, seeds: newSeeds };
-  }
-
-  if (rewardType === 'water') {
-    var newWater = Math.min(99, user.water_count + 3);
-    await dbUpdate('users', { telegram_id: 'eq.' + telegram_id }, { water_count: newWater });
-    return { ok: true, water_count: newWater };
-  }
-
-  return { ok: false, error: 'unknown_reward_type' };
-}
-
-async function actionTick(telegram_id) {
-  var GROW_TIME = 30;
-  var cells     = await getUserCells(telegram_id);
-
-  var updates  = [];
-  var anyReady = false;
-
-  for (var i = 0; i < cells.length; i++) {
-    var c = cells[i];
-    if (c.state !== 'growing') continue;
-
-    var newProgress = Math.min(GROW_TIME, c.progress + (c.watered ? 3 : 1));
-    var newState    = newProgress >= GROW_TIME ? 'ready' : 'growing';
-    if (newState === 'ready') anyReady = true;
-
-    updates.push(
-      dbUpdate('cells', {
-        telegram_id: 'eq.' + telegram_id,
-        cell_index:  'eq.' + c.cell_index,
-      }, { progress: newProgress, state: newState })
-    );
-  }
-
-  if (updates.length > 0) await Promise.all(updates);
-  return { ok: true, anyReady: anyReady };
-}
-
-// ─────────────────────────────────────────────────────────────
-// ACTION ROUTER
-// ─────────────────────────────────────────────────────────────
-
-async function routeAction(type, telegram_id, data) {
-  switch (type) {
-    case 'getState':
-      return actionGetState(telegram_id);
-
-    case 'plant':
-      return actionPlant(telegram_id, data);
-
-    case 'water':
-      return actionWater(telegram_id, data);
-
-    case 'harvest':
-      return actionHarvest(telegram_id, data);
-
-    case 'harvestAll':
-      return actionHarvestAll(telegram_id);
-
-    case 'withdraw':
-      return actionWithdraw(telegram_id, data);
-
-    case 'taskEarnChannel':
-      return actionTask(telegram_id, 'taskEarnChannel');
-
-    case 'taskEMoney':
-      return actionTask(telegram_id, 'taskEMoney');
-
-    case 'watchAdSeed':
-      return actionAdReward(telegram_id, 'seeds', data && data.count ? data.count : 1);
-
-    case 'watchAdWater':
-      return actionAdReward(telegram_id, 'water', 0);
-
-    case 'tick':
-      return actionTick(telegram_id);
-
-    default:
-      return { ok: false, error: 'unknown action: ' + type };
+// ── Bootstrap — أنشئ الجدول لو مو موجود ────────────────────────
+async function bootstrap() {
+  try {
+    await sql(`
+      CREATE TABLE IF NOT EXISTS users (
+        telegram_id     BIGINT        PRIMARY KEY,
+        username        TEXT,
+        balance         FLOAT         NOT NULL DEFAULT 0,
+        seeds           INT           NOT NULL DEFAULT 3,
+        water_count     INT           NOT NULL DEFAULT 3,
+        cells           JSONB         NOT NULL DEFAULT '[]',
+        task_state      JSONB         NOT NULL DEFAULT '{"earnChannel":"idle","eMoneyChannel":"idle"}',
+        wd_history      JSONB         NOT NULL DEFAULT '[]',
+        today_date      TEXT          NOT NULL DEFAULT '',
+        today_earn      FLOAT         NOT NULL DEFAULT 0,
+        total_harvests  INT           NOT NULL DEFAULT 0,
+        referral_by     BIGINT,
+        referral_friends INT          NOT NULL DEFAULT 0,
+        referral_balance FLOAT        NOT NULL DEFAULT 0,
+        day             INT           NOT NULL DEFAULT 1,
+        created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
+    console.log('[DB] Bootstrap OK');
+  } catch (e) {
+    console.error('[DB] Bootstrap failed:', e.message);
   }
 }
+bootstrap();
 
-// ─────────────────────────────────────────────────────────────
-// VERCEL / NEXT.JS HANDLER
-// ─────────────────────────────────────────────────────────────
-
-function sendJSON(res, statusCode, payload) {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(payload));
-}
-
-module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin',  '*');
+// ── CORS ─────────────────────────────────────────────────────────
+function cors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
-    return;
+// ── Main Handler ─────────────────────────────────────────────────
+module.exports = async function handler(req, res) {
+  cors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST')    return res.status(405).json({ error: 'Method not allowed' });
+
+  let body = req.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch { return res.status(400).json({ error: 'Invalid JSON' }); }
   }
 
-  if (req.method !== 'POST') {
-    return sendJSON(res, 405, { ok: false, error: 'Method not allowed. Use POST.' });
-  }
+  const { action, telegram_id, data = {} } = body || {};
 
-  // ── قراءة الـ body يدوياً من الـ stream (مثل المشروع القديم الشغّال) ──
-  var body;
-  try {
-    body = await new Promise(function(resolve, reject) {
-      var raw = '';
-      req.on('data', function(chunk) { raw += chunk.toString(); });
-      req.on('end',  function() {
-        try { resolve(JSON.parse(raw)); }
-        catch (e) { reject(new Error('Invalid JSON payload.')); }
-      });
-      req.on('error', reject);
-    });
-  } catch (err) {
-    return sendJSON(res, 400, { ok: false, error: err.message });
-  }
+  if (!action)      return res.status(400).json({ error: 'Missing action' });
+  if (!telegram_id) return res.status(400).json({ error: 'Missing telegram_id' });
 
-  if (!body || typeof body !== 'object') {
-    return sendJSON(res, 400, { ok: false, error: 'Request body must be JSON.' });
-  }
-
-  var type   = body.type   || null;
-  var data   = body.data   || {};
-  var userId = body.userId || null;
-  var tgUser = body.tgUser || null;
-
-  if (!type) {
-    return sendJSON(res, 400, { ok: false, error: 'Missing required field: type' });
-  }
-
-  var telegram_id = null;
-  if (userId) {
-    telegram_id = String(userId);
-  } else if (tgUser && tgUser.id) {
-    telegram_id = String(tgUser.id);
-  }
-
-  if (!telegram_id) {
-    return sendJSON(res, 401, { ok: false, error: 'unauthorized: missing userId or tgUser.id' });
-  }
+  const tid = parseInt(telegram_id);
+  if (isNaN(tid)) return res.status(400).json({ error: 'Invalid telegram_id' });
 
   try {
-    if (tgUser && tgUser.id) {
-      await getOrCreateUser({
-        telegram_id: telegram_id,
-        first_name:  tgUser.first_name  || '',
-        last_name:   tgUser.last_name   || '',
-        username:    tgUser.username    || '',
-        photo_url:   tgUser.photo_url   || '',
-      });
+
+    // ════════════════════════════════════════
+    //  LOAD — تحميل المستخدم أو إنشاؤه
+    // ════════════════════════════════════════
+    if (action === 'load') {
+      let rows = await sql(
+        'SELECT * FROM users WHERE telegram_id = $1',
+        [tid]
+      );
+
+      if (!rows.length) {
+        // مستخدم جديد
+        const username   = data.username   || null;
+        const referralBy = data.referral_by ? parseInt(data.referral_by) : null;
+
+        rows = await sql(
+          `INSERT INTO users (telegram_id, username, referral_by)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (telegram_id) DO UPDATE SET updated_at = NOW()
+           RETURNING *`,
+          [tid, username, referralBy]
+        );
+
+        // مكافأة المُحيل
+        if (referralBy) {
+          await sql(
+            `UPDATE users
+             SET balance          = balance + 0.01,
+                 referral_friends = referral_friends + 1,
+                 updated_at       = NOW()
+             WHERE telegram_id = $1`,
+            [referralBy]
+          );
+        }
+      }
+
+      return res.status(200).json({ ok: true, user: rows[0] });
     }
 
-    var result = await routeAction(type, telegram_id, data);
-    return sendJSON(res, 200, result);
+    // ════════════════════════════════════════
+    //  SAVE — حفظ الحالة الكاملة
+    // ════════════════════════════════════════
+    if (action === 'save') {
+      const {
+        balance = 0, seeds = 3, water_count = 3,
+        cells = [], task_state = {}, wd_history = [],
+        today_date = '', today_earn = 0,
+        total_harvests = 0, referral_balance = 0,
+        referral_friends = 0, day = 1
+      } = data;
+
+      await sql(
+        `UPDATE users SET
+           balance          = $2,
+           seeds            = $3,
+           water_count      = $4,
+           cells            = $5,
+           task_state       = $6,
+           wd_history       = $7,
+           today_date       = $8,
+           today_earn       = $9,
+           total_harvests   = $10,
+           referral_balance = $11,
+           referral_friends = $12,
+           day              = $13,
+           updated_at       = NOW()
+         WHERE telegram_id = $1`,
+        [
+          tid,
+          parseFloat(balance) || 0,
+          parseInt(seeds)     || 3,
+          parseInt(water_count) || 3,
+          JSON.stringify(cells),
+          JSON.stringify(task_state),
+          JSON.stringify(wd_history),
+          today_date,
+          parseFloat(today_earn) || 0,
+          parseInt(total_harvests) || 0,
+          parseFloat(referral_balance) || 0,
+          parseInt(referral_friends) || 0,
+          parseInt(day) || 1
+        ]
+      );
+
+      return res.status(200).json({ ok: true });
+    }
+
+    // ════════════════════════════════════════
+    //  WITHDRAW — سحب (يُحدَّث الرصيد في DB)
+    // ════════════════════════════════════════
+    if (action === 'withdraw') {
+      const { account, amount } = data;
+      if (!account)        return res.status(400).json({ ok: false, error: 'Missing account' });
+      if (!amount || amount <= 0) return res.status(400).json({ ok: false, error: 'Invalid amount' });
+      if (amount < 0.05)   return res.status(400).json({ ok: false, error: 'Minimum 0.05 TON' });
+
+      const rows = await sql('SELECT balance, wd_history FROM users WHERE telegram_id = $1', [tid]);
+      if (!rows.length)         return res.status(404).json({ ok: false, error: 'User not found' });
+      if (rows[0].balance < amount) return res.status(400).json({ ok: false, error: 'Insufficient balance' });
+
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                    + ' ' + now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const entry = { account, amount, date: dateStr, status: 'pending' };
+
+      const history = Array.isArray(rows[0].wd_history) ? rows[0].wd_history : [];
+      history.unshift(entry);
+
+      await sql(
+        `UPDATE users SET
+           balance    = balance - $2,
+           wd_history = $3,
+           updated_at = NOW()
+         WHERE telegram_id = $1`,
+        [tid, parseFloat(amount), JSON.stringify(history)]
+      );
+
+      return res.status(200).json({ ok: true, entry });
+    }
+
+    return res.status(400).json({ error: 'Unknown action: ' + action });
 
   } catch (err) {
-    console.error('[API] Error — type:', type, '| telegram_id:', telegram_id, '| error:', err.message);
-    return sendJSON(res, 500, { ok: false, error: err.message || 'internal_server_error' });
+    console.error('[API Error]', action, err.message);
+    return res.status(500).json({ error: 'Server error', detail: err.message });
   }
-}
+};
