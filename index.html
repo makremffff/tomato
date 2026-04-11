@@ -3773,8 +3773,7 @@ function _syncTaskUI(id, state) {
 }
 
 buildFarm();
-loadUser();  // ← تحميل من DB (بعد buildFarm مباشرة)
-renderFarm();
+loadUser();  // ← تحميل من DB — هي تستدعي renderFarm() و updateStats() بعد ما تنتهي
 
 /* ── INITIAL FARM PAGE ANIMATION ──
    Triggers the same pg-item entrance for the farm page on first load */
