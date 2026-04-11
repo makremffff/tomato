@@ -2500,7 +2500,7 @@ console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!T
   }
 })();
 
-const TOMATO  = { reward: 0.0001, growTime: 30 };
+const TOMATO  = { reward: 0.0001, growTime: 300 }; // ← server GROW_DURATION
 const LIMIT   = 3;
 const REF_PCT = 0.05;
 
@@ -2511,7 +2511,6 @@ let seeds           = 3;
 let waterCount      = 3;
 let day             = 1;
 let farmMode        = 'plant';
-let tickCount       = 0;
 let totalHarvests   = 0;
 let todayEarnings   = 0.0;
 const harvestHistory = []; // last 7 harvest amounts for sparkline
@@ -2551,11 +2550,9 @@ function toggleFarmStats() {
   btn.classList.toggle('open', open);
 }
 
-const cells = [
-  { state:'empty', progress:0, watered:false },
-  { state:'empty', progress:0, watered:false },
-  { state:'empty', progress:0, watered:false },
-];
+let cells = Array.from({ length: 3 }, (_, i) => ({
+  id: i, state: 'empty', planted_at: null, duration: TOMATO.growTime
+}));
 
 /* ═══════════════════════════
    SOUND ENGINE (Web Audio API)
@@ -2812,28 +2809,22 @@ function syncInvitePage() {
   }
 }
 
+/* ── LOCAL TICK — عداد تنازلي محلي فقط، الـ state الحقيقي من السيرفر ── */
 setInterval(() => {
-  tickCount++;
   let changed = false;
   cells.forEach(c => {
-    if (c.state === 'growing') {
-      c.progress += c.watered ? 3 : 1;
-      changed = true;
-      if (c.progress >= TOMATO.growTime) {
-        c.state = 'ready'; c.progress = TOMATO.growTime;
+    if (c.state === 'growing' && c.planted_at) {
+      const plantedMs = new Date(c.planted_at).getTime();
+      const duration  = (c.duration || TOMATO.growTime) * 1000;
+      if (Date.now() >= plantedMs + duration) {
+        c.state = 'ready';
+        changed = true;
         playSound('ready');
-        // تحديث state bar تلقائياً
         if (farmMode !== 'water') setFarmMode('ready');
         setTimeout(showSmartHint, 400);
       }
     }
   });
-  if (tickCount % 86400 === 0 && tickCount > 0) {
-    day++;
-    todayEarnings = 0.0;
-    cells.forEach(c => { if (c.state !== 'empty') c.watered = false; });
-    updateStats();
-  }
   if (changed) renderFarm();
 }, 1000);
 
@@ -2860,6 +2851,7 @@ function buildFarm() {
 function renderFarm() {
   cells.forEach((c, i) => {
     const el     = document.getElementById('cell-' + i);
+    if (!el) return;
     const inner  = el.querySelector('.c-inner');
     const lbl    = el.querySelector('.c-lbl');
     const fill   = el.querySelector('.c-fill');
@@ -2869,22 +2861,42 @@ function renderFarm() {
 
     if (c.state !== 'empty' && c.watered) el.classList.add('watered');
     if (c.state === 'ready') el.classList.add('ready');
-    if (cd) cd.style.display = 'none';
+
+    // حساب التقدم من planted_at
+    let pct = 0;
+    if (c.state === 'growing' && c.planted_at) {
+      const elapsed  = (Date.now() - new Date(c.planted_at).getTime()) / 1000;
+      const duration = c.duration || TOMATO.growTime;
+      pct = Math.min(100, Math.round((elapsed / duration) * 100));
+    } else if (c.state === 'ready') {
+      pct = 100;
+    }
+
+    // عداد تنازلي
+    if (cd) {
+      if (c.state === 'growing' && c.planted_at) {
+        const remSec = Math.max(0, Math.ceil(
+          ((new Date(c.planted_at).getTime() + (c.duration || TOMATO.growTime) * 1000) - Date.now()) / 1000
+        ));
+        cd.style.display = '';
+        cd.textContent = remSec + 's';
+      } else {
+        cd.style.display = 'none';
+      }
+    }
 
     if (c.state === 'empty') {
       inner.innerHTML  = '<span class="c-emoji"></span>';
       lbl.textContent  = 'empty';
       fill.style.width = '0%';
     } else {
-      const pct = Math.min(100, Math.round((c.progress / TOMATO.growTime) * 100));
-      fill.style.background = '';
       fill.style.width = pct + '%';
       if (c.state === 'ready') {
         inner.innerHTML = '<img src="asesst/tomato.png" alt="tomato">';
         lbl.textContent = '✅ ready!';
       } else {
         inner.innerHTML = pct < 45
-          ? '<img src="asesst/plan.png" alt="seedling" >'
+          ? '<img src="asesst/plan.png" alt="seedling">'
           : '<img src="asesst/grow.png" alt="growing">';
         lbl.textContent = pct + '%';
       }
@@ -2920,10 +2932,12 @@ function updateStats() {
   if (lsToday) lsToday.textContent = todayEarnings.toFixed(4);
   const lsEta = document.getElementById('stat-eta');
   if (lsEta) {
-    const growing = cells.find(c => c.state === 'growing');
+    const growing = cells.find(c => c.state === 'growing' && c.planted_at);
     if (growing) {
-      const rem = Math.ceil((TOMATO.growTime - growing.progress) / (growing.watered ? 3 : 1));
-      lsEta.textContent = rem + 's';
+      const remSec = Math.max(0, Math.ceil(
+        ((new Date(growing.planted_at).getTime() + (growing.duration || TOMATO.growTime) * 1000) - Date.now()) / 1000
+      ));
+      lsEta.textContent = remSec + 's';
     } else {
       lsEta.textContent = '—';
     }
@@ -3218,14 +3232,14 @@ function _runWatchAd(count) {
     // Adsgram لم يُحمَّل (خارج تيليغرام) — محاكاة للديفيلوب
     _simulateAds(count, () => {
       const seedReward = count === 5 ? 7 : count;
-      seeds += seedReward;
-      updateStats();
-      playSound('reward');
-      _resetSeedBtn(count, btnEl, txtEl, progEl);
-      toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
-      showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
-        document.getElementById('nb-farm'), 0);
-      _adSeedInProgress = false;
+      _dbAddResource('seeds', seedReward).then(() => {
+        playSound('reward');
+        _resetSeedBtn(count, btnEl, txtEl, progEl);
+        toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
+        showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
+          document.getElementById('nb-farm'), 0);
+        _adSeedInProgress = false;
+      });
     }, () => {
       _resetSeedBtn(count, btnEl, txtEl, progEl);
       _adSeedInProgress = false;
@@ -3263,15 +3277,14 @@ function _runWatchAd(count) {
         } else {
           // كل الإعلانات اتمشاهدت ✅
           const seedReward = count === 5 ? 7 : count;
-          seeds += seedReward;
-          if (seeds > 99) seeds = 99; // حد أقصى للبذور
-          updateStats();
-          playSound('reward');
-          _resetSeedBtn(count, btnEl, txtEl, progEl);
-          toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
-          showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
-            document.getElementById('nb-farm'), 0);
-          setTimeout(() => { adCooldown.seed = false; _adSeedInProgress = false; }, 4000);
+          _dbAddResource('seeds', seedReward).then(() => {
+            playSound('reward');
+            _resetSeedBtn(count, btnEl, txtEl, progEl);
+            toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
+            showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
+              document.getElementById('nb-farm'), 0);
+            setTimeout(() => { adCooldown.seed = false; _adSeedInProgress = false; }, 4000);
+          });
         }
       })
       .catch(() => {
@@ -3372,9 +3385,7 @@ function _runWatchWaterAd() {
 }
 
 function _giveWaterReward(txtEl, progEl, cntEl, btnEl) {
-  waterCount += 3;
-  if (waterCount > 99) waterCount = 99; // حد أقصى للماء
-  updateStats();
+  _dbAddResource('water', 3);
   playSound('reward');
   _resetWaterBtn(txtEl, progEl, btnEl);
   // reset dots
@@ -3535,22 +3546,24 @@ async function fetchApi({ type, data = {} }) {
 async function _dispatchAction(type, data) {
   switch (type) {
 
-    /* ── مزرعة ── */
+    /* ── زراعة ── */
     case 'plant': {
       const { cellIndex } = data;
       const c  = cells[cellIndex];
       const el = document.getElementById('cell-' + cellIndex);
-      const active = cells.filter(x => x.state !== 'empty').length;
-      if (active >= LIMIT)  { playSound('error'); toast('❌ All 3 plots are busy!'); return { ok: false }; }
-      if (seeds <= 0)       { triggerAnim(el,'shake',470); playSound('error'); toast('🌱 No seeds! Go to Store.'); return { ok: false }; }
+      if (seeds <= 0)        { triggerAnim(el,'shake',470); playSound('error'); toast('🌱 No seeds! Go to Store.'); return { ok: false }; }
+      if (c.state !== 'empty') { triggerAnim(el,'shake',470); playSound('error'); toast('❌ Cell is not empty!'); return { ok: false }; }
+
+      const result = await _dbCall('plant', { cell_id: cellIndex, duration: TOMATO.growTime });
+      if (!result.ok) { triggerAnim(el,'shake',470); playSound('error'); toast('❌ ' + (result.error || 'Plant failed')); return { ok: false }; }
+
+      cells = result.cells;
       seeds--;
-      c.state = 'growing'; c.progress = 0; c.watered = false;
       playSound('plant');
       triggerAnim(el, 'pop', 440);
       renderFarm(); setFarmMode('plant');
-      showHint('plant-first','🌱 Planted! Now try watering it 💧\nto make it grow 2× faster!', el, -10);
+      showHint('plant-first','🌱 Planted! Now try watering it 💧\nto make it grow 3× faster!', el, -10);
       showSmartHint();
-      saveUser();
       return { ok: true };
     }
 
@@ -3560,12 +3573,21 @@ async function _dispatchAction(type, data) {
       const el = document.getElementById('cell-' + cellIndex);
       if (c.watered)       { toast('✅ Already watered!'); return { ok: false }; }
       if (waterCount <= 0) { playSound('error'); toast('💧 No water! Get more from Store.'); triggerAnim(el,'shake'); return { ok: false }; }
-      c.watered = true; waterCount--;
+
+      // حساب duration الجديد: الوقت المتبقي ÷ 3
+      const elapsed   = c.planted_at ? (Date.now() - new Date(c.planted_at).getTime()) / 1000 : 0;
+      const remaining = Math.max(0, (c.duration || TOMATO.growTime) - elapsed);
+      const newDuration = Math.round(elapsed + remaining / 3);
+
+      const result = await _dbCall('update_cell', { cell_id: cellIndex, patch: { watered: true, duration: newDuration } });
+      if (!result.ok) { toast('❌ ' + (result.error || 'Water failed')); return { ok: false }; }
+
+      cells = result.cells;
+      waterCount--;
       playSound('water'); renderFarm();
-      toast('💧 Watered! Growing 2× faster');
-      showHint('water-first','💧 Watered crops grow twice as fast!\nCheck back sooner for harvest 🌿', el, -10);
+      toast('💧 Watered! Growing 3× faster');
+      showHint('water-first','💧 Watered crops grow 3× faster!\nCheck back sooner for harvest 🌿', el, -10);
       showSmartHint();
-      saveUser();
       return { ok: true };
     }
 
@@ -3574,27 +3596,24 @@ async function _dispatchAction(type, data) {
       const c  = cells[cellIndex];
       const el = document.getElementById('cell-' + cellIndex);
       if (c.state !== 'ready') return { ok: false };
+
+      const result = await _dbCall('harvest', { cell_id: cellIndex, reward: TOMATO.reward });
+      if (!result.ok) { playSound('error'); toast('❌ ' + (result.error || 'Harvest failed')); return { ok: false }; }
+
       el.classList.add('harvesting');
       playSound('harvest');
       spawnCoinBurst(el, TOMATO.reward);
-      balance += TOMATO.reward; todayEarnings += TOMATO.reward; totalHarvests++;
+      cells         = result.cells;
+      balance      += TOMATO.reward;
+      todayEarnings += TOMATO.reward;
+      totalHarvests++;
       harvestHistory.push(TOMATO.reward);
       if (harvestHistory.length > 7) harvestHistory.shift();
-      if (referralFriends > 0) {
-        referralBalance += TOMATO.reward * REF_PCT;
-        // أرسل 5% للمحيل مباشرة في السيرفر
-        const refId = (tg?.initDataUnsafe?.start_param || '').replace('ref_', '');
-        if (refId && refId !== TG_ID) {
-          _dbCall('referral_reward', { amount: TOMATO.reward * REF_PCT }, refId);
-        }
-      }
       flashEdgeGlow(); updateStats();
       showHint('harvest-first','✅ Harvested! +0.0001 💎 TON earned.\nPlant again to keep earning!', el, -10);
       setTimeout(() => {
         el.classList.remove('harvesting');
-        c.state = 'empty'; c.progress = 0; c.watered = false;
         renderFarm(); showSmartHint();
-        saveUser();
       }, 480);
       return { ok: true };
     }
@@ -3602,7 +3621,7 @@ async function _dispatchAction(type, data) {
     case 'harvestAll': {
       const ready = cells.reduce((a, c, i) => (c.state === 'ready' ? [...a, i] : a), []);
       if (!ready.length) { toast('<img src="asesst/loading.gif" width="16" style="vertical-align:middle"> No tomatoes ready yet!'); return { ok: false }; }
-      ready.forEach(i => fetchApi({ type: 'harvest', data: { cellIndex: i } }));
+      for (const i of ready) await fetchApi({ type: 'harvest', data: { cellIndex: i } });
       toast(`✂️ Harvested ${ready.length} tomato${ready.length > 1 ? 'es' : ''}!`);
       return { ok: true };
     }
@@ -3614,25 +3633,23 @@ async function _dispatchAction(type, data) {
       if (!amount || amount<=0){ playSound('error'); toast('❌ Enter a valid amount!'); return { ok: false }; }
       if (amount < 0.05)       { playSound('error'); toast('❌ Minimum withdrawal is 0.05 TON!'); return { ok: false }; }
       if (amount > balance)    { playSound('error'); toast('❌ Insufficient balance!'); return { ok: false }; }
-      const now = new Date();
-      const dateStr = now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})
-                    + ' ' + now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-      withdrawHistory.unshift({ account, amount, date: dateStr, status: 'pending' });
+
+      const result = await _dbCall('withdraw', { account, amount });
+      if (!result.ok) { playSound('error'); toast('❌ ' + (result.error || 'Withdrawal failed')); return { ok: false }; }
+
       balance -= amount;
+      withdrawHistory.unshift(result.entry);
       playSound('harvest'); updateStats();
       document.getElementById('wd-fastpay').value = '';
       document.getElementById('wd-amount').value  = '';
       document.getElementById('wd-bal').textContent = balance.toFixed(4);
       renderHistory();
       toast('✅ Withdrawal request submitted!');
-      showHint('withdraw-done','✅ Request sent!\nProcessed within 24 hours ⚡',
-        document.querySelector('.withdraw-bal'), 10);
-      saveUser();
       return { ok: true };
     }
 
     /* ── تاسكات ── */
-    case 'taskEarnChannel':  return _runChannelTask('earnChannel',  'https://t.me/botbababab',  0.005, '🎉 +0.005 TON claimed! Check your balance!'); 
+    case 'taskEarnChannel':  return _runChannelTask('earnChannel',  'https://t.me/botbababab',  0.005, '🎉 +0.005 TON claimed! Check your balance!');
     case 'taskEMoney':       return _runChannelTask('eMoneyChannel','https://t.me/tt_fhp',      0.005, '🎉 +0.005 TON from E-Money Algeria!');
 
     /* ── إعلانات ── */
@@ -3678,7 +3695,9 @@ function _runChannelTask(key, url, reward, successMsg) {
         status.innerHTML = `<img src="asesst/vertify.png" width="22">`;
         balance += reward; updateStats();
         playSound('reward'); toast(successMsg); showSmartHint();
-        saveUser();
+        // حفظ في السيرفر
+        _dbCall('add_balance', { amount: reward, source: key });
+        _dbCall('save_tasks', { task_state: taskState });
         resolve({ ok: true, state: 'done' });
       }, 3600);
     }
@@ -3706,75 +3725,37 @@ async function _dbCall(action, data = {}, tid = null) {
   }
 }
 
+function _applyUser(u) {
+  if (!u) return;
+  balance         = parseFloat(u.balance)         || 0;
+  seeds           = parseInt(u.seeds);
+  waterCount      = parseInt(u.water_count);
+  todayEarnings   = parseFloat(u.today_earn)       || 0;
+  totalHarvests   = parseInt(u.total_harvests)     || 0;
+  referralBalance = parseFloat(u.referral_balance) || 0;
+  referralFriends = parseInt(u.referral_friends)   || 0;
+  day             = parseInt(u.day)                || 1;
+  cells = Array.isArray(u.cells) && u.cells.length === 3
+    ? u.cells
+    : Array.from({ length: 3 }, (_, i) => ({ id: i, state: 'empty', planted_at: null, duration: TOMATO.growTime }));
+  taskState.earnChannel   = u.task_state?.earnChannel   || 'idle';
+  taskState.eMoneyChannel = u.task_state?.eMoneyChannel || 'idle';
+  withdrawHistory.length  = 0;
+  if (Array.isArray(u.wd_history)) withdrawHistory.push(...u.wd_history);
+}
+
 async function loadUser() {
-  if (!TG_ID) return; // خارج تلغرام — شغّل محلياً
+  if (!TG_ID) return;
   const result = await _dbCall('load', {
     username:    TG_USERNAME || TG_FIRST || null,
     referral_by: (tg?.initDataUnsafe?.start_param || '').replace('ref_', '') || null
   });
   if (!result.ok || !result.user) return;
-  const u = result.user;
-
-  // تطبيق البيانات على المتغيرات الموجودة
-  balance          = parseFloat(u.balance)          || 0;
-  seeds            = parseInt(u.seeds)              || 3;
-  waterCount       = parseInt(u.water_count)        || 3;
-  const now = Date.now();
-  cells = Array.isArray(u.cells) && u.cells.length
-    ? u.cells.map(c => {
-        if (c.state === 'growing' && c.saved_at) {
-          const elapsed = Math.floor((now - c.saved_at) / 1000);
-          const speed = c.watered ? 3 : 1;
-          c.progress = Math.min(TOMATO.growTime, c.progress + elapsed * speed);
-          if (c.progress >= TOMATO.growTime) { c.state = 'ready'; c.progress = TOMATO.growTime; }
-        }
-        return c;
-      })
-    : [{ state:'empty',progress:0,watered:false },
-       { state:'empty',progress:0,watered:false },
-       { state:'empty',progress:0,watered:false }];
-  taskState.earnChannel   = u.task_state?.earnChannel   || 'idle';
-  taskState.eMoneyChannel = u.task_state?.eMoneyChannel || 'idle';
-  withdrawHistory.length  = 0;
-  if (Array.isArray(u.wd_history)) withdrawHistory.push(...u.wd_history);
-  todayEarnings    = parseFloat(u.today_earn)       || 0;
-  totalHarvests    = parseInt(u.total_harvests)     || 0;
-  referralBalance  = parseFloat(u.referral_balance) || 0;
-  referralFriends  = parseInt(u.referral_friends)   || 0;
-  day              = parseInt(u.day)                || 1;
-
-  // إعادة ضبط اليوم لو تغيّر التاريخ
-  const today = new Date().toISOString().slice(0, 10);
-  if (u.today_date !== today) todayEarnings = 0;
-
-  renderFarm();
-  updateStats();
-  syncWithdrawPage();
-  syncInvitePage();
-  // مزامنة حالة التاسكات في الـ UI
+  _applyUser(result.user);
+  renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
   _syncTaskUI('ec', taskState.earnChannel);
   _syncTaskUI('em', taskState.eMoneyChannel);
   console.log('[DB] User loaded:', TG_ID);
-}
-
-function saveUser() {
-  if (!TG_ID) return;
-  const now = Date.now();
-  const cellsToSave = cells.map(c => ({
-    ...c,
-    saved_at: c.state === 'growing' ? now : null
-  }));
-  _dbCall('save', {
-    balance, seeds, water_count: waterCount,
-    cells: cellsToSave, task_state: taskState,
-    wd_history: withdrawHistory,
-    today_date: new Date().toISOString().slice(0, 10),
-    today_earn: todayEarnings,
-    total_harvests: totalHarvests,
-    referral_balance: referralBalance,
-    referral_friends: referralFriends,
-    day
-  });
 }
 
 // مزامنة حالة التاسك في الـ UI بعد تحميل DB
@@ -3794,20 +3775,41 @@ function _syncTaskUI(id, state) {
   }
 }
 
+// دالة مساعدة للإعلانات — تضيف موارد عبر السيرفر
+async function _dbAddResource(type, amount) {
+  const result = await _dbCall('add_resource', { type, amount });
+  if (!result.ok) return false;
+  if (type === 'seeds') seeds      = result.seeds      ?? seeds;
+  else                  waterCount = result.water_count ?? waterCount;
+  updateStats();
+  return true;
+}
+
 buildFarm();
 loadUser();
 
+/* ── POLLING — get_state كل 3 ثواني ── */
+let _pollActive = false;
 setInterval(async () => {
-  if (!TG_ID) return;
-  const result = await _dbCall('load', { username: TG_USERNAME || TG_FIRST || null });
-  if (!result.ok || !result.user) return;
-  const u = result.user;
-  balance         = parseFloat(u.balance)          || 0;
-  referralBalance = parseFloat(u.referral_balance) || 0;
-  referralFriends = parseInt(u.referral_friends)   || 0;
-  updateStats();
-  syncWithdrawPage();
-  syncInvitePage();
+  if (!TG_ID || _pollActive) return;
+  _pollActive = true;
+  try {
+    const result = await _dbCall('get_state');
+    if (!result.ok || !result.user) return;
+    const u = result.user;
+    balance         = parseFloat(u.balance)         || 0;
+    referralBalance = parseFloat(u.referral_balance) || 0;
+    referralFriends = parseInt(u.referral_friends)   || 0;
+    todayEarnings   = parseFloat(u.today_earn)       || 0;
+    totalHarvests   = parseInt(u.total_harvests)     || 0;
+    const sc = Array.isArray(u.cells) ? u.cells : [];
+    if (sc.length === 3) {
+      sc.forEach((sv, i) => { if (cells[i] && cells[i].state !== sv.state) cells[i] = sv; });
+    }
+    renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
+  } finally {
+    _pollActive = false;
+  }
 }, 3000);
 
 /* ── INITIAL FARM PAGE ANIMATION ──
