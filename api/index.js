@@ -112,7 +112,8 @@ module.exports = async function handler(req, res) {
     }
 
     // ════════════════════════════════════════
-    //  SAVE — حفظ الحالة الكاملة
+    //  SAVE — حفظ الحالة الكاملة (UPSERT)
+    //  ✅ يُنشئ المستخدم تلقائياً لو مو موجود
     // ════════════════════════════════════════
     if (action === 'save') {
       const {
@@ -124,35 +125,40 @@ module.exports = async function handler(req, res) {
       } = data;
 
       await sql(
-        `UPDATE users SET
-           balance          = $2,
-           seeds            = $3,
-           water_count      = $4,
-           cells            = $5,
-           task_state       = $6,
-           wd_history       = $7,
-           today_date       = $8,
-           today_earn       = $9,
-           total_harvests   = $10,
-           referral_balance = $11,
-           referral_friends = $12,
-           day              = $13,
-           updated_at       = NOW()
-         WHERE telegram_id = $1`,
+        `INSERT INTO users
+           (telegram_id, balance, seeds, water_count, cells, task_state,
+            wd_history, today_date, today_earn, total_harvests,
+            referral_balance, referral_friends, day, updated_at)
+         VALUES
+           ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+         ON CONFLICT (telegram_id) DO UPDATE SET
+           balance          = EXCLUDED.balance,
+           seeds            = EXCLUDED.seeds,
+           water_count      = EXCLUDED.water_count,
+           cells            = EXCLUDED.cells,
+           task_state       = EXCLUDED.task_state,
+           wd_history       = EXCLUDED.wd_history,
+           today_date       = EXCLUDED.today_date,
+           today_earn       = EXCLUDED.today_earn,
+           total_harvests   = EXCLUDED.total_harvests,
+           referral_balance = EXCLUDED.referral_balance,
+           referral_friends = EXCLUDED.referral_friends,
+           day              = EXCLUDED.day,
+           updated_at       = NOW()`,
         [
           tid,
-          parseFloat(balance) || 0,
-          parseInt(seeds)     || 3,
-          parseInt(water_count) || 3,
+          parseFloat(balance)          || 0,
+          parseInt(seeds)              || 3,
+          parseInt(water_count)        || 3,
           JSON.stringify(cells),
           JSON.stringify(task_state),
           JSON.stringify(wd_history),
           today_date,
-          parseFloat(today_earn) || 0,
-          parseInt(total_harvests) || 0,
+          parseFloat(today_earn)       || 0,
+          parseInt(total_harvests)     || 0,
           parseFloat(referral_balance) || 0,
-          parseInt(referral_friends) || 0,
-          parseInt(day) || 1
+          parseInt(referral_friends)   || 0,
+          parseInt(day)                || 1
         ]
       );
 
@@ -169,8 +175,8 @@ module.exports = async function handler(req, res) {
       if (amount < 0.05)        return res.status(400).json({ ok: false, error: 'Minimum 0.05 TON' });
 
       const rows = await sql('SELECT balance, wd_history FROM users WHERE telegram_id = $1', [tid]);
-      if (!rows.length)              return res.status(404).json({ ok: false, error: 'User not found' });
-      if (rows[0].balance < amount)  return res.status(400).json({ ok: false, error: 'Insufficient balance' });
+      if (!rows.length)             return res.status(404).json({ ok: false, error: 'User not found' });
+      if (rows[0].balance < amount) return res.status(400).json({ ok: false, error: 'Insufficient balance' });
 
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
