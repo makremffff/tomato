@@ -1,4 +1,4 @@
-/// ================================================================
+// ================================================================
 //  Tomato Farm — API Backend
 //  ✅ يستخدم @neondatabase/serverless
 //  ✅ ضع DATABASE_URL في Environment Variables على Vercel
@@ -7,6 +7,9 @@
 const { neon } = require('@neondatabase/serverless');
 
 const DATABASE_URL = process.env.DATABASE_URL;
+
+// FIXED: Constant for referral percentage — calculated server-side only
+const REFERRAL_PCT = 0.05;
 
 // ── دالة تنفيذ SQL ────────────────────────────────────────────
 async function sql(query, params = []) {
@@ -40,7 +43,6 @@ async function bootstrap() {
         updated_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       )
     `);
-    // أضف عمود referral_rewarded لو الجدول قديم
     await sql(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewarded BOOLEAN NOT NULL DEFAULT FALSE
     `);
@@ -56,6 +58,21 @@ function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+// ── FIXED: Safe integer parser — returns defaultVal if value is null/undefined/NaN
+//          Does NOT fall back to default for legitimate 0 values
+function safeInt(value, defaultVal) {
+  if (value === null || value === undefined) return defaultVal;
+  const parsed = parseInt(value);
+  return isNaN(parsed) ? defaultVal : parsed;
+}
+
+// ── FIXED: Safe float parser — same logic as safeInt but for floats
+function safeFloat(value, defaultVal) {
+  if (value === null || value === undefined) return defaultVal;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? defaultVal : parsed;
 }
 
 // ── Main Handler ─────────────────────────────────────────────────
@@ -89,7 +106,7 @@ module.exports = async function handler(req, res) {
       );
 
       if (!rows.length) {
-        // مستخدم جديد
+        // مستخدم جديد — أنشئه
         const username   = data.username   || null;
         const referralBy = data.referral_by ? parseInt(data.referral_by) : null;
 
@@ -101,11 +118,13 @@ module.exports = async function handler(req, res) {
           [tid, username, referralBy]
         );
 
-        // عند أول دخول — سجّل +1 للمحيل فقط (المكافأة المالية تأتي من 5% حصاد)
+        // مكافأة المُحيل — مرة واحدة فقط عند أول دخول
         if (referralBy && !isNaN(referralBy) && referralBy !== tid) {
           await sql(
             `UPDATE users
              SET referral_friends = referral_friends + 1,
+                 referral_balance = referral_balance + 0.01,
+                 balance          = balance + 0.01,
                  updated_at       = NOW()
              WHERE telegram_id = $1`,
             [referralBy]
@@ -116,12 +135,14 @@ module.exports = async function handler(req, res) {
           );
         }
       } else {
-        // مستخدم موجود — تحقق لو referral_by موجود لكن +1 لم تُعطَ بعد
+        // مستخدم موجود — تحقق لو referral_by موجود لكن لم تُعطَ المكافأة بعد
         const u = rows[0];
         if (u.referral_by && !u.referral_rewarded) {
           await sql(
             `UPDATE users
              SET referral_friends = referral_friends + 1,
+                 referral_balance = referral_balance + 0.01,
+                 balance          = balance + 0.01,
                  updated_at       = NOW()
              WHERE telegram_id = $1`,
             [u.referral_by]
@@ -139,38 +160,88 @@ module.exports = async function handler(req, res) {
 
     // ════════════════════════════════════════
     //  REFERRAL_REWARD — 5% من كل حصاد
-    //  يجلب referral_by من DB ويعطيه المكافأة
     // ════════════════════════════════════════
     if (action === 'referral_reward') {
-      const { amount } = data;
-      if (!amount || amount <= 0) return res.status(200).json({ ok: false });
-      // جلب referral_by للمستخدم الحالي
-      const uRows = await sql('SELECT referral_by FROM users WHERE telegram_id = $1', [tid]);
-      if (!uRows.length || !uRows[0].referral_by) return res.status(200).json({ ok: false });
-      const referrerId = uRows[0].referral_by;
+      const rawAmount = data.harvest_amount ?? data.amount;
+
+      // FIXED: Validate the incoming harvest amount
+      if (rawAmount === undefined || rawAmount === null) {
+        return res.status(400).json({ ok: false, error: 'Missing harvest_amount' });
+      }
+
+      const harvestAmount = parseFloat(rawAmount);
+      if (isNaN(harvestAmount) || harvestAmount <= 0) {
+        return res.status(400).json({ ok: false, error: 'Invalid harvest_amount' });
+      }
+
+      // FIXED: Calculate 5% server-side — never trust the frontend amount directly
+      const reward = Math.round(harvestAmount * REFERRAL_PCT * 1e8) / 1e8; // precision-safe
+
       await sql(
         `UPDATE users
          SET referral_balance = referral_balance + $2,
              balance          = balance + $2,
              updated_at       = NOW()
          WHERE telegram_id = $1`,
-        [referrerId, parseFloat(amount)]
+        [tid, reward]
       );
-      return res.status(200).json({ ok: true });
+
+      return res.status(200).json({ ok: true, rewarded: reward });
     }
 
     // ════════════════════════════════════════
-    //  SAVE — حفظ الحالة الكاملة (UPSERT)
-    //  ✅ يُنشئ المستخدم تلقائياً لو مو موجود
+    //  SAVE — حفظ الحالة الكاملة
+    //  FIXED: Load current DB row first, then only overwrite
+    //         fields that were explicitly sent — prevents
+    //         accidental reset of seeds, water, and cells
     // ════════════════════════════════════════
     if (action === 'save') {
-      const {
-        balance = 0, seeds = 3, water_count = 3,
-        cells = [], task_state = {}, wd_history = [],
-        today_date = '', today_earn = 0,
-        total_harvests = 0, referral_balance = 0,
-        referral_friends = 0, day = 1
-      } = data;
+
+      // FIXED: Fetch existing row so we can fall back to DB values
+      //        for any field the frontend didn't send
+      const existing = await sql(
+        'SELECT * FROM users WHERE telegram_id = $1',
+        [tid]
+      );
+      const cur = existing[0] || {};
+
+      // FIXED: Use safeInt/safeFloat so 0 is preserved, not replaced with default
+      const newBalance       = safeFloat(data.balance,         cur.balance          ?? 0);
+      const newSeeds         = safeInt  (data.seeds,           cur.seeds            ?? 3); // FIXED: was || 3
+      const newWaterCount    = safeInt  (data.water_count,     cur.water_count      ?? 3); // FIXED: was || 3
+      const newTodayEarn     = safeFloat(data.today_earn,      cur.today_earn       ?? 0);
+      const newTotalHarvests = safeInt  (data.total_harvests,  cur.total_harvests   ?? 0);
+      const newRefBalance    = safeFloat(data.referral_balance,cur.referral_balance ?? 0);
+      const newRefFriends    = safeInt  (data.referral_friends,cur.referral_friends ?? 0);
+      const newDay           = safeInt  (data.day,             cur.day              ?? 1);
+      const newTodayDate     = data.today_date  !== undefined ? data.today_date  : (cur.today_date  || '');
+
+      // FIXED: cells — if frontend didn't send cells (or sent empty array),
+      //        keep the existing DB value to prevent farm from disappearing on refresh
+      let newCells;
+      if (Array.isArray(data.cells) && data.cells.length > 0) {
+        newCells = JSON.stringify(data.cells);                 // frontend sent real data → use it
+      } else if (data.cells === null) {
+        newCells = '[]';                                       // frontend explicitly cleared → allow
+      } else {
+        newCells = JSON.stringify(cur.cells ?? []);            // FIXED: not provided → keep DB value
+      }
+
+      // task_state — keep existing if not provided
+      let newTaskState;
+      if (data.task_state !== undefined) {
+        newTaskState = JSON.stringify(data.task_state);
+      } else {
+        newTaskState = JSON.stringify(cur.task_state ?? { earnChannel: 'idle', eMoneyChannel: 'idle' });
+      }
+
+      // wd_history — keep existing if not provided
+      let newWdHistory;
+      if (Array.isArray(data.wd_history)) {
+        newWdHistory = JSON.stringify(data.wd_history);
+      } else {
+        newWdHistory = JSON.stringify(cur.wd_history ?? []);
+      }
 
       await sql(
         `INSERT INTO users
@@ -195,18 +266,18 @@ module.exports = async function handler(req, res) {
            updated_at       = NOW()`,
         [
           tid,
-          parseFloat(balance)          || 0,
-          parseInt(seeds)              || 3,
-          parseInt(water_count)        || 3,
-          JSON.stringify(cells),
-          JSON.stringify(task_state),
-          JSON.stringify(wd_history),
-          today_date,
-          parseFloat(today_earn)       || 0,
-          parseInt(total_harvests)     || 0,
-          parseFloat(referral_balance) || 0,
-          parseInt(referral_friends)   || 0,
-          parseInt(day)                || 1
+          newBalance,
+          newSeeds,
+          newWaterCount,
+          newCells,
+          newTaskState,
+          newWdHistory,
+          newTodayDate,
+          newTodayEarn,
+          newTotalHarvests,
+          newRefBalance,
+          newRefFriends,
+          newDay
         ]
       );
 
@@ -229,7 +300,7 @@ module.exports = async function handler(req, res) {
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
                     + ' ' + now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-      const entry = { account, amount, date: dateStr, status: 'pending' };
+      const entry = { account, amount: parseFloat(amount), date: dateStr, status: 'pending' };
 
       const history = Array.isArray(rows[0].wd_history) ? rows[0].wd_history : [];
       history.unshift(entry);
