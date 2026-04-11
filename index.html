@@ -2514,6 +2514,7 @@ let farmMode        = 'plant';
 let tickCount       = 0;
 let totalHarvests   = 0;
 let todayEarnings   = 0.0;
+let dbReady         = false; // GUARD: prevent saveUser before loadUser completes
 const harvestHistory = []; // last 7 harvest amounts for sparkline
 const withdrawHistory = [];
 
@@ -3714,8 +3715,8 @@ async function loadUser() {
 
   // تطبيق البيانات على المتغيرات الموجودة
   balance          = parseFloat(u.balance)          || 0;
-  seeds            = parseInt(u.seeds)              || 3;
-  waterCount       = parseInt(u.water_count)        || 3;
+  seeds            = (u.seeds      != null && !isNaN(parseInt(u.seeds)))      ? parseInt(u.seeds)      : 3;
+  waterCount       = (u.water_count!= null && !isNaN(parseInt(u.water_count)))? parseInt(u.water_count): 3;
   const now = Date.now();
   const savedCells = Array.isArray(u.cells) ? u.cells : [];
   cells = savedCells.length === 3
@@ -3752,11 +3753,13 @@ async function loadUser() {
   // مزامنة حالة التاسكات في الـ UI
   _syncTaskUI('ec', taskState.earnChannel);
   _syncTaskUI('em', taskState.eMoneyChannel);
+  dbReady = true; // GUARD: now safe to save
   console.log('[DB] User loaded:', TG_ID);
 }
 
 function saveUser() {
   if (!TG_ID) return;
+  if (!dbReady) return; // GUARD: don't save default values before DB is loaded
   const now = Date.now();
   const cellsToSave = cells.map(c => ({
     ...c,
@@ -3795,17 +3798,23 @@ function _syncTaskUI(id, state) {
 buildFarm();
 loadUser();
 
+let _isSyncing = false;
 setInterval(async () => {
-  if (!TG_ID) return;
-  const result = await _dbCall('load', { username: TG_USERNAME || TG_FIRST || null });
-  if (!result.ok || !result.user) return;
-  const u = result.user;
-  balance         = parseFloat(u.balance)          || 0;
-  referralBalance = parseFloat(u.referral_balance) || 0;
-  referralFriends = parseInt(u.referral_friends)   || 0;
-  updateStats();
-  syncWithdrawPage();
-  syncInvitePage();
+  if (!TG_ID || !dbReady || _isSyncing) return; // GUARD: skip if not ready or already syncing
+  _isSyncing = true;
+  try {
+    const result = await _dbCall('load', { username: TG_USERNAME || TG_FIRST || null });
+    if (!result.ok || !result.user) return;
+    const u = result.user;
+    balance         = parseFloat(u.balance)          || 0;
+    referralBalance = parseFloat(u.referral_balance) || 0;
+    referralFriends = parseInt(u.referral_friends)   || 0;
+    updateStats();
+    syncWithdrawPage();
+    syncInvitePage();
+  } finally {
+    _isSyncing = false;
+  }
 }, 3000);
 
 /* ── INITIAL FARM PAGE ANIMATION ──
