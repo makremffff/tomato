@@ -89,7 +89,7 @@ module.exports = async function handler(req, res) {
       );
 
       if (!rows.length) {
-        // ✅ مستخدم جديد — أنشئه
+        // مستخدم جديد
         const username   = data.username   || null;
         const referralBy = data.referral_by ? parseInt(data.referral_by) : null;
 
@@ -101,32 +101,27 @@ module.exports = async function handler(req, res) {
           [tid, username, referralBy]
         );
 
-        // ✅ مكافأة المُحيل — مرة واحدة فقط عند أول دخول
+        // عند أول دخول — سجّل +1 للمحيل فقط (المكافأة المالية تأتي من 5% حصاد)
         if (referralBy && !isNaN(referralBy) && referralBy !== tid) {
           await sql(
             `UPDATE users
              SET referral_friends = referral_friends + 1,
-                 referral_balance = referral_balance + 0.01,
-                 balance          = balance + 0.01,
                  updated_at       = NOW()
              WHERE telegram_id = $1`,
             [referralBy]
           );
-          // سجّل إن هذا المستخدم تمت مكافأة محيله
           await sql(
             `UPDATE users SET referral_rewarded = TRUE WHERE telegram_id = $1`,
             [tid]
           );
         }
       } else {
-        // ✅ مستخدم موجود — تحقق لو referral_by موجود لكن لم تُعطَ المكافأة بعد
+        // مستخدم موجود — تحقق لو referral_by موجود لكن +1 لم تُعطَ بعد
         const u = rows[0];
         if (u.referral_by && !u.referral_rewarded) {
           await sql(
             `UPDATE users
              SET referral_friends = referral_friends + 1,
-                 referral_balance = referral_balance + 0.01,
-                 balance          = balance + 0.01,
                  updated_at       = NOW()
              WHERE telegram_id = $1`,
             [u.referral_by]
@@ -135,7 +130,6 @@ module.exports = async function handler(req, res) {
             `UPDATE users SET referral_rewarded = TRUE WHERE telegram_id = $1`,
             [tid]
           );
-          // أعد تحميل بيانات المستخدم بعد التحديث
           rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
         }
       }
@@ -145,18 +139,22 @@ module.exports = async function handler(req, res) {
 
     // ════════════════════════════════════════
     //  REFERRAL_REWARD — 5% من كل حصاد
+    //  يجلب referral_by من DB ويعطيه المكافأة
     // ════════════════════════════════════════
     if (action === 'referral_reward') {
       const { amount } = data;
-      if (!amount || amount <= 0) return res.status(400).json({ ok: false });
-      // المُحيل هو telegram_id الممرر — أضف له 5%
+      if (!amount || amount <= 0) return res.status(200).json({ ok: false });
+      // جلب referral_by للمستخدم الحالي
+      const uRows = await sql('SELECT referral_by FROM users WHERE telegram_id = $1', [tid]);
+      if (!uRows.length || !uRows[0].referral_by) return res.status(200).json({ ok: false });
+      const referrerId = uRows[0].referral_by;
       await sql(
         `UPDATE users
          SET referral_balance = referral_balance + $2,
              balance          = balance + $2,
              updated_at       = NOW()
          WHERE telegram_id = $1`,
-        [tid, parseFloat(amount)]
+        [referrerId, parseFloat(amount)]
       );
       return res.status(200).json({ ok: true });
     }
