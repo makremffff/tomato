@@ -2848,7 +2848,7 @@ function buildFarm() {
       <div class="c-ring"></div>
       <div class="c-water">💧</div>
       <div class="c-countdown" id="cd-${i}" style="display:none"></div>
-      <div class="c-inner"><span class="c-emoji">🟫</span></div>
+      <div class="c-inner"><span class="c-emoji"></span></div>
       <div class="c-lbl">empty</div>
       <div class="c-prog"><div class="c-fill" style="width:0%"></div></div>
     `;
@@ -3773,7 +3773,20 @@ function _syncTaskUI(id, state) {
 }
 
 buildFarm();
-loadUser();  // ← تحميل من DB — هي تستدعي renderFarm() و updateStats() بعد ما تنتهي
+loadUser();
+
+setInterval(async () => {
+  if (!TG_ID) return;
+  const result = await _dbCall('load', { username: TG_USERNAME || TG_FIRST || null });
+  if (!result.ok || !result.user) return;
+  const u = result.user;
+  balance         = parseFloat(u.balance)          || 0;
+  referralBalance = parseFloat(u.referral_balance) || 0;
+  referralFriends = parseInt(u.referral_friends)   || 0;
+  updateStats();
+  syncWithdrawPage();
+  syncInvitePage();
+}, 3000);
 
 /* ── INITIAL FARM PAGE ANIMATION ──
    Triggers the same pg-item entrance for the farm page on first load */
