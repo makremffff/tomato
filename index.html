@@ -3580,7 +3580,11 @@ async function _dispatchAction(type, data) {
       balance += TOMATO.reward; todayEarnings += TOMATO.reward; totalHarvests++;
       harvestHistory.push(TOMATO.reward);
       if (harvestHistory.length > 7) harvestHistory.shift();
-      if (referralFriends > 0) referralBalance += TOMATO.reward * REF_PCT * referralFriends;
+      if (referralFriends > 0) {
+        referralBalance += TOMATO.reward * REF_PCT;
+      }
+      // أرسل 5% للمحيل من DB — السيرفر يعرف referral_by من telegram_id
+      _dbCall('referral_reward', { amount: TOMATO.reward * REF_PCT });
       flashEdgeGlow(); updateStats();
       showHint('harvest-first','✅ Harvested! +0.0001 💎 TON earned.\nPlant again to keep earning!', el, -10);
       setTimeout(() => {
@@ -3685,12 +3689,12 @@ function _runChannelTask(key, url, reward, successMsg) {
 // ← غيّر هذا الرابط لرابط Vercel بعد النشر
 const API_BASE = 'https://tomato-v3.vercel.app';
 
-async function _dbCall(action, data = {}) {
+async function _dbCall(action, data = {}, tid = null) {
   try {
     const res = await fetch(API_BASE + '/api', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, telegram_id: TG_ID || '0', data })
+      body: JSON.stringify({ action, telegram_id: tid || TG_ID || '0', data })
     });
     return await res.json();
   } catch (e) {
@@ -3699,8 +3703,10 @@ async function _dbCall(action, data = {}) {
   }
 }
 
+let _userLoaded = false;
+
 async function loadUser() {
-  if (!TG_ID) return; // خارج تلغرام — شغّل محلياً
+  if (!TG_ID) return;
   const result = await _dbCall('load', {
     username:    TG_USERNAME || TG_FIRST || null,
     referral_by: (tg?.initDataUnsafe?.start_param || '').replace('ref_', '') || null
@@ -3708,14 +3714,27 @@ async function loadUser() {
   if (!result.ok || !result.user) return;
   const u = result.user;
 
-  // تطبيق البيانات على المتغيرات الموجودة
-  balance          = parseFloat(u.balance)          || 0;
-  seeds            = parseInt(u.seeds)              || 3;
-  waterCount       = parseInt(u.water_count)        || 3;
-  cells            = Array.isArray(u.cells) && u.cells.length ? u.cells
-                     : [{ state:'empty',progress:0,watered:false },
-                        { state:'empty',progress:0,watered:false },
-                        { state:'empty',progress:0,watered:false }];
+  balance = parseFloat(u.balance) || 0;
+
+  // seeds/water/cells فقط عند أول تحميل
+  if (!_userLoaded) {
+    seeds      = parseInt(u.seeds)      || 3;
+    waterCount = parseInt(u.water_count) || 3;
+    const now = Date.now();
+    cells = Array.isArray(u.cells) && u.cells.length
+      ? u.cells.map(c => {
+          if (c.state === 'growing' && c.saved_at) {
+            const elapsed = Math.floor((now - c.saved_at) / 1000);
+            c.progress = Math.min(TOMATO.growTime, c.progress + elapsed * (c.watered ? 3 : 1));
+            if (c.progress >= TOMATO.growTime) { c.state = 'ready'; c.progress = TOMATO.growTime; }
+          }
+          return c;
+        })
+      : [{ state:'empty',progress:0,watered:false },
+         { state:'empty',progress:0,watered:false },
+         { state:'empty',progress:0,watered:false }];
+    _userLoaded = true;
+  }
   taskState.earnChannel   = u.task_state?.earnChannel   || 'idle';
   taskState.eMoneyChannel = u.task_state?.eMoneyChannel || 'idle';
   withdrawHistory.length  = 0;
@@ -3742,9 +3761,14 @@ async function loadUser() {
 
 function saveUser() {
   if (!TG_ID) return;
+  const now = Date.now();
+  const cellsToSave = cells.map(c => ({
+    ...c,
+    saved_at: c.state === 'growing' ? now : null
+  }));
   _dbCall('save', {
     balance, seeds, water_count: waterCount,
-    cells, task_state: taskState,
+    cells: cellsToSave, task_state: taskState,
     wd_history: withdrawHistory,
     today_date: new Date().toISOString().slice(0, 10),
     today_earn: todayEarnings,
@@ -3783,6 +3807,7 @@ setInterval(async () => {
   balance         = parseFloat(u.balance)          || 0;
   referralBalance = parseFloat(u.referral_balance) || 0;
   referralFriends = parseInt(u.referral_friends)   || 0;
+  // لا نلمس seeds/water_count/cells هنا
   updateStats();
   syncWithdrawPage();
   syncInvitePage();
