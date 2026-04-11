@@ -2504,6 +2504,7 @@ const TOMATO  = { reward: 0.0001, growTime: 30 };
 const LIMIT   = 3;
 const REF_PCT = 0.05;
 let _userLoaded = false;
+let _isSaving   = false;   // true while a save is in-flight — blocks polling overwrite
 
 let balance         = 0.0;
 let referralBalance = 0.0;
@@ -3756,24 +3757,29 @@ async function loadUser() {
   _userLoaded = true;
 }
 
-function saveUser() {
+async function saveUser() {
   if (!TG_ID) return;
+  _isSaving = true;
   const now = Date.now();
   const cellsToSave = cells.map(c => ({
     ...c,
     saved_at: c.state === 'growing' ? now : null
   }));
-  _dbCall('save', {
-    balance, seeds, water_count: waterCount,
-    cells: cellsToSave, task_state: taskState,
-    wd_history: withdrawHistory,
-    today_date: new Date().toISOString().slice(0, 10),
-    today_earn: todayEarnings,
-    total_harvests: totalHarvests,
-    referral_balance: referralBalance,
-    referral_friends: referralFriends,
-    day
-  });
+  try {
+    await _dbCall('save', {
+      balance, seeds, water_count: waterCount,
+      cells: cellsToSave, task_state: taskState,
+      wd_history: withdrawHistory,
+      today_date: new Date().toISOString().slice(0, 10),
+      today_earn: todayEarnings,
+      total_harvests: totalHarvests,
+      referral_balance: referralBalance,
+      referral_friends: referralFriends,
+      day
+    });
+  } finally {
+    _isSaving = false;
+  }
 }
 
 // مزامنة حالة التاسك في الـ UI بعد تحميل DB
@@ -3797,9 +3803,10 @@ buildFarm();
 loadUser();
 
 setInterval(async () => {
-  if (!TG_ID || !_userLoaded) return;  // guard: don't poll before initial load completes
+  if (!TG_ID || !_userLoaded || _isSaving) return; // skip if save in-flight
   const result = await _dbCall('load', { username: TG_USERNAME || TG_FIRST || null });
   if (!result.ok || !result.user) return;
+  if (_isSaving) return; // check again after await — save may have started during fetch
   const u = result.user;
   balance         = parseFloat(u.balance)          || 0;
   referralBalance = parseFloat(u.referral_balance) || 0;
@@ -3807,7 +3814,7 @@ setInterval(async () => {
   updateStats();
   syncWithdrawPage();
   syncInvitePage();
-}, 3000);
+}, 5000); // 5s instead of 3s — reduce API load
 
 // Force-save on page close using sendBeacon (reliable even during unload)
 window.addEventListener('beforeunload', () => {
