@@ -17,88 +17,6 @@
 <!-- ✅ FIX: Telegram SDK must load FIRST before any inline script uses window.Telegram -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
-
-<!-- 🔒 TomatoSec — Signed Requests + Fingerprint + Anti-Replay -->
-<script>
-const TomatoSec = (() => {
-  // 🔑 HMAC Secret — نفس قيمة HMAC_SECRET في Vercel بالضبط
-  const _k = () => {
-    const p = ['a9','F#','k2','Lm','!Q','x9','Zp','@3','Vt','Y7','$w','E8','rN','6u','B1','cD'];
-    return p.join('');
-  };
-
-  function _nonce() {
-    const arr = new Uint8Array(16);
-    crypto.getRandomValues(arr);
-    return Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
-  }
-
-  async function _hmac(message, secret) {
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw', enc.encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false, ['sign']
-    );
-    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
-    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2,'0')).join('');
-  }
-
-  function _fingerprint() {
-    return {
-      ua:       navigator.userAgent || '',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-      screen:   `${screen.width}x${screen.height}x${screen.colorDepth}`,
-      lang:     navigator.language || '',
-    };
-  }
-
-  // تجميد fetch لمنع أي override
-  (function _freeze() {
-    try {
-      const _orig = window.fetch;
-      Object.defineProperty(window, 'fetch', {
-        get() { return _orig; },
-        set() {},
-        configurable: false
-      });
-    } catch {}
-  })();
-
-  async function call(action, telegram_id, data = {}, apiBase) {
-    const base = apiBase || 'https://tomato-v3.vercel.app';
-    const isWrite = !['get_state','load'].includes(action);
-    const ts    = Date.now().toString();
-    const nonce = _nonce();
-    const body  = { action, telegram_id, data };
-    const fp    = _fingerprint();
-    const headers = { 'Content-Type': 'application/json' };
-
-    if (isWrite) {
-      const payload = `${nonce}:${ts}:${JSON.stringify(body)}`;
-      const sig = await _hmac(payload, _k());
-      headers['X-Signature'] = sig;
-      headers['X-Nonce']     = nonce;
-      headers['X-Timestamp'] = ts;
-    }
-
-    try {
-      const res = await fetch(base + '/api', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ ...body, fingerprint: fp })
-      });
-      return await res.json();
-    } catch (e) {
-      console.warn('[SEC]', action, 'failed:', e.message);
-      return { ok: false };
-    }
-  }
-
-  return { call, fingerprint: _fingerprint };
-})();
-</script>
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&display=swap');
 
@@ -824,22 +742,7 @@ body::before {
 .info-strip   { display: none; }
 .farm-outer   { display: none; }
 .farm-header  { display: none; }
-.c-countdown {
-  position: absolute;
-  top: -26px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.62rem;
-  font-weight: 700;
-  background: rgba(255,152,0,0.92);
-  color: #fff;
-  border-radius: 8px;
-  padding: 3px 8px;
-  z-index: 10;
-  box-shadow: 0 2px 8px rgba(255,100,0,0.45);
-  white-space: nowrap;
-  pointer-events: none;
-}
+.c-countdown  { position:absolute;top:-19px;left:18px;font-size:0.62rem;font-weight:700;background:rgba(255,152,0,0.85);color:#fff;border-radius:8px;padding:2px 6px;z-index:3;box-shadow:0 2px 8px rgba(255,100,0,0.4); }
 
 @media (max-width: 380px) {
   .cell .c-inner .c-emoji { font-size: 2.5rem; }
@@ -3808,9 +3711,18 @@ function _runChannelTask(key, url, reward, successMsg) {
 // ← غيّر هذا الرابط لرابط Vercel بعد النشر
 const API_BASE = 'https://tomato-v3.vercel.app';
 
-// 🔒 _dbCall — موقّعة عبر TomatoSec (HMAC + Nonce + Fingerprint)
 async function _dbCall(action, data = {}, tid = null) {
-  return TomatoSec.call(action, tid || TG_ID || '0', data, API_BASE);
+  try {
+    const res = await fetch(API_BASE + '/api', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, telegram_id: tid || TG_ID || '0', data })
+    });
+    return await res.json();
+  } catch (e) {
+    console.warn('[DB]', action, 'failed:', e.message);
+    return { ok: false };
+  }
 }
 
 function _applyUser(u) {
