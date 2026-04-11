@@ -2503,8 +2503,6 @@ console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!T
 const TOMATO  = { reward: 0.0001, growTime: 30 };
 const LIMIT   = 3;
 const REF_PCT = 0.05;
-let _userLoaded = false;
-let _isSaving   = false;   // true while a save is in-flight — blocks polling overwrite
 
 let balance         = 0.0;
 let referralBalance = 0.0;
@@ -3582,10 +3580,13 @@ async function _dispatchAction(type, data) {
       balance += TOMATO.reward; todayEarnings += TOMATO.reward; totalHarvests++;
       harvestHistory.push(TOMATO.reward);
       if (harvestHistory.length > 7) harvestHistory.shift();
-      // Always try to reward the referrer (whoever referred this user), not based on referralFriends count
-      const refId = (tg?.initDataUnsafe?.start_param || '').replace('ref_', '');
-      if (refId && refId !== String(TG_ID)) {
-        _dbCall('referral_reward', { amount: TOMATO.reward * REF_PCT }, refId);
+      if (referralFriends > 0) {
+        referralBalance += TOMATO.reward * REF_PCT;
+        // أرسل 5% للمحيل مباشرة في السيرفر
+        const refId = (tg?.initDataUnsafe?.start_param || '').replace('ref_', '');
+        if (refId && refId !== TG_ID) {
+          _dbCall('referral_reward', { amount: TOMATO.reward * REF_PCT }, refId);
+        }
       }
       flashEdgeGlow(); updateStats();
       showHint('harvest-first','✅ Harvested! +0.0001 💎 TON earned.\nPlant again to keep earning!', el, -10);
@@ -3754,32 +3755,26 @@ async function loadUser() {
   _syncTaskUI('ec', taskState.earnChannel);
   _syncTaskUI('em', taskState.eMoneyChannel);
   console.log('[DB] User loaded:', TG_ID);
-  _userLoaded = true;
 }
 
-async function saveUser() {
+function saveUser() {
   if (!TG_ID) return;
-  _isSaving = true;
   const now = Date.now();
   const cellsToSave = cells.map(c => ({
     ...c,
     saved_at: c.state === 'growing' ? now : null
   }));
-  try {
-    await _dbCall('save', {
-      balance, seeds, water_count: waterCount,
-      cells: cellsToSave, task_state: taskState,
-      wd_history: withdrawHistory,
-      today_date: new Date().toISOString().slice(0, 10),
-      today_earn: todayEarnings,
-      total_harvests: totalHarvests,
-      referral_balance: referralBalance,
-      referral_friends: referralFriends,
-      day
-    });
-  } finally {
-    _isSaving = false;
-  }
+  _dbCall('save', {
+    balance, seeds, water_count: waterCount,
+    cells: cellsToSave, task_state: taskState,
+    wd_history: withdrawHistory,
+    today_date: new Date().toISOString().slice(0, 10),
+    today_earn: todayEarnings,
+    total_harvests: totalHarvests,
+    referral_balance: referralBalance,
+    referral_friends: referralFriends,
+    day
+  });
 }
 
 // مزامنة حالة التاسك في الـ UI بعد تحميل DB
@@ -3803,10 +3798,9 @@ buildFarm();
 loadUser();
 
 setInterval(async () => {
-  if (!TG_ID || !_userLoaded || _isSaving) return; // skip if save in-flight
+  if (!TG_ID) return;
   const result = await _dbCall('load', { username: TG_USERNAME || TG_FIRST || null });
   if (!result.ok || !result.user) return;
-  if (_isSaving) return; // check again after await — save may have started during fetch
   const u = result.user;
   balance         = parseFloat(u.balance)          || 0;
   referralBalance = parseFloat(u.referral_balance) || 0;
@@ -3814,32 +3808,7 @@ setInterval(async () => {
   updateStats();
   syncWithdrawPage();
   syncInvitePage();
-}, 5000); // 5s instead of 3s — reduce API load
-
-// Force-save on page close using sendBeacon (reliable even during unload)
-window.addEventListener('beforeunload', () => {
-  if (!TG_ID) return;
-  const now = Date.now();
-  const cellsToSave = cells.map(c => ({
-    ...c,
-    saved_at: c.state === 'growing' ? now : null
-  }));
-  navigator.sendBeacon(API_BASE + '/api', JSON.stringify({
-    action: 'save',
-    telegram_id: TG_ID,
-    data: {
-      balance, seeds, water_count: waterCount,
-      cells: cellsToSave, task_state: taskState,
-      wd_history: withdrawHistory,
-      today_date: new Date().toISOString().slice(0, 10),
-      today_earn: todayEarnings,
-      total_harvests: totalHarvests,
-      referral_balance: referralBalance,
-      referral_friends: referralFriends,
-      day
-    }
-  }));
-});
+}, 3000);
 
 /* ── INITIAL FARM PAGE ANIMATION ──
    Triggers the same pg-item entrance for the farm page on first load */
