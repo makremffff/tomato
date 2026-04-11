@@ -144,6 +144,24 @@ module.exports = async function handler(req, res) {
     }
 
     // ════════════════════════════════════════
+    //  REFERRAL_REWARD — 5% من كل حصاد
+    // ════════════════════════════════════════
+    if (action === 'referral_reward') {
+      const { amount } = data;
+      if (!amount || amount <= 0) return res.status(400).json({ ok: false });
+      // المُحيل هو telegram_id الممرر — أضف له 5%
+      await sql(
+        `UPDATE users
+         SET referral_balance = referral_balance + $2,
+             balance          = balance + $2,
+             updated_at       = NOW()
+         WHERE telegram_id = $1`,
+        [tid, parseFloat(amount)]
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    // ════════════════════════════════════════
     //  SAVE — حفظ الحالة الكاملة (UPSERT)
     //  ✅ يُنشئ المستخدم تلقائياً لو مو موجود
     // ════════════════════════════════════════
