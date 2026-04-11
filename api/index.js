@@ -1,36 +1,18 @@
 // ================================================================
 //  Tomato Farm — API Backend
-//  ✅ CommonJS — بدون أي مكتبات خارجية
-//  ✅ يتصل بـ Neon عبر HTTP مباشرة (fetch مدمج في Node 18+)
+//  ✅ يستخدم @neondatabase/serverless
 //  ✅ ضع DATABASE_URL في Environment Variables على Vercel
 // ================================================================
 
+const { neon } = require('@neondatabase/serverless');
+
 const DATABASE_URL = process.env.DATABASE_URL;
 
-// ── دالة تنفيذ SQL على Neon عبر HTTP ────────────────────────────
+// ── دالة تنفيذ SQL ────────────────────────────────────────────
 async function sql(query, params = []) {
-  // حوّل postgresql:// أو postgres:// إلى https://
-  const httpUrl = DATABASE_URL
-    .replace(/^postgresql:\/\//, 'https://')
-    .replace(/^postgres:\/\//, 'https://');
-
-  // Neon HTTP endpoint
-  const url = httpUrl.replace(/\/([^/?]+)(\?.*)?$/, '/v2/query$2');
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, params })
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error('Neon HTTP error: ' + res.status + ' — ' + err);
-  }
-
-  const json = await res.json();
-  // Neon يرجع { results: [{ rows, fields }] }
-  return json.results?.[0]?.rows ?? [];
+  const db = neon(DATABASE_URL);
+  const rows = await db(query, params);
+  return rows;
 }
 
 // ── Bootstrap — أنشئ الجدول لو مو موجود ────────────────────────
@@ -102,7 +84,6 @@ module.exports = async function handler(req, res) {
       );
 
       if (!rows.length) {
-        // مستخدم جديد
         const username   = data.username   || null;
         const referralBy = data.referral_by ? parseInt(data.referral_by) : null;
 
@@ -179,17 +160,17 @@ module.exports = async function handler(req, res) {
     }
 
     // ════════════════════════════════════════
-    //  WITHDRAW — سحب (يُحدَّث الرصيد في DB)
+    //  WITHDRAW — سحب
     // ════════════════════════════════════════
     if (action === 'withdraw') {
       const { account, amount } = data;
-      if (!account)        return res.status(400).json({ ok: false, error: 'Missing account' });
-      if (!amount || amount <= 0) return res.status(400).json({ ok: false, error: 'Invalid amount' });
-      if (amount < 0.05)   return res.status(400).json({ ok: false, error: 'Minimum 0.05 TON' });
+      if (!account)             return res.status(400).json({ ok: false, error: 'Missing account' });
+      if (!amount || amount<=0) return res.status(400).json({ ok: false, error: 'Invalid amount' });
+      if (amount < 0.05)        return res.status(400).json({ ok: false, error: 'Minimum 0.05 TON' });
 
       const rows = await sql('SELECT balance, wd_history FROM users WHERE telegram_id = $1', [tid]);
-      if (!rows.length)         return res.status(404).json({ ok: false, error: 'User not found' });
-      if (rows[0].balance < amount) return res.status(400).json({ ok: false, error: 'Insufficient balance' });
+      if (!rows.length)              return res.status(404).json({ ok: false, error: 'User not found' });
+      if (rows[0].balance < amount)  return res.status(400).json({ ok: false, error: 'Insufficient balance' });
 
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
