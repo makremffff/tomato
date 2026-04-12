@@ -457,13 +457,17 @@ module.exports = async function handler(req, res) {
     // ── فحص shadow ban قبل إنشاء الجلسة ──
     const banCheck = await sql(`SELECT shadow_banned, risk_score FROM users WHERE telegram_id = $1`, [tid]);
     if (banCheck[0]?.shadow_banned) {
-      // نسجّل المحاولة لكن لا نكشف السبب
       await auditLog(tid, ipHash, fingerprint, 'create_session_banned', banCheck[0].risk_score, 'deny', { reason: 'shadow_banned' });
       return res.status(200).json({ ok: false, is_banned: true });
     }
 
-    // إلغاء الجلسات القديمة
+    // إلغاء الجلسات القديمة (حتى لو كانت من فترة الحظر)
     await sql(`UPDATE sessions SET is_valid = FALSE WHERE telegram_id = $1`, [tid]);
+
+    // لو risk_score مرتفع لكن shadow_banned=false (رُفع الحظر) — نُخفّضه
+    if (banCheck[0]?.risk_score >= 50) {
+      await sql(`UPDATE users SET risk_score = 20, updated_at = NOW() WHERE telegram_id = $1`, [tid]);
+    }
 
     // إنشاء جلسة جديدة
     const sid = generateSessionId();
@@ -885,7 +889,8 @@ module.exports = async function handler(req, res) {
       if (taskState[source] === 'done')
         return res.status(400).json({ ok: false, error: 'Task already rewarded' });
 
-      // Shadow ban
+      // Shadow ban: يُعيد ok:true للعميل لكن لا يُضيف رصيداً ولا يُسجّل المهمة كـ done
+      // هذا يضمن أنه لو رُفع الحظر لاحقاً يقدر يأخذ المكافأة
       if (isShadowBanned) return res.status(200).json({ ok: true });
 
       await sql(
