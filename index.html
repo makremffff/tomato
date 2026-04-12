@@ -3705,19 +3705,100 @@ function _runChannelTask(key, url, reward, successMsg) {
 }
 
 // ══════════════════════════════════════════════════════════
-//  DB SYNC — حفظ وتحميل من Neon عبر الباك اند
+//  DB SYNC — Zero Trust Security Layer v3.0
+//  💀 "كل شيء يُتحقق منه في السيرفر"
 // ══════════════════════════════════════════════════════════
 
-// ← غيّر هذا الرابط لرابط Vercel بعد النشر
 const API_BASE = 'https://tomato-v3.vercel.app';
 
-async function _dbCall(action, data = {}, tid = null) {
+// ── حالة الجلسة (في الذاكرة فقط) ──
+let _sessionId = null;
+
+// ── توليد Nonce فريد لكل طلب ──
+function _genNonce() {
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('') + '_' + Date.now();
+}
+
+// ── بصمة الجهاز (ترسل مع كل طلب) ──
+function _buildFingerprint() {
+  return JSON.stringify({
+    user_agent: navigator.userAgent        || '',
+    lang:       navigator.language         || '',
+    screen:     `${screen.width}x${screen.height}`,
+    tz_offset:  new Date().getTimezoneOffset(),
+  });
+}
+
+// ── إنشاء جلسة بعد التحقق من initData ──
+async function _createSession() {
+  const initData = tg?.initData || '';
+  if (!initData) {
+    console.warn('[ZT] No initData — running in dev mode');
+    return false;
+  }
   try {
     const res = await fetch(API_BASE + '/api', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, telegram_id: tid || TG_ID || '0', data })
+      headers: {
+        'Content-Type':  'application/json',
+        'X-Init-Data':   initData,
+        'X-Fingerprint': _buildFingerprint(),
+      },
+      body: JSON.stringify({ action: 'create_session', data: {} })
     });
+    const result = await res.json();
+    if (result.ok && result.session_id) {
+      _sessionId = result.session_id;
+      console.log('[ZT] Session created');
+      return true;
+    }
+    console.warn('[ZT] Session creation failed:', result.error);
+    return false;
+  } catch (e) {
+    console.warn('[ZT] Session create error:', e.message);
+    return false;
+  }
+}
+
+// ── الدالة المركزية لكل الطلبات (Zero Trust) ──
+async function _dbCall(action, data = {}) {
+  // إذا لم تكن هناك جلسة، نحاول إنشاءها
+  if (!_sessionId && !['create_session'].includes(action)) {
+    const ok = await _createSession();
+    if (!ok) {
+      // dev fallback: نرسل بدون جلسة (للتطوير المحلي فقط)
+      console.warn('[ZT] No session — dev fallback for:', action);
+    }
+  }
+
+  // الطلبات التي تحتاج nonce (تغيير حالة)
+  const needsNonce = !['get_state', 'load'].includes(action);
+
+  try {
+    const headers = {
+      'Content-Type':  'application/json',
+      'X-Fingerprint': _buildFingerprint(),
+    };
+    if (_sessionId)           headers['X-Session-Id'] = _sessionId;
+    if (needsNonce)           headers['X-Nonce']      = _genNonce();
+
+    const res = await fetch(API_BASE + '/api', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action, data })
+      // ❌ لا نرسل telegram_id — السيرفر يأخذه من الجلسة
+    });
+
+    // جلسة منتهية أو غير صالحة: نعيد إنشاءها
+    if (res.status === 401) {
+      _sessionId = null;
+      const renewed = await _createSession();
+      if (renewed) return _dbCall(action, data); // إعادة المحاولة
+      return { ok: false, error: 'auth_failed' };
+    }
+
     return await res.json();
   } catch (e) {
     console.warn('[DB]', action, 'failed:', e.message);
@@ -3746,6 +3827,8 @@ function _applyUser(u) {
 
 async function loadUser() {
   if (!TG_ID) return;
+  // ── Zero Trust: إنشاء الجلسة أولاً ──
+  await _createSession();
   const result = await _dbCall('load', {
     username:    TG_USERNAME || TG_FIRST || null,
     referral_by: (tg?.initDataUnsafe?.start_param || '').replace('ref_', '') || null
@@ -3755,7 +3838,7 @@ async function loadUser() {
   renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
   _syncTaskUI('ec', taskState.earnChannel);
   _syncTaskUI('em', taskState.eMoneyChannel);
-  console.log('[DB] User loaded:', TG_ID);
+  console.log('[ZT] User loaded via secure session');
 }
 
 // مزامنة حالة التاسك في الـ UI بعد تحميل DB
