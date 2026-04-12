@@ -2820,6 +2820,29 @@ console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!T
   }
 })();
 
+// ── استخراج referral_by من start_param بشكل موثوق ──
+function getReferralId() {
+  try {
+    // ① من initDataUnsafe مباشرة (Mini App عبر startapp=)
+    const sp = tg?.initDataUnsafe?.start_param || '';
+    if (sp) return sp.replace('ref_', '').trim() || null;
+
+    // ② من initData (نص URL-encoded) كـ fallback
+    if (tg?.initData) {
+      const params = new URLSearchParams(tg.initData);
+      const sp2 = params.get('start_param') || '';
+      if (sp2) return sp2.replace('ref_', '').trim() || null;
+    }
+
+    // ③ من URL الصفحة نفسها كـ fallback أخير
+    const urlParams = new URLSearchParams(window.location.search);
+    const sp3 = urlParams.get('startapp') || urlParams.get('start') || '';
+    if (sp3) return sp3.replace('ref_', '').trim() || null;
+
+  } catch(e) {}
+  return null;
+}
+
 const TOMATO  = { reward: 0.0001, growTime: 300 }; // ← server GROW_DURATION
 const LIMIT   = 3;
 const REF_PCT = 0.05;
@@ -3920,19 +3943,29 @@ async function handleTask(taskId) {
     const res = await _dbCall('handle_task', { task_id: taskId, step: 'open' });
     if (!res.ok) { toast('⚠️ Could not load task. Try again.'); return; }
 
-    // فتح الرابط
+    // فتح الرابط — يخرج من البوت ويفتح خارجياً
     const url = res.url;
     if (url) {
-      if (tg?.openTelegramLink && url.includes('t.me')) tg.openTelegramLink(url);
-      else if (tg?.openLink) tg.openLink(url);
-      else {
-        const a = document.createElement('a');
-        a.href = url;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => document.body.removeChild(a), 100);
+      try {
+        if (url.includes('t.me')) {
+          // روابط تيليغرام: openTelegramLink يفتح داخل تيليغرام (يخرج من WebApp)
+          if (tg?.openTelegramLink) {
+            tg.openTelegramLink(url);
+          } else if (tg?.openLink) {
+            tg.openLink(url, { try_instant_view: false });
+          } else {
+            window.location.href = url;
+          }
+        } else {
+          // روابط خارجية عادية
+          if (tg?.openLink) {
+            tg.openLink(url, { try_instant_view: false });
+          } else {
+            window.open(url, '_blank');
+          }
+        }
+      } catch(e) {
+        window.open(url, '_blank');
       }
     }
 
@@ -4184,7 +4217,12 @@ function _runChannelTask(key, url, reward, successMsg) {
     if (taskState[key] === 'done') { resolve({ ok: false }); return; }
 
     if (taskState[key] === 'idle') {
-      window.open(url, '_blank');
+      // فتح رابط القناة خارج البوت
+      try {
+        if (url.includes('t.me') && tg?.openTelegramLink) tg.openTelegramLink(url);
+        else if (tg?.openLink) tg.openLink(url, { try_instant_view: false });
+        else window.open(url, '_blank');
+      } catch(e) { window.open(url, '_blank'); }
       taskState[key] = 'joined';
       txt.textContent = 'Verify';
       btn.style.background = 'linear-gradient(135deg,#f57f17,#e65100)';
@@ -4477,7 +4515,7 @@ async function loadUser() {
   await _createSession();
   const result = await _dbCall('load', {
     username:    TG_USERNAME || TG_FIRST || null,
-    referral_by: (tg?.initDataUnsafe?.start_param || '').replace('ref_', '') || null
+    referral_by: getReferralId()
   });
   if (!result.ok || !result.user) return;
 
@@ -4508,7 +4546,61 @@ async function _dbAddResource(type, amount, source) {
 }
 
 buildFarm();
-loadUser();
+
+/* ── SMART LOADING — تخفي شاشة التحميل بعد انتهاء loadUser فعلاً ── */
+(async function initApp() {
+  const loadingEl = document.getElementById('loading-page');
+  if (loadingEl) {
+    document.body.style.pointerEvents = 'none';
+    loadingEl.style.pointerEvents = 'all';
+  }
+
+  const timeout = new Promise(resolve => setTimeout(resolve, 8000));
+
+  const loadPromise = (async () => {
+    if (!TG_ID) return;
+    await _createSession();
+    const result = await _dbCall('load', {
+      username:    TG_USERNAME || TG_FIRST || null,
+      referral_by: getReferralId()
+    });
+    if (!result.ok || !result.user) return;
+    if (result.user.shadow_banned === true) { showSecurityWall(); return; }
+    _applyUser(result.user);
+    renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
+    await loadAndRenderTasks();
+    console.log('[APP] User & tasks loaded');
+  })();
+
+  await Promise.race([loadPromise, timeout]);
+
+  if (loadingEl) {
+    loadingEl.classList.add('hide');
+    document.body.style.pointerEvents = '';
+    _startPassiveAds();
+    setTimeout(() => {
+      runPageAnim(document.getElementById('page-farm'));
+      setTimeout(() => showHint('farm-first',
+        '👆 Tap any empty plot to plant your first tomato!',
+        document.getElementById('farm-grid'), 10), 800);
+    }, 100);
+    setTimeout(() => loadingEl.remove(), 900);
+  }
+})();
+
+async function loadUser() {
+  if (!TG_ID) return;
+  await _createSession();
+  const result = await _dbCall('load', {
+    username:    TG_USERNAME || TG_FIRST || null,
+    referral_by: getReferralId()
+  });
+  if (!result.ok || !result.user) return;
+  if (result.user.shadow_banned === true) { showSecurityWall(); return; }
+  _applyUser(result.user);
+  renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
+  await loadAndRenderTasks();
+}
 
 /* ── POLLING — get_state كل 3 ثواني ── */
 let _pollActive = false;
@@ -4567,26 +4659,7 @@ function runPageAnim(pageEl) {
   });
 }
 
-(function(){
-  var p = document.getElementById('loading-page');
-  if (!p) return;
-  document.body.style.pointerEvents = 'none';
-  p.style.pointerEvents = 'all';
-  setTimeout(function(){
-    p.classList.add('hide');
-    document.body.style.pointerEvents = '';
-    _startPassiveAds();
-    // ── Trigger farm entrance animation AFTER loading screen fades out ──
-    setTimeout(function(){
-      runPageAnim(document.getElementById('page-farm'));
-      // Show first-visit hint shortly after animation starts
-      setTimeout(() => showHint('farm-first',
-        '👆 Tap any empty plot to plant your first tomato!',
-        document.getElementById('farm-grid'), 10), 800);
-    }, 100); // small offset so fade-out and slide-in don't overlap
-    setTimeout(function(){ p.remove(); }, 900);
-  }, 9000);
-})();
+
 </script>
 </body>
 </html>
