@@ -794,33 +794,41 @@ module.exports = async function handler(req, res) {
     if (action === 'load') {
       let rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
 
-      if (!rows.length) {
-        const username   = data.username   || null;
-        const referralBy = data.referral_by ? parseInt(data.referral_by) : null;
-        const validRef   = referralBy && !isNaN(referralBy) && referralBy !== tid ? referralBy : null;
+      const username   = data.username   || null;
+      const referralBy = data.referral_by ? parseInt(data.referral_by) : null;
+      const validRef   = referralBy && !isNaN(referralBy) && referralBy !== tid ? referralBy : null;
 
+      if (!rows.length) {
+        // مستخدم جديد كلياً
         rows = await sql(
           `INSERT INTO users (telegram_id, username, referral_by, cells)
            VALUES ($1, $2, $3, $4)
-           ON CONFLICT (telegram_id) DO UPDATE SET updated_at = NOW()
+           ON CONFLICT (telegram_id) DO UPDATE
+             SET username   = EXCLUDED.username,
+                 referral_by = COALESCE(users.referral_by, EXCLUDED.referral_by),
+                 updated_at = NOW()
            RETURNING *`,
           [tid, username, validRef, JSON.stringify(buildEmptyCells())]
         );
-
-        if (validRef) {
-          await sql(
-            `UPDATE users
-             SET referral_friends = referral_friends + 1,
-                 updated_at       = NOW()
-             WHERE telegram_id = $1`,
-            [validRef]
-          );
-          await sql(`UPDATE users SET referral_rewarded = TRUE WHERE telegram_id = $1`, [tid]);
-        }
       } else {
-        const u = rows[0];
+        // مستخدم موجود — نحدث الاسم ونحفظ referral_by إذا لم يكن محفوظاً بعد
+        if (validRef && !rows[0].referral_by) {
+          await sql(
+            `UPDATE users SET referral_by = $2, updated_at = NOW()
+             WHERE telegram_id = $1 AND referral_by IS NULL`,
+            [tid, validRef]
+          );
+          rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
+        }
+      }
 
-        if (u.referral_by && !u.referral_rewarded) {
+      const u = rows[0];
+
+      // معالجة الإحالة: إذا عنده referral_by ولم يتم احتسابه بعد
+      if (u.referral_by && !u.referral_rewarded) {
+        // تحقق أن المُحيل موجود
+        const refExists = await sql(`SELECT telegram_id FROM users WHERE telegram_id = $1`, [u.referral_by]);
+        if (refExists.length) {
           await sql(
             `UPDATE users
              SET referral_friends = referral_friends + 1,
@@ -828,17 +836,17 @@ module.exports = async function handler(req, res) {
              WHERE telegram_id = $1`,
             [u.referral_by]
           );
-          await sql(`UPDATE users SET referral_rewarded = TRUE WHERE telegram_id = $1`, [tid]);
-          rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
         }
+        await sql(`UPDATE users SET referral_rewarded = TRUE WHERE telegram_id = $1`, [tid]);
+        rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
+      }
 
-        if (rows[0].today_date !== todayUTC()) {
-          await sql(
-            `UPDATE users SET today_date = $2, today_earn = 0, updated_at = NOW() WHERE telegram_id = $1`,
-            [tid, todayUTC()]
-          );
-          rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
-        }
+      if (rows[0].today_date !== todayUTC()) {
+        await sql(
+          `UPDATE users SET today_date = $2, today_earn = 0, updated_at = NOW() WHERE telegram_id = $1`,
+          [tid, todayUTC()]
+        );
+        rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
       }
 
       const user     = rows[0];
