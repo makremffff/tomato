@@ -4188,6 +4188,8 @@ async function _createSession() {
     return false;
   }
   try {
+    // امسح الـ cache عند كل محاولة جلسة جديدة لضمان fingerprint حديث
+    _cachedFingerprint = null;
     const fpStr = await _buildFingerprint();
     const res = await fetch(API_BASE + '/api', {
       method: 'POST',
@@ -4199,7 +4201,6 @@ async function _createSession() {
       body: JSON.stringify({ action: 'create_session', data: {} })
     });
     const result = await res.json();
-    // ── السيرفر يمكن أن يرسل is_banned في create_session ──
     if (result.is_banned || result.shadow_banned) {
       showSecurityWall();
       return false;
@@ -4310,13 +4311,24 @@ function _syncTaskUI(id, state) {
   const status = document.getElementById('task-status-' + id);
   if (!btn) return;
   if (state === 'done') {
+    // مكتمل — أخفِ الزر وأظهر علامة التحقق
     btn.style.display = 'none';
     status?.classList.add('show');
     if (status) status.innerHTML = '<img src="asesst/vertify.png" width="22">';
   } else if (state === 'joined') {
+    // انضم لكن لم يتحقق بعد — أظهر زر Verify
+    btn.style.display = '';
     if (txt) txt.textContent = 'Verify';
     btn.style.background = 'linear-gradient(135deg,#f57f17,#e65100)';
     btn.style.boxShadow  = '0 3px 12px rgba(245,127,23,0.4)';
+    if (status) status.classList.remove('show');
+  } else {
+    // idle — بعد رفع الحظر أو حالة أولية: أعد الزر لوضعه الطبيعي
+    btn.style.display    = '';
+    btn.style.background = '';
+    btn.style.boxShadow  = '';
+    if (status) status.classList.remove('show');
+    if (txt) txt.textContent = 'Join';
   }
 }
 
