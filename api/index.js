@@ -780,18 +780,48 @@ module.exports = async function handler(req, res) {
     // ══════════════════════════════════════════════════════════════
     if (action === 'add_resource') {
       const type   = data.type;
-      const source = data.source || 'ad'; // مصدر الموارد: ad / task
+      const source = data.source || 'ad_seed_single';
 
       if (!['seeds', 'water'].includes(type))
         return res.status(400).json({ ok: false, error: 'Invalid resource type' });
 
-      // السيرفر يحدد الكمية المسموح بها لكل مصدر
-      const ALLOWED_AMOUNTS = { ad: { seeds: 1, water: 1 }, task: { seeds: 5, water: 5 } };
-      const amount = ALLOWED_AMOUNTS[source]?.[type];
-      if (!amount) return res.status(400).json({ ok: false, error: 'Invalid source' });
+      // السيرفر يحدد الكمية والحد اليومي لكل مصدر
+      const ALLOWED_AMOUNTS = {
+        ad_seed_single: { seeds: 1,  daily_max: 10 },  // max 10 seeds/day من single ads
+        ad_seed_bundle: { seeds: 7,  daily_max: 21 },  // max 3 bundles/day = 21 seeds
+        ad_water:       { water: 3,  daily_max: 9  },  // max 3 refills/day = 9 water
+        task:           { seeds: 5,  water: 5, daily_max: 999 },
+      };
+
+      const resourceType = type === 'seeds' ? 'seeds' : 'water';
+      const allowed      = ALLOWED_AMOUNTS[source];
+      if (!allowed || allowed[resourceType] === undefined)
+        return res.status(400).json({ ok: false, error: 'Invalid source or resource type' });
+
+      const amount    = allowed[resourceType];
+      const dailyMax  = allowed.daily_max || 999;
+      const today     = todayUTC();
+
+      // فحص الحد اليومي من audit log
+      const todayUsage = await sql(
+        `SELECT COALESCE(SUM((detail->>'amount')::int), 0) AS used
+         FROM security_logs
+         WHERE telegram_id = $1
+           AND action = 'add_resource_' || $2
+           AND verdict = 'allow'
+           AND created_at >= NOW() - INTERVAL '24 hours'`,
+        [tid, source]
+      );
+      const usedToday = parseInt(todayUsage[0]?.used || 0);
+      if (usedToday + amount > dailyMax) {
+        await auditLog(tid, ipHash, fingerprint, 'add_resource_' + source, 10, 'deny',
+          { reason: 'daily_limit', used: usedToday, limit: dailyMax });
+        // Shadow يُعطي استجابة ناجحة زائفة — لا يكشف الحد
+        return res.status(200).json({ ok: false, error: 'Daily limit reached' });
+      }
 
       // Shadow ban
-      if (isShadowBanned) return res.status(200).json({ ok: true, [type === 'seeds' ? 'seeds' : 'water_count']: 0 });
+      if (isShadowBanned) return res.status(200).json({ ok: true, [resourceType === 'seeds' ? 'seeds' : 'water_count']: 0 });
 
       const col = type === 'seeds' ? 'seeds' : 'water_count';
       const MAX = 10;
@@ -802,6 +832,11 @@ module.exports = async function handler(req, res) {
       );
 
       const rows = await sql(`SELECT ${col} FROM users WHERE telegram_id = $1`, [tid]);
+
+      // تسجيل في audit log مع الكمية للحد اليومي
+      await auditLog(tid, ipHash, fingerprint, 'add_resource_' + source, 0, 'allow',
+        { type, amount, source });
+
       return res.status(200).json({ ok: true, [col]: rows[0]?.[col] });
     }
 
