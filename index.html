@@ -3561,7 +3561,8 @@ function _runWatchAd(count) {
     // Adsgram لم يُحمَّل (خارج تيليغرام) — محاكاة للديفيلوب
     _simulateAds(count, () => {
       const seedReward = count === 5 ? 7 : count;
-      _dbAddResource('seeds', seedReward).then(() => {
+      const src = count === 5 ? 'ad_seed_bundle' : 'ad_seed_single';
+      _dbAddResource('seeds', seedReward, src).then(() => {
         playSound('reward');
         _resetSeedBtn(count, btnEl, txtEl, progEl);
         toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
@@ -3606,7 +3607,8 @@ function _runWatchAd(count) {
         } else {
           // كل الإعلانات اتمشاهدت ✅
           const seedReward = count === 5 ? 7 : count;
-          _dbAddResource('seeds', seedReward).then(() => {
+          const src = count === 5 ? 'ad_seed_bundle' : 'ad_seed_single';
+          _dbAddResource('seeds', seedReward, src).then(() => {
             playSound('reward');
             _resetSeedBtn(count, btnEl, txtEl, progEl);
             toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
@@ -3714,7 +3716,7 @@ function _runWatchWaterAd() {
 }
 
 function _giveWaterReward(txtEl, progEl, cntEl, btnEl) {
-  _dbAddResource('water', 3);
+  _dbAddResource('water', 3, 'ad_water');
   playSound('reward');
   _resetWaterBtn(txtEl, progEl, btnEl);
   // reset dots
@@ -4318,9 +4320,10 @@ function _syncTaskUI(id, state) {
   }
 }
 
-// دالة مساعدة للإعلانات — تضيف موارد عبر السيرفر
-async function _dbAddResource(type, amount) {
-  const result = await _dbCall('add_resource', { type, amount });
+// دالة مساعدة للإعلانات — تضيف موارد عبر السيرفر مع source صحيح
+async function _dbAddResource(type, amount, source) {
+  // source يُحدد الكمية في السيرفر — نتجاهل amount هنا (السيرفر يحدده)
+  const result = await _dbCall('add_resource', { type, source: source || 'ad_seed_single' });
   if (!result.ok) return false;
   if (type === 'seeds') seeds      = result.seeds      ?? seeds;
   else                  waterCount = result.water_count ?? waterCount;
