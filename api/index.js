@@ -146,6 +146,56 @@ async function bootstrap() {
       )
     `);
 
+    // ── جدول المهام (Tasks) ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id          TEXT          PRIMARY KEY,
+        icon        TEXT          NOT NULL DEFAULT '⭐',
+        name        TEXT          NOT NULL,
+        reward      NUMERIC(18,6) NOT NULL DEFAULT 0,
+        task_type   TEXT          NOT NULL DEFAULT 'url',  -- channel | url | other
+        url         TEXT,
+        channel     TEXT,
+        description TEXT          NOT NULL DEFAULT '',
+        is_active   BOOLEAN       NOT NULL DEFAULT TRUE,
+        sort_order  INT           NOT NULL DEFAULT 0,
+        created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_tasks_active ON tasks(is_active, sort_order)`);
+
+    // ── جدول إنجازات المستخدمين (User Tasks) ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS user_tasks (
+        telegram_id  BIGINT        NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+        task_id      TEXT          NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        completed    BOOLEAN       NOT NULL DEFAULT FALSE,
+        completed_at TIMESTAMPTZ,
+        PRIMARY KEY (telegram_id, task_id)
+      )
+    `);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_user_tasks_telegram ON user_tasks(telegram_id)`);
+
+    // ── Seed default tasks if table is empty ──
+    const existingTasks = await sql(`SELECT COUNT(*) AS cnt FROM tasks`);
+    if (parseInt(existingTasks[0]?.cnt || 0) === 0) {
+      await sql(`
+        INSERT INTO tasks (id, icon, name, reward, task_type, url, channel, description, sort_order) VALUES
+        ('earnChannel',   '📢', 'Join Earn Channel',  0.005, 'channel', NULL, 'botbababab',  'Subscribe on Telegram to unlock rewards', 1),
+        ('eMoneyChannel', '💰', 'E-Money Algeria',    0.005, 'channel', NULL, 'tt_fhp',      'Join our partner channel to earn bonus TON', 2)
+        ON CONFLICT (id) DO NOTHING
+      `);
+    }
+
+    // ── Migrations للمهام ──
+    const taskMigrations = [
+      `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_active  BOOLEAN NOT NULL DEFAULT TRUE`,
+      `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sort_order INT     NOT NULL DEFAULT 0`,
+    ];
+    for (const m of taskMigrations) {
+      try { await sql(m); } catch (_) {}
+    }
+
     // ── جدول السحوبات (Giveaways) ──
     await sql(`
       CREATE TABLE IF NOT EXISTS giveaways (
@@ -1044,64 +1094,88 @@ module.exports = async function handler(req, res) {
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  SAVE_TASKS — حالة المهام
+    //  GET_TASKS — جلب كل المهام + حالة المستخدم لكل منها
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'get_tasks') {
+      const tasks = await sql(
+        `SELECT t.*,
+                ut.completed,
+                ut.completed_at
+         FROM tasks t
+         LEFT JOIN user_tasks ut
+           ON ut.task_id = t.id AND ut.telegram_id = $1
+         WHERE t.is_active = TRUE
+         ORDER BY t.sort_order ASC, t.created_at ASC`,
+        [tid]
+      );
+      return res.status(200).json({ ok: true, tasks });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  HANDLE_TASK — معالجة المهمة الموحّدة
+    //  يدعم: channel | url
+    //  data: { task_id, step: 'open' | 'verify' }
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'handle_task') {
+      const { task_id, step } = data;
+      if (!task_id || !step)
+        return res.status(400).json({ ok: false, error: 'Missing task_id or step' });
+
+      // جلب المهمة من DB
+      const taskRows = await sql(
+        `SELECT * FROM tasks WHERE id = $1 AND is_active = TRUE`,
+        [task_id]
+      );
+      if (!taskRows.length)
+        return res.status(404).json({ ok: false, error: 'Task not found' });
+
+      const task = taskRows[0];
+
+      // هل المهمة مكتملة مسبقاً؟ (منع الغش - PRIMARY KEY check)
+      const existing = await sql(
+        `SELECT completed FROM user_tasks WHERE telegram_id = $1 AND task_id = $2`,
+        [tid, task_id]
+      );
+      if (existing.length && existing[0].completed)
+        return res.status(400).json({ ok: false, error: 'Task already completed' });
+
+      // ── ROUTE بناءً على task_type ──
+      switch (task.task_type) {
+        case 'channel': return handleChannelTask(task, tid, step, isShadowBanned, ipHash, fingerprint, res);
+        case 'url':     return handleUrlTask(task, tid, step, isShadowBanned, ipHash, fingerprint, res);
+        default:
+          return res.status(400).json({ ok: false, error: 'Unsupported task_type: ' + task.task_type });
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  SAVE_TASKS — (Legacy compat — kept for old clients)
     // ══════════════════════════════════════════════════════════════
     if (action === 'save_tasks') {
-      const task_state = data.task_state;
-      if (!task_state || typeof task_state !== 'object')
-        return res.status(400).json({ ok: false, error: 'Invalid task_state' });
-
-      const safeState = {};
-      for (const key of ['earnChannel', 'eMoneyChannel']) {
-        if (['idle', 'joined', 'done'].includes(task_state[key]))
-          safeState[key] = task_state[key];
-      }
-
-      await sql(
-        `UPDATE users SET task_state = task_state || $2::jsonb, updated_at = NOW() WHERE telegram_id = $1`,
-        [tid, JSON.stringify(safeState)]
-      );
-
+      // مهمل — النظام الجديد يستخدم user_tasks table فقط
       return res.status(200).json({ ok: true });
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  ADD_BALANCE — من مصادر موثّقة فقط (tasks)
+    //  ADD_BALANCE — (Legacy compat)
     // ══════════════════════════════════════════════════════════════
     if (action === 'add_balance') {
       const source = data.source || 'unknown';
-
-      // السيرفر يحدد المكافأة المسموح بها لكل مهمة
-      const TASK_REWARDS = {
-        earnChannel:   0.005,
-        eMoneyChannel: 0.005,
-      };
-
-      const amount = TASK_REWARDS[source];
-      if (!amount) return res.status(400).json({ ok: false, error: 'Unknown reward source' });
-
-      // التحقق أن المهمة مكتملة فعلاً في قاعدة البيانات
-      const rows = await sql(`SELECT task_state FROM users WHERE telegram_id = $1`, [tid]);
-      if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
-
-      const taskState = rows[0].task_state || {};
-      if (taskState[source] === 'done')
-        return res.status(400).json({ ok: false, error: 'Task already rewarded' });
-
-      // Shadow ban: يُعيد ok:true للعميل لكن لا يُضيف رصيداً ولا يُسجّل المهمة كـ done
-      // هذا يضمن أنه لو رُفع الحظر لاحقاً يقدر يأخذ المكافأة
-      if (isShadowBanned) return res.status(200).json({ ok: true });
-
-      await sql(
-        `UPDATE users
-         SET balance    = balance + $2,
-             task_state = task_state || $3::jsonb,
-             updated_at = NOW()
-         WHERE telegram_id = $1`,
-        [tid, amount, JSON.stringify({ [source]: 'done' })]
+      // حوّل الـ source القديم إلى handle_task
+      data.task_id = source;
+      data.step    = 'verify';
+      // إعادة التوجيه لـ handle_task
+      const taskRows = await sql(`SELECT * FROM tasks WHERE id = $1 AND is_active = TRUE`, [source]);
+      if (!taskRows.length) return res.status(400).json({ ok: false, error: 'Unknown reward source' });
+      const task = taskRows[0];
+      const existing = await sql(
+        `SELECT completed FROM user_tasks WHERE telegram_id = $1 AND task_id = $2`,
+        [tid, source]
       );
-
-      return res.status(200).json({ ok: true });
+      if (existing.length && existing[0].completed)
+        return res.status(400).json({ ok: false, error: 'Task already rewarded' });
+      if (isShadowBanned) return res.status(200).json({ ok: true });
+      return completeTask(task, tid, res);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1165,3 +1239,113 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Server error', detail: err.message });
   }
 };
+
+// ================================================================
+//  TASK HANDLERS — كل نوع مهمة له دالة مستقلة
+//  قابل للتوسع: url | channel | app_install | invite | social
+// ================================================================
+
+/**
+ * handleUrlTask — مهمة رابط خارجي
+ * step='open'   : تسجيل النقرة + إعادة الرابط للفتح
+ * step='verify' : إعطاء المكافأة فوراً (لا يوجد تحقق خارجي)
+ */
+async function handleUrlTask(task, tid, step, isShadowBanned, ipHash, fingerprint, res) {
+  if (step === 'open') {
+    // سجّل الفتح في audit log — لا نُعطي المكافأة هنا
+    await sql(
+      `INSERT INTO user_tasks (telegram_id, task_id, completed)
+       VALUES ($1, $2, FALSE)
+       ON CONFLICT (telegram_id, task_id) DO NOTHING`,
+      [tid, task.id]
+    );
+    return res.status(200).json({ ok: true, step: 'open', url: task.url });
+  }
+
+  if (step === 'verify') {
+    // URL tasks: المكافأة تُعطى تلقائياً بعد فتح الرابط — لا تحقق خارجي
+    if (isShadowBanned) return res.status(200).json({ ok: true }); // shadow: ok زائف
+    return completeTask(task, tid, res);
+  }
+
+  return res.status(400).json({ ok: false, error: 'Invalid step for url task' });
+}
+
+/**
+ * handleChannelTask — مهمة قناة Telegram
+ * step='open'   : فتح القناة + تسجيل "joined"
+ * step='verify' : تحقق عبر getChatMember + إعطاء المكافأة
+ */
+async function handleChannelTask(task, tid, step, isShadowBanned, ipHash, fingerprint, res) {
+  if (step === 'open') {
+    await sql(
+      `INSERT INTO user_tasks (telegram_id, task_id, completed)
+       VALUES ($1, $2, FALSE)
+       ON CONFLICT (telegram_id, task_id) DO NOTHING`,
+      [tid, task.id]
+    );
+    const channelUrl = 'https://t.me/' + (task.channel || '');
+    return res.status(200).json({ ok: true, step: 'open', url: channelUrl });
+  }
+
+  if (step === 'verify') {
+    // التحقق عبر Telegram Bot API
+    const isMember = await verifyChannelMembership(tid, task.channel);
+    if (!isMember) {
+      return res.status(400).json({ ok: false, error: 'not_member', message: 'Please join the channel first' });
+    }
+    if (isShadowBanned) return res.status(200).json({ ok: true }); // shadow: ok زائف
+    return completeTask(task, tid, res);
+  }
+
+  return res.status(400).json({ ok: false, error: 'Invalid step for channel task' });
+}
+
+/**
+ * completeTask — إكمال المهمة وإضافة المكافأة
+ * مشترك بين جميع أنواع المهام
+ */
+async function completeTask(task, tid, res) {
+  const reward = parseFloat(task.reward) || 0;
+
+  // تحديث user_tasks + balance في عملية واحدة
+  await sql(
+    `INSERT INTO user_tasks (telegram_id, task_id, completed, completed_at)
+     VALUES ($1, $2, TRUE, NOW())
+     ON CONFLICT (telegram_id, task_id)
+     DO UPDATE SET completed = TRUE, completed_at = NOW()`,
+    [tid, task.id]
+  );
+
+  if (reward > 0) {
+    await sql(
+      `UPDATE users SET balance = balance + $2, updated_at = NOW() WHERE telegram_id = $1`,
+      [tid, reward]
+    );
+  }
+
+  // جلب الرصيد الجديد
+  const updated = await sql(`SELECT balance FROM users WHERE telegram_id = $1`, [tid]);
+  const newBalance = parseFloat(updated[0]?.balance || 0);
+
+  return res.status(200).json({ ok: true, reward, balance: newBalance });
+}
+
+/**
+ * verifyChannelMembership — تحقق عبر Telegram Bot API getChatMember
+ */
+async function verifyChannelMembership(telegramId, channelUsername) {
+  if (!BOT_TOKEN || !channelUsername) return false;
+  try {
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=@${channelUsername}&user_id=${telegramId}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.ok) return false;
+    const status = data.result?.status;
+    // مقبول: member | administrator | creator
+    return ['member', 'administrator', 'creator'].includes(status);
+  } catch (e) {
+    console.warn('[verifyChannel] error:', e.message);
+    return false;
+  }
+}
