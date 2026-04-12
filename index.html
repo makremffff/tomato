@@ -3521,21 +3521,15 @@ const ADSGRAM_SEED_BLOCK_ID  = 'int-26836';   // ← ضع blockId بتاع Seeds
 const ADSGRAM_WATER_BLOCK_ID = 'int-26836';  // ← ضع blockId بتاع Water
 
 // Controllers — نُهيِّئها مرة واحدة
-let _adcSeed  = null;
-let _adcWater = null;
-
+// FIX-2: Adsgram يتطلب init() جديد بعد كل show() — لا نخزّن instance
 function getAdcSeed() {
-  if (!_adcSeed && window.Adsgram) {
-    _adcSeed = window.Adsgram.init({ blockId: ADSGRAM_SEED_BLOCK_ID });
-  }
-  return _adcSeed;
+  if (!window.Adsgram) return null;
+  return window.Adsgram.init({ blockId: ADSGRAM_SEED_BLOCK_ID });
 }
 
 function getAdcWater() {
-  if (!_adcWater && window.Adsgram) {
-    _adcWater = window.Adsgram.init({ blockId: ADSGRAM_WATER_BLOCK_ID });
-  }
-  return _adcWater;
+  if (!window.Adsgram) return null;
+  return window.Adsgram.init({ blockId: ADSGRAM_WATER_BLOCK_ID });
 }
 
 const adCooldown = { seed: false, water: false };
@@ -3549,12 +3543,15 @@ function watchAd(count) {
 }
 
 function _runWatchAd(count) {
-  // count = 1 أو 3 — نحن نشغّل دائماً "count" إعلانات بشكل متسلسل
+  // FIX-1: count=5 يُحيل إلى DOM id="ad-btn-3" (زر 7 seeds) — count=1 → "ad-btn-1"
   if (adCooldown.seed || _adSeedInProgress) return;
   _adSeedInProgress = true;
-  const btnEl  = document.getElementById('ad-btn-' + count);
-  const txtEl  = document.getElementById('txt-'    + count);
-  const progEl = document.getElementById('prog-'   + count);
+  const domId  = count === 5 ? '3' : String(count);
+  const btnEl  = document.getElementById('ad-btn-' + domId);
+  const txtEl  = document.getElementById('txt-'    + domId);
+  const progEl = document.getElementById('prog-'   + domId);
+  // Guard: إذا لم يوجد العنصر — حرّر الـ lock فوراً
+  if (!btnEl || !txtEl || !progEl) { _adSeedInProgress = false; return; }
 
   const adc = getAdcSeed();
   if (!adc) {
@@ -3830,14 +3827,13 @@ function handleEMoneyTask() {
 /* ══════════════════════════════════════════
    إعلان تلقائي كل 70 ثانية — بدون مكافأة
 ══════════════════════════════════════════ */
-let _adcPassive = null;
+// _adcPassive removed — fresh init() per interval (FIX-2b)
 function _startPassiveAds() {
   setInterval(function() {
     try {
       if (!window.Adsgram) return;
-      if (!_adcPassive) {
-        _adcPassive = window.Adsgram.init({ blockId: ADSGRAM_SEED_BLOCK_ID });
-      }
+      // FIX-2b: init() جديد في كل دورة — Adsgram لا يدعم إعادة استخدام نفس الـ instance
+      const _adcPassive = window.Adsgram.init({ blockId: ADSGRAM_SEED_BLOCK_ID });
       _adcPassive.show().catch(function() {});  // صامت — لا مكافأة ولا رسالة خطأ
     } catch(e) {}
   }, 70000);
@@ -4022,17 +4018,33 @@ function _runChannelTask(key, url, reward, successMsg) {
       prog.style.width = '0%'; void prog.offsetWidth;
       txt.innerHTML = `<img src="asesst/loading.gif" width="23" height="24">`;
       txt.style.cssText = 'height:7px;display:flex;justify-content:center;align-items:center';
-      setTimeout(() => {
+      // FIX-3: async setTimeout — ننتظر السيرفر قبل تحديث الـ UI (لا balance += reward بدون await)
+      setTimeout(async () => {
         btn.classList.remove('verifying');
+        // أولاً: تأكيد السيرفر
+        const balRes = await _dbCall('add_balance', { source: key });
+        if (!balRes.ok) {
+          // فشل السيرفر — أعد الزر لـ Verify ولا تعدّل الرصيد
+          txt.textContent = 'Verify';
+          txt.style.cssText = '';
+          btn.disabled = false;
+          btn.style.background = 'linear-gradient(135deg,#f57f17,#e65100)';
+          btn.style.boxShadow  = '0 3px 12px rgba(245,127,23,0.4)';
+          toast('⚠️ Verification failed. Please try again.');
+          resolve({ ok: false }); return;
+        }
+        // نجح السيرفر — نحدث الـ state والـ UI
         taskState[key] = 'done';
+        await _dbCall('save_tasks', { task_state: taskState });
         btn.style.display = 'none';
         status.classList.add('show');
         status.innerHTML = `<img src="asesst/vertify.png" width="22">`;
-        balance += reward; updateStats();
+        // اجلب الرصيد الحقيقي من السيرفر — لا نثق بالحساب المحلي
+        const stateRes = await _dbCall('get_state');
+        if (stateRes.ok && stateRes.user) _applyUser(stateRes.user);
+        else { balance += reward; updateStats(); }
+        updateStats();
         playSound('reward'); toast(successMsg); showSmartHint();
-        // حفظ في السيرفر
-        _dbCall('add_balance', { amount: reward, source: key });
-        _dbCall('save_tasks', { task_state: taskState });
         resolve({ ok: true, state: 'done' });
       }, 3600);
     }
