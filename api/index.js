@@ -503,13 +503,23 @@ module.exports = async function handler(req, res) {
   const session = sessionRows[0];
   const tid     = parseInt(session.telegram_id);
 
-  // التحقق من تطابق الـ fingerprint والـ IP
-  if (session.fingerprint !== fingerprint || session.ip_hash !== ipHash) {
+  // التحقق من تطابق الـ fingerprint فقط — IP يتغير بشكل طبيعي (proxy/NAT/4G)
+  // رفض فقط إذا اختلف الـ fingerprint (الجهاز الفعلي) وليس الـ IP
+  if (session.fingerprint !== fingerprint) {
+    // تغيّر fingerprint = جهاز مختلف = خطر حقيقي
     await sql(`UPDATE sessions SET is_valid = FALSE WHERE session_id = $1`, [sessionId]);
     await updateUserRisk(tid, 30);
     await auditLog(tid, ipHash, fingerprint, action, 30, 'deny',
-      { reason: 'session_mismatch', expected_fp: session.fingerprint, expected_ip: session.ip_hash });
+      { reason: 'fingerprint_mismatch', expected_fp: session.fingerprint });
     return res.status(401).json({ ok: false, error: 'Session mismatch — please re-authenticate' });
+  }
+
+  // تغيّر IP فقط = طبيعي — نُحدّث الجلسة برفق ونضيف risk بسيط
+  if (session.ip_hash !== ipHash) {
+    await sql(`UPDATE sessions SET ip_hash = $2 WHERE session_id = $1`, [sessionId, ipHash]);
+    await updateUserRisk(tid, 5); // risk منخفض فقط
+    await auditLog(tid, ipHash, fingerprint, action, 5, 'allow',
+      { reason: 'ip_changed', note: 'natural IP rotation' });
   }
 
   // ── Rate Limiting ──
@@ -683,7 +693,7 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ ok: false, error: 'Cell is not ready to harvest' });
 
       // ⚡ السيرفر يحسب المكافأة — لا نأخذها من العميل أبداً
-      const SERVER_REWARD = 0.005; // ثابت في السيرفر فقط
+      const SERVER_REWARD = 0.0001; // مطابق للعميل: 0.0001 TON لكل حصاد
 
       // Shadow ban: يعطي استجابة ناجحة لكن لا يضيف رصيداً
       const actualReward = isShadowBanned ? 0 : SERVER_REWARD;
@@ -719,9 +729,15 @@ module.exports = async function handler(req, res) {
         );
       }
 
+      // جلب الرصيد الحقيقي بعد التحديث
+      const updatedUser = await sql(`SELECT balance, today_earn, total_harvests FROM users WHERE telegram_id = $1`, [tid]);
+
       return res.status(200).json({
         ok: true, cells,
-        reward: SERVER_REWARD, // نعطي العميل القيمة الظاهرة دائماً
+        reward:       SERVER_REWARD,
+        balance:      parseFloat(updatedUser[0]?.balance      || 0),
+        today_earn:   parseFloat(updatedUser[0]?.today_earn   || 0),
+        total_harvests: parseInt(updatedUser[0]?.total_harvests || 0),
         referral_cut: user.referral_by ? parseFloat((SERVER_REWARD * 0.05).toFixed(6)) : 0
       });
     }
@@ -770,7 +786,7 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ ok: false, error: 'Invalid resource type' });
 
       // السيرفر يحدد الكمية المسموح بها لكل مصدر
-      const ALLOWED_AMOUNTS = { ad: { seeds: 3, water: 2 }, task: { seeds: 5, water: 5 } };
+      const ALLOWED_AMOUNTS = { ad: { seeds: 1, water: 1 }, task: { seeds: 5, water: 5 } };
       const amount = ALLOWED_AMOUNTS[source]?.[type];
       if (!amount) return res.status(400).json({ ok: false, error: 'Invalid source' });
 
