@@ -1852,9 +1852,325 @@ left: 25%;
   transition: opacity 0.8s ease, visibility 0.8s ease;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   SECURITY WALL — Account Restriction Screen
+   Military / Banking Grade UI · Zero Disclosure Policy
+═══════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&display=swap');
+
+#security-wall {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: #020508;
+  font-family: 'Rajdhani', sans-serif;
+  overflow: hidden;
+}
+
+/* scanline overlay */
+#security-wall::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,255,120,0.018) 2px,
+    rgba(0,255,120,0.018) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+  animation: sw-scanroll 8s linear infinite;
+}
+
+/* vignette */
+#security-wall::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center,
+    transparent 40%,
+    rgba(0,0,0,0.82) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes sw-scanroll {
+  from { background-position: 0 0; }
+  to   { background-position: 0 200px; }
+}
+
+/* grid lines bg */
+.sw-grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,255,80,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,80,0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: sw-grid-fade 4s ease-in-out infinite alternate;
+}
+@keyframes sw-grid-fade {
+  from { opacity: 0.6; }
+  to   { opacity: 1; }
+}
+
+/* center container */
+.sw-center {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px 28px;
+  gap: 0;
+}
+
+/* top status bar */
+.sw-statusbar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: rgba(0,255,80,0.04);
+  border-bottom: 1px solid rgba(0,255,80,0.12);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.52rem;
+  color: rgba(0,255,80,0.45);
+  letter-spacing: 1px;
+  z-index: 20;
+}
+.sw-statusbar-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #ff3b3b;
+  box-shadow: 0 0 6px #ff3b3b;
+  animation: sw-blink 1.4s ease-in-out infinite;
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+@keyframes sw-blink {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+/* shield icon area */
+.sw-shield-wrap {
+  position: relative;
+  margin-bottom: 28px;
+  margin-top: 24px;
+}
+.sw-shield-svg {
+  width: 90px; height: 90px;
+  filter: drop-shadow(0 0 22px rgba(255,50,50,0.55));
+  animation: sw-shield-pulse 3s ease-in-out infinite;
+}
+@keyframes sw-shield-pulse {
+  0%,100% { filter: drop-shadow(0 0 22px rgba(255,50,50,0.55)); }
+  50%      { filter: drop-shadow(0 0 38px rgba(255,50,50,0.90)); }
+}
+
+/* glitch badge */
+.sw-badge {
+  display: inline-block;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 3px;
+  color: #ff3b3b;
+  background: rgba(255,40,40,0.08);
+  border: 1px solid rgba(255,40,40,0.28);
+  border-radius: 3px;
+  padding: 4px 12px;
+  margin-bottom: 16px;
+  animation: sw-glitch 6s steps(1) infinite;
+  position: relative;
+}
+@keyframes sw-glitch {
+  0%,96%,100% { clip-path: none; transform: none; }
+  97% { clip-path: inset(20% 0 60% 0); transform: translate(-3px, 0); }
+  98% { clip-path: inset(50% 0 10% 0); transform: translate(3px, 0); }
+  99% { clip-path: none; transform: translate(0, 2px); }
+}
+
+/* headline */
+.sw-headline {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #e8eaed;
+  text-align: center;
+  line-height: 1.2;
+  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+  text-transform: uppercase;
+}
+.sw-headline em {
+  font-style: normal;
+  color: #ff5c5c;
+}
+
+/* descriptor */
+.sw-desc {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.64rem;
+  color: rgba(200,210,200,0.48);
+  text-align: center;
+  line-height: 1.7;
+  letter-spacing: 0.5px;
+  max-width: 300px;
+  margin-bottom: 32px;
+}
+
+/* divider */
+.sw-divider {
+  width: 200px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,60,60,0.4), transparent);
+  margin-bottom: 32px;
+}
+
+/* incident ID */
+.sw-incident {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.48rem;
+  color: rgba(0,255,80,0.3);
+  letter-spacing: 2px;
+  margin-bottom: 36px;
+  text-transform: uppercase;
+}
+
+/* CTA button */
+.sw-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 32px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 6px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: rgba(230,235,230,0.85);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  position: relative;
+  overflow: hidden;
+}
+.sw-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.04);
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+}
+.sw-btn:hover::before { transform: translateX(0); }
+.sw-btn:hover {
+  border-color: rgba(255,255,255,0.38);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(255,255,255,0.06);
+}
+.sw-btn:active {
+  transform: scale(0.97);
+}
+.sw-btn svg {
+  width: 16px; height: 16px;
+  stroke: currentColor; fill: none;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* bottom trace bar */
+.sw-trace {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #ff3b3b 50%, transparent);
+  animation: sw-trace-move 3s ease-in-out infinite alternate;
+}
+@keyframes sw-trace-move {
+  from { opacity: 0.4; transform: scaleX(0.4); }
+  to   { opacity: 1;   transform: scaleX(1); }
+}
+
+/* fade-in animation when wall appears */
+@keyframes sw-fadein {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+#security-wall.active {
+  display: flex;
+  animation: sw-fadein 0.6s ease forwards;
+}
+
 </style>
 </head>
 <body>
+
+<!-- ═══ SECURITY WALL — shown on ban/shadow-ban, NO loading screen first ═══ -->
+<div id="security-wall">
+  <div class="sw-grid-bg"></div>
+
+  <!-- top status bar -->
+  <div class="sw-statusbar">
+    <span><span class="sw-statusbar-dot"></span>SECURITY SYSTEM ACTIVE</span>
+    <span id="sw-ts" style="font-family:'Share Tech Mono',monospace"></span>
+    <span>REF: SEC-PORTAL</span>
+  </div>
+
+  <div class="sw-center">
+
+    <!-- shield icon -->
+    <div class="sw-shield-wrap">
+      <svg class="sw-shield-svg" viewBox="0 0 100 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M50 8L10 24V52C10 74 28 92 50 102C72 92 90 74 90 52V24L50 8Z"
+          fill="rgba(255,40,40,0.08)" stroke="#ff3b3b" stroke-width="2.5"/>
+        <path d="M50 22L22 34V52C22 68 34 82 50 92C66 82 78 68 78 52V34L50 22Z"
+          fill="rgba(255,40,40,0.05)" stroke="rgba(255,80,80,0.5)" stroke-width="1.5"/>
+        <line x1="36" y1="52" x2="46" y2="62" stroke="#ff4444" stroke-width="3" stroke-linecap="round"/>
+        <line x1="46" y1="62" x2="64" y2="42" stroke="#ff4444" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    <!-- classification badge -->
+    <div class="sw-badge">⬛ ACCESS RESTRICTED ⬛</div>
+
+    <!-- headline -->
+    <div class="sw-headline">Account<br><em>Restricted</em></div>
+
+    <!-- description — vague by design -->
+    <div class="sw-desc">
+      Your account has been restricted<br>
+      due to suspicious activity detected<br>
+      by our security systems.
+    </div>
+
+    <div class="sw-divider"></div>
+
+    <!-- incident reference -->
+    <div class="sw-incident" id="sw-incident-id">INCIDENT ID: GENERATING...</div>
+
+    <!-- single CTA -->
+    <button class="sw-btn" onclick="window.open('https://t.me/tomato_support','_blank')">
+      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Contact Support
+    </button>
+
+  </div>
+
+  <!-- bottom red trace -->
+  <div class="sw-trace"></div>
+</div>
 <div class="loading-page" id="loading-page">
 
   <div class="load-page">
@@ -3721,14 +4037,128 @@ function _genNonce() {
   return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('') + '_' + Date.now();
 }
 
-// ── بصمة الجهاز (ترسل مع كل طلب) ──
-function _buildFingerprint() {
-  return JSON.stringify({
-    user_agent: navigator.userAgent        || '',
-    lang:       navigator.language         || '',
-    screen:     `${screen.width}x${screen.height}`,
-    tz_offset:  new Date().getTimezoneOffset(),
+// ══════════════════════════════════════════════════════════════
+//  SECURITY WALL — Client Side Controller
+// ══════════════════════════════════════════════════════════════
+
+function _genIncidentId() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let id = 'INC-';
+  for (let i = 0; i < 12; i++) {
+    if (i === 4 || i === 8) id += '-';
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return id;
+}
+
+function showSecurityWall() {
+  const lp = document.getElementById('loading-page');
+  if (lp) lp.remove();
+  document.body.style.pointerEvents = 'none';
+  const ts = document.getElementById('sw-ts');
+  if (ts) {
+    const now = new Date();
+    ts.textContent = now.toISOString().replace('T',' ').slice(0,19) + ' UTC';
+  }
+  const iid = document.getElementById('sw-incident-id');
+  if (iid) iid.textContent = 'INCIDENT ID: ' + _genIncidentId();
+  const wall = document.getElementById('security-wall');
+  if (wall) { wall.style.display = 'flex'; wall.classList.add('active'); }
+}
+
+// ── بصمة الجهاز القوية — Multi-Signal Production Fingerprint ──
+let _cachedFingerprint = null;
+
+async function _buildFingerprint() {
+  if (_cachedFingerprint) return _cachedFingerprint;
+
+  // Signal 1: Canvas
+  let canvasHash = '';
+  try {
+    const c   = document.createElement('canvas');
+    const ctx = c.getContext('2d');
+    ctx.textBaseline = 'top';
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#f60';
+    ctx.fillRect(125, 1, 62, 20);
+    ctx.fillStyle = '#069';
+    ctx.fillText('Cwm fjordbank glyphs vext quiz', 2, 15);
+    ctx.fillStyle = 'rgba(102,204,0,0.7)';
+    ctx.fillText('Cwm fjordbank glyphs vext quiz', 4, 17);
+    canvasHash = c.toDataURL().slice(-40);
+  } catch (_) { canvasHash = 'canvas_blocked'; }
+
+  // Signal 2: WebGL
+  let webglInfo = '';
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      webglInfo = ext
+        ? (gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) + '|' + gl.getParameter(ext.UNMASKED_VENDOR_WEBGL))
+        : gl.getParameter(gl.RENDERER);
+    }
+  } catch (_) { webglInfo = 'webgl_blocked'; }
+
+  // Signal 3: Audio
+  let audioHash = '';
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+    const osc = ac.createOscillator();
+    const an  = ac.createAnalyser();
+    const gain = ac.createGain();
+    gain.gain.value = 0;
+    osc.connect(an); an.connect(gain); gain.connect(ac.destination);
+    osc.start(0);
+    const buf = new Float32Array(an.frequencyBinCount);
+    an.getFloatFrequencyData(buf);
+    osc.stop();
+    await ac.close();
+    audioHash = buf.slice(0, 8).reduce((s, v) => s + Math.abs(v).toFixed(2), '');
+  } catch (_) { audioHash = 'audio_blocked'; }
+
+  // Signal 4-9: Platform signals
+  const hw       = [navigator.hardwareConcurrency||0, navigator.deviceMemory||0].join('x');
+  const touch    = [navigator.maxTouchPoints||0, 'ontouchstart' in window?1:0].join('');
+  const platform = [navigator.userAgent||'', navigator.language||'', (navigator.languages||[]).join(','),
+                    `${screen.width}x${screen.height}x${screen.colorDepth}`,
+                    new Date().getTimezoneOffset(),
+                    (Intl.DateTimeFormat().resolvedOptions().timeZone||'')].join('|');
+  const plugins  = navigator.plugins?.length || 0;
+  const media    = [
+    window.matchMedia('(prefers-color-scheme:dark)').matches ? 'D':'L',
+    (window.devicePixelRatio||1).toFixed(1),
+  ].join('');
+
+  const raw = [canvasHash, webglInfo, audioHash, hw, touch, platform, plugins, media].join('§');
+
+  // djb2 double hash
+  let h1 = 5381, h2 = 52711;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw.charCodeAt(i);
+    h1 = (Math.imul(h1, 31) ^ c) >>> 0;
+    h2 = (Math.imul(h2, 33) ^ c) >>> 0;
+  }
+  const fpHash = ((h1>>>0).toString(16).padStart(8,'0') + (h2>>>0).toString(16).padStart(8,'0'));
+
+  _cachedFingerprint = JSON.stringify({
+    fp:          fpHash,
+    user_agent:  navigator.userAgent        || '',
+    lang:        navigator.language         || '',
+    screen:      `${screen.width}x${screen.height}`,
+    tz_offset:   new Date().getTimezoneOffset(),
+    hw_cores:    navigator.hardwareConcurrency || 0,
+    hw_mem:      navigator.deviceMemory        || 0,
+    touch_pts:   navigator.maxTouchPoints      || 0,
+    tz_name:     Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+    canvas_sig:  canvasHash,
+    webgl_sig:   webglInfo.slice(0, 60),
+    audio_sig:   audioHash,
+    dpr:         (window.devicePixelRatio||1).toFixed(2),
+    color_depth: screen.colorDepth || 0,
   });
+
+  return _cachedFingerprint;
 }
 
 // ── إنشاء جلسة بعد التحقق من initData ──
@@ -3739,16 +4169,22 @@ async function _createSession() {
     return false;
   }
   try {
+    const fpStr = await _buildFingerprint();
     const res = await fetch(API_BASE + '/api', {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
         'X-Init-Data':   initData,
-        'X-Fingerprint': _buildFingerprint(),
+        'X-Fingerprint': fpStr,
       },
       body: JSON.stringify({ action: 'create_session', data: {} })
     });
     const result = await res.json();
+    // ── السيرفر يمكن أن يرسل is_banned في create_session ──
+    if (result.is_banned || result.shadow_banned) {
+      showSecurityWall();
+      return false;
+    }
     if (result.ok && result.session_id) {
       _sessionId = result.session_id;
       console.log('[ZT] Session created');
@@ -3764,42 +4200,43 @@ async function _createSession() {
 
 // ── الدالة المركزية لكل الطلبات (Zero Trust) ──
 async function _dbCall(action, data = {}) {
-  // إذا لم تكن هناك جلسة، نحاول إنشاءها
   if (!_sessionId && !['create_session'].includes(action)) {
     const ok = await _createSession();
     if (!ok) {
-      // dev fallback: نرسل بدون جلسة (للتطوير المحلي فقط)
       console.warn('[ZT] No session — dev fallback for:', action);
     }
   }
 
-  // الطلبات التي تحتاج nonce (تغيير حالة)
   const needsNonce = !['get_state', 'load'].includes(action);
 
   try {
+    const fpStr = await _buildFingerprint();
     const headers = {
       'Content-Type':  'application/json',
-      'X-Fingerprint': _buildFingerprint(),
+      'X-Fingerprint': fpStr,
     };
-    if (_sessionId)           headers['X-Session-Id'] = _sessionId;
-    if (needsNonce)           headers['X-Nonce']      = _genNonce();
+    if (_sessionId) headers['X-Session-Id'] = _sessionId;
+    if (needsNonce) headers['X-Nonce']      = _genNonce();
 
     const res = await fetch(API_BASE + '/api', {
       method: 'POST',
       headers,
       body: JSON.stringify({ action, data })
-      // ❌ لا نرسل telegram_id — السيرفر يأخذه من الجلسة
     });
 
-    // جلسة منتهية أو غير صالحة: نعيد إنشاءها
     if (res.status === 401) {
       _sessionId = null;
       const renewed = await _createSession();
-      if (renewed) return _dbCall(action, data); // إعادة المحاولة
+      if (renewed) return _dbCall(action, data);
       return { ok: false, error: 'auth_failed' };
     }
 
-    return await res.json();
+    const json = await res.json();
+    // ── فحص shadow ban من أي رد من السيرفر ──
+    if (json.shadow_banned === true || json.is_banned === true) {
+      showSecurityWall();
+    }
+    return json;
   } catch (e) {
     console.warn('[DB]', action, 'failed:', e.message);
     return { ok: false };
@@ -3827,13 +4264,19 @@ function _applyUser(u) {
 
 async function loadUser() {
   if (!TG_ID) return;
-  // ── Zero Trust: إنشاء الجلسة أولاً ──
   await _createSession();
   const result = await _dbCall('load', {
     username:    TG_USERNAME || TG_FIRST || null,
     referral_by: (tg?.initDataUnsafe?.start_param || '').replace('ref_', '') || null
   });
   if (!result.ok || !result.user) return;
+
+  // ── فحص الحظر فور تحميل بيانات المستخدم ──
+  if (result.user.shadow_banned === true) {
+    showSecurityWall();
+    return; // لا نتابع التحميل
+  }
+
   _applyUser(result.user);
   renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
   _syncTaskUI('ec', taskState.earnChannel);
