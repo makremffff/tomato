@@ -811,8 +811,6 @@ module.exports = async function handler(req, res) {
           await sql(
             `UPDATE users
              SET referral_friends = referral_friends + 1,
-                 referral_balance = referral_balance + 0.01,
-                 balance          = balance + 0.01,
                  updated_at       = NOW()
              WHERE telegram_id = $1`,
             [validRef]
@@ -826,8 +824,6 @@ module.exports = async function handler(req, res) {
           await sql(
             `UPDATE users
              SET referral_friends = referral_friends + 1,
-                 referral_balance = referral_balance + 0.01,
-                 balance          = balance + 0.01,
                  updated_at       = NOW()
              WHERE telegram_id = $1`,
             [u.referral_by]
