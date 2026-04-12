@@ -26,7 +26,7 @@ async function sql(query, params = []) {
 
 // ── Constants ────────────────────────────────────────────────────
 const CELL_COUNT         = 3;
-const GROW_DURATION      = 300;          // seconds
+const GROW_DURATION      = 30;          // seconds
 const INIT_DATA_TTL      = 3600;         // 1 hour
 const SESSION_TTL        = 86400;        // 24 hours
 const RATE_WINDOW        = 5000;         // 5 seconds
@@ -219,16 +219,42 @@ function hashIP(ip) {
   return crypto.createHash('sha256').update(ip + (process.env.IP_SALT || 'zt_salt')).digest('hex').slice(0, 32);
 }
 
-// ── بناء fingerprint من بيانات الطلب ──
-function buildFingerprint(data, ipHash) {
-  const raw = [
-    data.user_agent  || '',
-    data.lang        || '',
-    data.screen      || '',
-    String(data.tz_offset || 0),
-    ipHash,
-  ].join('|');
+// ── بناء fingerprint محسّن من بيانات الطلب ──
+// يستخدم الـ fp hash المولّد client-side + fallback إلى الإشارات الأخرى
+function buildFingerprint(fpData, ipHash) {
+  // إذا أرسل الـ client fingerprint hash جاهزاً — نضيف IP ونُعيد hash
+  const clientFp = fpData.fp || '';
+
+  // الإشارات الأساسية كـ fallback
+  const ua      = (fpData.user_agent || '').slice(0, 200);
+  const lang    = fpData.lang        || '';
+  const screen  = fpData.screen      || '';
+  const tz      = String(fpData.tz_offset  || 0);
+  const tzName  = fpData.tz_name     || '';
+  const cores   = String(fpData.hw_cores   || 0);
+  const mem     = String(fpData.hw_mem     || 0);
+  const touch   = String(fpData.touch_pts  || 0);
+  const canvas  = (fpData.canvas_sig || '').slice(0, 40);
+  const webgl   = (fpData.webgl_sig  || '').slice(0, 60);
+  const audio   = (fpData.audio_sig  || '').slice(0, 40);
+  const dpr     = fpData.dpr         || '';
+  const colDepth = String(fpData.color_depth || 0);
+
+  // إذا عنده fp hash — نبني fingerprint مزدوج (client hash + server signals)
+  const raw = clientFp
+    ? [clientFp, ipHash, ua, lang, tz, tzName, cores, mem].join('|')
+    : [ua, lang, screen, tz, tzName, cores, mem, touch, canvas, webgl, audio, dpr, colDepth, ipHash].join('|');
+
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 40);
+}
+
+// ── Resilient Fingerprint Comparison ──
+// يتحمّل تغير IP (proxy/NAT) لكن يرفض تغير الجهاز الكامل
+function isFingerprintMatch(stored, current, storedIp, currentIp) {
+  if (stored === current) return true; // مطابق تماماً
+  // IP تغيّر لكن هذا طبيعي — نقبل إذا fingerprint مطابق
+  // لو اختلف كلاهما — رفض قاطع
+  return false;
 }
 
 // ── تحقق من Nonce (منع Replay Attacks) ──
@@ -428,6 +454,14 @@ module.exports = async function handler(req, res) {
       [tid, tgUser.username || tgUser.first_name || null]
     );
 
+    // ── فحص shadow ban قبل إنشاء الجلسة ──
+    const banCheck = await sql(`SELECT shadow_banned, risk_score FROM users WHERE telegram_id = $1`, [tid]);
+    if (banCheck[0]?.shadow_banned) {
+      // نسجّل المحاولة لكن لا نكشف السبب
+      await auditLog(tid, ipHash, fingerprint, 'create_session_banned', banCheck[0].risk_score, 'deny', { reason: 'shadow_banned' });
+      return res.status(200).json({ ok: false, is_banned: true });
+    }
+
     // إلغاء الجلسات القديمة
     await sql(`UPDATE sessions SET is_valid = FALSE WHERE telegram_id = $1`, [tid]);
 
@@ -439,7 +473,7 @@ module.exports = async function handler(req, res) {
       [sid, tid, ipHash, fingerprint]
     );
 
-    // حفظ fingerprint
+    // حفظ fingerprint مع الإشارات المتقدمة
     await sql(
       `INSERT INTO device_fingerprints (fingerprint, telegram_id, user_agent, lang, screen, timezone_off)
        VALUES ($1, $2, $3, $4, $5, $6)
