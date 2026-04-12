@@ -762,6 +762,29 @@ body::before {
 .info-item .i-val b { color: var(--gold); }
 .i-div { width: 1px; height: 26px; background: var(--card-bdr); }
 
+/* ── Task Button Variants by Type ── */
+.task-btn.btn-channel {
+  background: linear-gradient(135deg, #229ED9, #1a7fb5);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(34,158,217,0.38);
+}
+.task-btn.btn-channel.joined {
+  background: linear-gradient(135deg,#f57f17,#e65100);
+  box-shadow: 0 3px 12px rgba(245,127,23,0.4);
+}
+.task-btn.btn-url {
+  background: linear-gradient(135deg, #2e7d32, #1b5e20);
+  color: #ccf5b0;
+  box-shadow: 0 3px 12px rgba(46,125,50,0.38);
+}
+.task-btn.btn-url:active { transform: scale(0.96); opacity: 0.85; }
+
+/* task-card done state */
+.task-card.task-done {
+  opacity: 0.72;
+  border-color: rgba(105,240,174,0.2);
+}
+
 /* ── TASKS ── */
 #page-tasks { padding: 0 16px 20px; gap: 12px; }
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 50px 20px; text-align: center; color: var(--text-dim); }
@@ -2320,53 +2343,11 @@ left: 25%;
 <div id="page-tasks" class="page">
   <div class="page-header pg-item">
     <h2><img src="asesst/task.gif" width="28"> Tasks</h2>
-    <p>Complete tasks to earn bonus seeds</p>
+    <p>Complete tasks to earn bonus TON</p>
   </div>
 
-  <div class="task-card pg-item" id="task-earn-channel">
-    <div class="task-icon">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.43 13.67l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.718.889z"/>
-      </svg>
-    </div>
-    <div class="task-body">
-      <div class="task-title">Join Earn Channel</div>
-      <div class="task-desc">Subscribe on Telegram to unlock rewards</div>
-      <div class="task-meta">
-        <div class="task-reward">+0.005 <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"> TON</div>
-      </div>
-    </div>
-    <div class="task-action">
-      <button class="task-btn" id="task-btn-ec" onclick="handleEarnChannelTask()">
-        <div class="task-btn-progress" id="task-prog-ec"></div>
-        <span id="task-txt-ec">Join</span>
-      </button>
-      <div class="task-status" id="task-status-ec">✅ Done</div>
-    </div>
-  </div>
-
-  <!-- NEW CHANNEL: E-Money Algeria -->
-  <div class="task-card pg-item" id="task-emoney-channel">
-    <div class="task-icon">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.43 13.67l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.718.889z"/>
-      </svg>
-    </div>
-    <div class="task-body">
-      <div class="task-title">E-Money Algeria</div>
-      <div class="task-desc">Join our partner channel to earn bonus TON</div>
-      <div class="task-meta">
-        <div class="task-reward">+0.005 <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"> TON</div>
-      </div>
-    </div>
-    <div class="task-action">
-      <button class="task-btn" id="task-btn-em" onclick="handleEMoneyTask()">
-        <div class="task-btn-progress" id="task-prog-em"></div>
-        <span id="task-txt-em">Join</span>
-      </button>
-      <div class="task-status" id="task-status-em">✅ Done</div>
-    </div>
-  </div>
+  <!-- Dynamic task cards injected here by JS -->
+  <div id="tasks-list"></div>
 </div>
 
 <!-- PAGE: STORE -->
@@ -2823,9 +2804,10 @@ console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!T
   // ③ رابط الإحالة
   const refEl = document.getElementById('ref-link');
   if (refEl) {
+    // FIX: /earn يظهر مرة واحدة فقط
     refEl.value = TG_ID
-      ? `https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_${TG_ID}`
-      : 'https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_UNKNOWN';
+      ? `https://t.me/tamatoFarm_bot/earn?startapp=ref_${TG_ID}`
+      : 'https://t.me/tamatoFarm_bot/earn?startapp=ref_UNKNOWN';
   }
 })();
 
@@ -3134,7 +3116,8 @@ function syncInvitePage() {
   // Refresh ref link in case TG_ID loaded late
   const refEl = document.getElementById('ref-link');
   if (refEl && TG_ID) {
-    refEl.value = `https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_${TG_ID}`;
+    // FIX: /earn يظهر مرة واحدة فقط
+    refEl.value = `https://t.me/tamatoFarm_bot/earn?startapp=ref_${TG_ID}`;
   }
 }
 
@@ -3809,20 +3792,204 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2700);
 }
 
-/* ═══════════════════════════
-   TASKS
-═══════════════════════════ */
-const taskState = { earnChannel: 'idle', eMoneyChannel: 'idle' }; // idle | joined | done
+/* ═══════════════════════════════════════════════════════
+   TASKS ENGINE v2 — Dynamic, Scalable, Anti-Cheat
+   Supports: channel | url | (extendable: app, invite…)
+═══════════════════════════════════════════════════════ */
 
-function handleEarnChannelTask() {
-  if (_lock('task-ec', 700)) return;
-  fetchApi({ type: 'taskEarnChannel' });
+// In-memory task state: { [task_id]: 'idle' | 'opened' | 'done' }
+const _taskState = {};
+
+// ── Icons per task_type ──
+function _taskIcon(task) {
+  if (task.task_type === 'channel') {
+    return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.43 13.67l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.718.889z"/>
+    </svg>`;
+  }
+  if (task.task_type === 'url') {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    </svg>`;
+  }
+  return `<span style="font-size:1.3rem">${task.icon || '⭐'}</span>`;
 }
 
-function handleEMoneyTask() {
-  if (_lock('task-em', 700)) return;
-  fetchApi({ type: 'taskEMoney' });
+// ── Render button based on task_type + state ──
+function _renderTaskBtn(task, state) {
+  if (state === 'done') return ''; // no button — show status badge
+
+  if (task.task_type === 'channel') {
+    const isJoined = state === 'opened';
+    return `<button class="task-btn btn-channel${isJoined ? ' joined' : ''}"
+              id="task-btn-${task.id}"
+              onclick="handleTask('${task.id}')">
+              <div class="task-btn-progress" id="task-prog-${task.id}"></div>
+              <span id="task-txt-${task.id}">${isJoined ? 'Verify' : 'Join'}</span>
+            </button>`;
+  }
+
+  if (task.task_type === 'url') {
+    const isOpened = state === 'opened';
+    return `<button class="task-btn btn-url"
+              id="task-btn-${task.id}"
+              onclick="handleTask('${task.id}')">
+              <div class="task-btn-progress" id="task-prog-${task.id}"></div>
+              <span id="task-txt-${task.id}">🔗 ${isOpened ? 'Claim' : 'Open & Earn'}</span>
+            </button>`;
+  }
+
+  // fallback generic
+  return `<button class="task-btn btn-channel"
+            id="task-btn-${task.id}"
+            onclick="handleTask('${task.id}')">
+            <div class="task-btn-progress" id="task-prog-${task.id}"></div>
+            <span id="task-txt-${task.id}">Start</span>
+          </button>`;
 }
+
+// ── Build single task card HTML ──
+function _buildTaskCard(task) {
+  const state  = _taskState[task.id] || 'idle';
+  const isDone = state === 'done';
+  const reward = parseFloat(task.reward).toFixed(3);
+
+  return `
+  <div class="task-card pg-item${isDone ? ' task-done' : ''}" id="task-card-${task.id}">
+    <div class="task-icon">
+      ${_taskIcon(task)}
+    </div>
+    <div class="task-body">
+      <div class="task-title">${task.name}</div>
+      ${task.description ? `<div class="task-desc">${task.description}</div>` : ''}
+      <div class="task-meta">
+        <div class="task-reward">+${reward} <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"> TON</div>
+      </div>
+    </div>
+    <div class="task-action">
+      ${_renderTaskBtn(task, state)}
+      <div class="task-status${isDone ? ' show' : ''}" id="task-status-${task.id}">
+        ${isDone ? '<img src="asesst/vertify.png" width="22">' : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Load tasks from server and render ──
+async function loadAndRenderTasks() {
+  const listEl = document.getElementById('tasks-list');
+  if (!listEl) return;
+
+  const result = await _dbCall('get_tasks', {});
+  if (!result.ok || !Array.isArray(result.tasks)) return;
+
+  // seed state map from DB
+  result.tasks.forEach(t => {
+    _taskState[t.id] = t.completed ? 'done' : 'idle';
+  });
+
+  // render
+  listEl.innerHTML = result.tasks.map(_buildTaskCard).join('');
+}
+
+// ── Central task handler — called from any task button ──
+async function handleTask(taskId) {
+  if (_lock('task-' + taskId, 700)) return;
+
+  const state = _taskState[taskId] || 'idle';
+  if (state === 'done') return;
+
+  const btn    = document.getElementById('task-btn-' + taskId);
+  const txt    = document.getElementById('task-txt-' + taskId);
+  const prog   = document.getElementById('task-prog-' + taskId);
+  const status = document.getElementById('task-status-' + taskId);
+  const card   = document.getElementById('task-card-' + taskId);
+
+  // ── STEP 1: idle → open ──
+  if (state === 'idle') {
+    const res = await _dbCall('handle_task', { task_id: taskId, step: 'open' });
+    if (!res.ok) { toast('⚠️ Could not load task. Try again.'); return; }
+
+    // فتح الرابط
+    const url = res.url;
+    if (url) {
+      if (tg?.openTelegramLink && url.includes('t.me')) tg.openTelegramLink(url);
+      else if (tg?.openLink) tg.openLink(url);
+      else window.open(url, '_blank');
+    }
+
+    _taskState[taskId] = 'opened';
+
+    // تحديث الزر بناءً على task_type
+    if (btn) {
+      btn.classList.add('joined'); // يعمل للـ channel؛ للـ url الـ CSS مختلف لكن state يتغير
+    }
+    if (txt) {
+      // نعرف النوع من الزر نفسه
+      const isUrl = btn?.classList.contains('btn-url');
+      txt.textContent = isUrl ? '🔗 Claim' : 'Verify';
+    }
+
+    toast('📢 Opened! Tap the button again to claim your reward.');
+    return;
+  }
+
+  // ── STEP 2: opened → verify/complete ──
+  if (state === 'opened') {
+    if (btn) { btn.disabled = true; btn.classList.add('verifying'); }
+    if (prog) { prog.style.width = '0%'; void prog.offsetWidth; }
+    if (txt) {
+      txt.innerHTML = `<img src="asesst/loading.gif" width="23" height="24">`;
+      txt.style.cssText = 'height:7px;display:flex;justify-content:center;align-items:center';
+    }
+
+    // انتظر قليلاً ثم تحقق من السيرفر
+    await new Promise(r => setTimeout(r, 2200));
+
+    if (btn) btn.classList.remove('verifying');
+
+    const verifyRes = await _dbCall('handle_task', { task_id: taskId, step: 'verify' });
+
+    if (!verifyRes.ok) {
+      // فشل التحقق — أعد الزر
+      if (txt) { txt.textContent = 'Verify'; txt.style.cssText = ''; }
+      if (btn) { btn.disabled = false; }
+
+      const errCode = verifyRes.error;
+      if (errCode === 'not_member') {
+        toast('⚠️ You must join the channel first!');
+      } else {
+        toast('⚠️ Verification failed. Please try again.');
+      }
+      return;
+    }
+
+    // ✅ نجح
+    _taskState[taskId] = 'done';
+    if (btn)    btn.style.display = 'none';
+    if (status) { status.classList.add('show'); status.innerHTML = '<img src="asesst/vertify.png" width="22">'; }
+    if (card)   card.classList.add('task-done');
+    if (txt)    txt.style.cssText = '';
+
+    // تحديث الرصيد من السيرفر
+    const stateRes = await _dbCall('get_state');
+    if (stateRes.ok && stateRes.user) _applyUser(stateRes.user);
+    else if (verifyRes.reward) { balance += verifyRes.reward; }
+    updateStats();
+
+    playSound('reward');
+    const rewardStr = verifyRes.reward ? `+${parseFloat(verifyRes.reward).toFixed(3)} TON` : '';
+    toast(`🎉 ${rewardStr} claimed! Check your balance.`);
+  }
+}
+
+// ── Legacy wrappers (kept for any stale onclick references) ──
+function handleEarnChannelTask() { handleTask('earnChannel'); }
+function handleEMoneyTask()      { handleTask('eMoneyChannel'); }
+
+// مزامنة حالة التاسك في الـ UI بعد تحميل DB (legacy — no-op in new system)
+function _syncTaskUI(id, state) { /* replaced by loadAndRenderTasks */ }
 
 /* ══════════════════════════════════════════
    إعلان تلقائي كل 70 ثانية — بدون مكافأة
@@ -3978,10 +4145,6 @@ async function _dispatchAction(type, data) {
       toast('✅ Withdrawal request submitted!');
       return { ok: true };
     }
-
-    /* ── تاسكات ── */
-    case 'taskEarnChannel':  return _runChannelTask('earnChannel',  'https://t.me/botbababab',  0.005, '🎉 +0.005 TON claimed! Check your balance!');
-    case 'taskEMoney':       return _runChannelTask('eMoneyChannel','https://t.me/tt_fhp',      0.005, '🎉 +0.005 TON from E-Money Algeria!');
 
     /* ── إعلانات ── */
     case 'watchAdSeed':  _runWatchAd(data.count); return { ok: true };
@@ -4288,8 +4451,6 @@ function _applyUser(u) {
   cells = Array.isArray(u.cells) && u.cells.length === 3
     ? u.cells
     : Array.from({ length: 3 }, (_, i) => ({ id: i, state: 'empty', planted_at: null, duration: TOMATO.growTime }));
-  taskState.earnChannel   = u.task_state?.earnChannel   || 'idle';
-  taskState.eMoneyChannel = u.task_state?.eMoneyChannel || 'idle';
   withdrawHistory.length  = 0;
   if (Array.isArray(u.wd_history)) withdrawHistory.push(...u.wd_history);
 }
@@ -4311,37 +4472,11 @@ async function loadUser() {
 
   _applyUser(result.user);
   renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
-  _syncTaskUI('ec', taskState.earnChannel);
-  _syncTaskUI('em', taskState.eMoneyChannel);
-  console.log('[ZT] User loaded via secure session');
-}
 
-// مزامنة حالة التاسك في الـ UI بعد تحميل DB
-function _syncTaskUI(id, state) {
-  const btn    = document.getElementById('task-btn-'    + id);
-  const txt    = document.getElementById('task-txt-'    + id);
-  const status = document.getElementById('task-status-' + id);
-  if (!btn) return;
-  if (state === 'done') {
-    // مكتمل — أخفِ الزر وأظهر علامة التحقق
-    btn.style.display = 'none';
-    status?.classList.add('show');
-    if (status) status.innerHTML = '<img src="asesst/vertify.png" width="22">';
-  } else if (state === 'joined') {
-    // انضم لكن لم يتحقق بعد — أظهر زر Verify
-    btn.style.display = '';
-    if (txt) txt.textContent = 'Verify';
-    btn.style.background = 'linear-gradient(135deg,#f57f17,#e65100)';
-    btn.style.boxShadow  = '0 3px 12px rgba(245,127,23,0.4)';
-    if (status) status.classList.remove('show');
-  } else {
-    // idle — بعد رفع الحظر أو حالة أولية: أعد الزر لوضعه الطبيعي
-    btn.style.display    = '';
-    btn.style.background = '';
-    btn.style.boxShadow  = '';
-    if (status) status.classList.remove('show');
-    if (txt) txt.textContent = 'Join';
-  }
+  // ── تحميل المهام الديناميكية ──
+  await loadAndRenderTasks();
+
+  console.log('[ZT] User loaded via secure session');
 }
 
 // دالة مساعدة للإعلانات — تضيف موارد عبر السيرفر مع source صحيح
