@@ -35,6 +35,19 @@ const RISK_SUSPICIOUS    = 41;
 const RISK_BAN           = 71;
 const NONCE_TTL          = 300;          // 5 min nonce validity
 
+// ── Multi-Account Detection Config ───────────────────────────────
+// قابل للتعديل بدون لمس المنطق
+const MULTI_ACCT = {
+  MAX_ACCOUNTS_PER_IP          : 2,      // حد الحسابات لكل IP
+  MAX_ACCOUNTS_PER_FINGERPRINT : 1,      // حد الحسابات لكل fingerprint (1 = تطابق كامل يعني ban)
+  IP_WHITELIST                 : new Set([
+    // أضف هنا ip_hash لشبكات موثوقة (مثل مكتبك أو ناس تعرفهم)
+    // مثال: 'abc123def456...'
+  ]),
+  // عمر الحسابات (بالأيام) — الحساب الذي مضى عليه أقل من هذا يُعتبر "جديد"
+  NEW_ACCOUNT_AGE_DAYS         : 3,
+};
+
 // ── Bootstrap: إنشاء جميع الجداول ───────────────────────────────
 async function bootstrap() {
   try {
@@ -76,8 +89,10 @@ async function bootstrap() {
         is_valid      BOOLEAN       NOT NULL DEFAULT TRUE
       )
     `);
-    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_telegram ON sessions(telegram_id)`);
-    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_expires  ON sessions(expires_at)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_telegram    ON sessions(telegram_id)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_expires     ON sessions(expires_at)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_ip_hash     ON sessions(ip_hash)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_fingerprint ON sessions(fingerprint)`);
 
     // ── جدول Nonce (منع إعادة الإرسال) ──
     await sql(`
@@ -155,11 +170,12 @@ async function bootstrap() {
 
     // ── Migrations للجداول القديمة ──
     const migrations = [
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS shadow_banned BOOLEAN NOT NULL DEFAULT FALSE`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_score    INT     NOT NULL DEFAULT 0`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewarded BOOLEAN NOT NULL DEFAULT FALSE`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_friends  INT NOT NULL DEFAULT 0`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS shadow_banned   BOOLEAN       NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_score      INT           NOT NULL DEFAULT 0`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewarded BOOLEAN     NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_friends  INT         NOT NULL DEFAULT 0`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_balance  NUMERIC(18,6) NOT NULL DEFAULT 0`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hard_banned  BOOLEAN       NOT NULL DEFAULT FALSE`,
     ];
     for (const m of migrations) {
       try { await sql(m); } catch (_) {}
@@ -447,59 +463,213 @@ module.exports = async function handler(req, res) {
     const tid = parseInt(tgUser.id);
     if (isNaN(tid)) return res.status(400).json({ ok: false, error: 'Invalid user ID' });
 
-    // إنشاء/تحديث المستخدم
+    // ── إنشاء/تحديث المستخدم أولاً (خارج transaction) ──
     await sql(
       `INSERT INTO users (telegram_id, username) VALUES ($1, $2)
        ON CONFLICT (telegram_id) DO UPDATE SET username = $2, updated_at = NOW()`,
       [tid, tgUser.username || tgUser.first_name || null]
     );
 
-    // ── فحص shadow ban قبل إنشاء الجلسة ──
-    const banCheck = await sql(`SELECT shadow_banned, risk_score FROM users WHERE telegram_id = $1`, [tid]);
-    if (banCheck[0]?.shadow_banned) {
-      await auditLog(tid, ipHash, fingerprint, 'create_session_banned', banCheck[0].risk_score, 'deny', { reason: 'shadow_banned' });
-      return res.status(200).json({ ok: false, is_banned: true });
-    }
+    // ════════════════════════════════════════════════════════════════
+    //  ATOMIC MULTI-ACCOUNT DETECTION
+    //  كل شيء داخل transaction مع advisory lock لمنع race conditions
+    // ════════════════════════════════════════════════════════════════
+    const db = neon(DATABASE_URL);
 
-    // إلغاء كل الجلسات القديمة (بما فيها فترة الحظر)
-    await sql(`UPDATE sessions SET is_valid = FALSE WHERE telegram_id = $1`, [tid]);
+    try {
+      await db('BEGIN');
 
-    // FIX-4: Reset كامل عند رفع الحظر
-    // السبب: calcRiskScore تقرأ آخر session → fingerprint مختلف → score+=25 → إعادة حظر تلقائية
-    if (banCheck[0]?.risk_score >= RISK_SUSPICIOUS) {
-      // 1. صفّر risk_score تماماً (لا 20 — لأن calcRiskScore ستضيف 25 فوراً)
-      await sql(
-        `UPDATE users SET risk_score = 0, updated_at = NOW() WHERE telegram_id = $1`,
+      // ── Advisory lock مبني على ip_hash ──
+      // يحول نص الـ ip_hash إلى رقم صحيح 64-bit بطريقة ثابتة
+      // هذا يمنع حالات race condition لو جاء طلبان بنفس الـ IP في نفس الوقت
+      const lockKey = BigInt('0x' + ipHash.slice(0, 15)) & BigInt('0x7FFFFFFFFFFFFFFF');
+      await db(`SELECT pg_advisory_xact_lock($1)`, [lockKey.toString()]);
+
+      // ── فحص Hard Ban أولاً ──
+      const banCheck = await db(
+        `SELECT shadow_banned, is_hard_banned, risk_score, created_at
+         FROM users WHERE telegram_id = $1`,
         [tid]
       );
-      // 2. احذف device_fingerprints — ستُعاد بالجلسة الجديدة الصحيحة
-      await sql(`DELETE FROM device_fingerprints WHERE telegram_id = $1`, [tid]);
-      // 3. احذف سجلات deny — لا تُراكم في حساب risk مستقبلاً
-      await sql(
-        `DELETE FROM security_logs WHERE telegram_id = $1 AND verdict = 'deny'`,
-        [tid]
+      const userRow = banCheck[0];
+
+      if (userRow?.is_hard_banned) {
+        await db('ROLLBACK');
+        await auditLog(tid, ipHash, fingerprint, 'create_session_hard_banned', 100, 'deny',
+          { reason: 'hard_banned', tg_id: tid });
+        return res.status(200).json({ ok: false, is_banned: true, ban_type: 'hard' });
+      }
+
+      if (userRow?.shadow_banned) {
+        await db('ROLLBACK');
+        await auditLog(tid, ipHash, fingerprint, 'create_session_shadow_banned', userRow.risk_score, 'deny',
+          { reason: 'shadow_banned' });
+        return res.status(200).json({ ok: false, is_banned: true });
+      }
+
+      // ── تحديد هل الحساب "جديد" ──
+      const accountCreatedAt = userRow?.created_at ? new Date(userRow.created_at) : new Date();
+      const accountAgeDays   = (Date.now() - accountCreatedAt.getTime()) / (1000 * 60 * 60 * 24);
+      const isNewAccount     = accountAgeDays < MULTI_ACCT.NEW_ACCOUNT_AGE_DAYS;
+
+      // ── IP Whitelist check ──
+      const isWhitelisted = MULTI_ACCT.IP_WHITELIST.has(ipHash);
+
+      if (!isWhitelisted && isNewAccount) {
+        // ════════════════════════════════════════════════════════════
+        //  STEP 1 — عدد الحسابات لكل IP
+        //  نحسب كم حساباً مختلفاً تم تسجيله من هذا الـ IP
+        //  نستخدم DISTINCT لأن نفس المستخدم قد يفتح جلسات متعددة
+        // ════════════════════════════════════════════════════════════
+        const ipCountResult = await db(
+          `SELECT COUNT(DISTINCT telegram_id) AS cnt
+           FROM sessions
+           WHERE ip_hash = $1
+             AND telegram_id != $2
+             AND is_valid = TRUE
+             AND expires_at > NOW()`,
+          [ipHash, tid]
+        );
+        const activeAccountsOnIP = parseInt(ipCountResult[0]?.cnt || 0);
+
+        // ════════════════════════════════════════════════════════════
+        //  STEP 2 — عدد الحسابات لكل fingerprint
+        //  fingerprint أقوى من IP لأنه يمثل الجهاز الفعلي
+        // ════════════════════════════════════════════════════════════
+        const fpCountResult = await db(
+          `SELECT COUNT(DISTINCT telegram_id) AS cnt
+           FROM device_fingerprints
+           WHERE fingerprint = $1
+             AND telegram_id != $2`,
+          [fingerprint, tid]
+        );
+        const accountsOnFingerprint = parseInt(fpCountResult[0]?.cnt || 0);
+
+        // ════════════════════════════════════════════════════════════
+        //  STEP 3 — منطق الحظر المزدوج
+        //
+        //  القرار: Hard Ban فقط عند تحقق الشرطين معاً:
+        //   ① IP فيه أكثر من MAX_ACCOUNTS_PER_IP حسابات
+        //   ② نفس الـ fingerprint مستخدم مع حساب آخر
+        //
+        //  أو: Fingerprint وحده كافٍ إذا تجاوز الحد
+        //  (حالة أشد خطورة: نفس الجهاز بحسابات متعددة)
+        // ════════════════════════════════════════════════════════════
+        const ipViolation = activeAccountsOnIP >= MULTI_ACCT.MAX_ACCOUNTS_PER_IP;
+        const fpViolation  = accountsOnFingerprint >= MULTI_ACCT.MAX_ACCOUNTS_PER_FINGERPRINT;
+
+        const shouldBan = (ipViolation && fpViolation) || fpViolation;
+        // شرح المنطق:
+        // • fpViolation وحده = Ban (أقوى دليل: نفس الجهاز → multi-account حقيقي)
+        // • ipViolation && fpViolation = Ban (تأكيد مزدوج)
+        // • ipViolation وحده = لا ban (شبكة مشتركة/NAT)
+
+        if (shouldBan) {
+          // ── Hard Ban للحساب الجديد فقط ──
+          // الحسابات القديمة لا تُمس
+          await db(
+            `UPDATE users SET is_hard_banned = TRUE, updated_at = NOW() WHERE telegram_id = $1`,
+            [tid]
+          );
+
+          // تسجيل تفصيلي للتحليل لاحقاً
+          await db(
+            `INSERT INTO security_logs
+               (telegram_id, ip_hash, fingerprint, action, risk_score, verdict, detail)
+             VALUES ($1, $2, $3, 'multi_account_detected', 100, 'deny', $4)`,
+            [
+              tid, ipHash, fingerprint,
+              JSON.stringify({
+                reason            : 'multi_account_hard_ban',
+                ip_accounts_count : activeAccountsOnIP,
+                fp_accounts_count : accountsOnFingerprint,
+                ip_violation      : ipViolation,
+                fp_violation      : fpViolation,
+                account_age_days  : Math.round(accountAgeDays * 10) / 10,
+                is_new_account    : isNewAccount,
+                fingerprint       : fingerprint,
+                ip_hash           : ipHash,
+                tg_id             : tid,
+              })
+            ]
+          );
+
+          await db('COMMIT');
+
+          console.warn(
+            `[ANTI-FRAUD] Hard Ban applied → tg_id=${tid}` +
+            ` ip_accounts=${activeAccountsOnIP} fp_accounts=${accountsOnFingerprint}` +
+            ` ip_hash=${ipHash.slice(0, 8)}... fp=${fingerprint.slice(0, 8)}...`
+          );
+
+          return res.status(200).json({ ok: false, is_banned: true, ban_type: 'hard' });
+        }
+
+        // ── تحذير فقط: IP فيه حسابات متعددة لكن بدون تطابق fingerprint ──
+        if (ipViolation && !fpViolation) {
+          // نسجّل للتحليل لكن لا نحظر
+          await db(
+            `INSERT INTO security_logs
+               (telegram_id, ip_hash, fingerprint, action, risk_score, verdict, detail)
+             VALUES ($1, $2, $3, 'multi_ip_warning', 30, 'allow', $4)`,
+            [
+              tid, ipHash, fingerprint,
+              JSON.stringify({
+                reason            : 'shared_ip_multiple_accounts',
+                ip_accounts_count : activeAccountsOnIP,
+                fp_accounts_count : accountsOnFingerprint,
+                note              : 'Shared WiFi / Carrier NAT — no ban applied',
+              })
+            ]
+          );
+        }
+      }
+      // ════════════════════════════════════════════════════════════
+      //  END MULTI-ACCOUNT CHECK
+      // ════════════════════════════════════════════════════════════
+
+      // ── Reset خفيف عند ارتفاع risk_score السابق ──
+      if (userRow?.risk_score >= RISK_SUSPICIOUS) {
+        await db(
+          `UPDATE users SET risk_score = 0, updated_at = NOW() WHERE telegram_id = $1`,
+          [tid]
+        );
+        await db(`DELETE FROM device_fingerprints WHERE telegram_id = $1`, [tid]);
+        await db(`DELETE FROM security_logs WHERE telegram_id = $1 AND verdict = 'deny'`, [tid]);
+      }
+
+      // ── إلغاء الجلسات القديمة ──
+      await db(`UPDATE sessions SET is_valid = FALSE WHERE telegram_id = $1`, [tid]);
+
+      // ── إنشاء جلسة جديدة داخل نفس الـ transaction ──
+      const sid = generateSessionId();
+      await db(
+        `INSERT INTO sessions (session_id, telegram_id, ip_hash, fingerprint)
+         VALUES ($1, $2, $3, $4)`,
+        [sid, tid, ipHash, fingerprint]
       );
+
+      // ── حفظ fingerprint ──
+      await db(
+        `INSERT INTO device_fingerprints (fingerprint, telegram_id, user_agent, lang, screen, timezone_off)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (fingerprint, telegram_id) DO UPDATE SET last_seen = NOW()`,
+        [fingerprint, tid, fpData.user_agent || null, fpData.lang || null,
+         fpData.screen || null, fpData.tz_offset || 0]
+      );
+
+      await db('COMMIT');
+
+      await auditLog(tid, ipHash, fingerprint, 'create_session', 0, 'allow',
+        { tg_id: tid, is_new_account: isNewAccount });
+
+      return res.status(200).json({ ok: true, session_id: sid });
+
+    } catch (txErr) {
+      try { await db('ROLLBACK'); } catch (_) {}
+      console.error('[create_session TX Error]', txErr.message);
+      return res.status(500).json({ ok: false, error: 'Session creation failed' });
     }
-
-    // إنشاء جلسة جديدة
-    const sid = generateSessionId();
-    await sql(
-      `INSERT INTO sessions (session_id, telegram_id, ip_hash, fingerprint)
-       VALUES ($1, $2, $3, $4)`,
-      [sid, tid, ipHash, fingerprint]
-    );
-
-    // حفظ fingerprint مع الإشارات المتقدمة
-    await sql(
-      `INSERT INTO device_fingerprints (fingerprint, telegram_id, user_agent, lang, screen, timezone_off)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (fingerprint, telegram_id) DO UPDATE SET last_seen = NOW()`,
-      [fingerprint, tid, fpData.user_agent || null, fpData.lang || null,
-       fpData.screen || null, fpData.tz_offset || 0]
-    );
-
-    await auditLog(tid, ipHash, fingerprint, 'create_session', 0, 'allow', { tg_id: tid });
-    return res.status(200).json({ ok: true, session_id: sid });
   }
 
   // ================================================================
@@ -630,8 +800,19 @@ module.exports = async function handler(req, res) {
       const resolved = resolveCells(original);
       await persistIfChanged(tid, original, resolved);
 
+      // ── FIX: عدد الأصدقاء الحقيقي من جدول users مباشرة ──
+      // نعتمد على العد الفعلي بدلاً من الحقل المخزّن الذي قد يكون قديماً
+      const realFriendsCount = await sql(
+        `SELECT COUNT(*) AS cnt FROM users WHERE referral_by = $1 AND referral_rewarded = TRUE`,
+        [tid]
+      );
+      const trueReferralFriends = parseInt(realFriendsCount[0]?.cnt || 0);
+
       // Shadow-banned users get real data but rewards are silently ignored upstream
-      return res.status(200).json({ ok: true, user: { ...user, cells: resolved } });
+      return res.status(200).json({
+        ok: true,
+        user: { ...user, cells: resolved, referral_friends: trueReferralFriends }
+      });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -656,12 +837,18 @@ module.exports = async function handler(req, res) {
       const resolved = resolveCells(original);
       await persistIfChanged(tid, original, resolved);
 
-      return res.status(200).json({ ok: true, user: { ...user, cells: resolved } });
-    }
+      // ── FIX: عدد الأصدقاء الحقيقي ──
+      const realFriendsCount2 = await sql(
+        `SELECT COUNT(*) AS cnt FROM users WHERE referral_by = $1 AND referral_rewarded = TRUE`,
+        [tid]
+      );
+      const trueReferralFriends2 = parseInt(realFriendsCount2[0]?.cnt || 0);
 
-    // ══════════════════════════════════════════════════════════════
-    //  PLANT — السيرفر يتحقق من كل شيء
-    // ══════════════════════════════════════════════════════════════
+      return res.status(200).json({
+        ok: true,
+        user: { ...user, cells: resolved, referral_friends: trueReferralFriends2 }
+      });
+    }
     if (action === 'plant') {
       const cellId   = parseInt(data.cell_id);
       const duration = GROW_DURATION; // السيرفر يحدد المدة فقط، لا العميل
