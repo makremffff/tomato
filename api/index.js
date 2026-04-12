@@ -461,12 +461,24 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: false, is_banned: true });
     }
 
-    // إلغاء الجلسات القديمة (حتى لو كانت من فترة الحظر)
+    // إلغاء كل الجلسات القديمة (بما فيها فترة الحظر)
     await sql(`UPDATE sessions SET is_valid = FALSE WHERE telegram_id = $1`, [tid]);
 
-    // لو risk_score مرتفع لكن shadow_banned=false (رُفع الحظر) — نُخفّضه
-    if (banCheck[0]?.risk_score >= 50) {
-      await sql(`UPDATE users SET risk_score = 20, updated_at = NOW() WHERE telegram_id = $1`, [tid]);
+    // FIX-4: Reset كامل عند رفع الحظر
+    // السبب: calcRiskScore تقرأ آخر session → fingerprint مختلف → score+=25 → إعادة حظر تلقائية
+    if (banCheck[0]?.risk_score >= RISK_SUSPICIOUS) {
+      // 1. صفّر risk_score تماماً (لا 20 — لأن calcRiskScore ستضيف 25 فوراً)
+      await sql(
+        `UPDATE users SET risk_score = 0, updated_at = NOW() WHERE telegram_id = $1`,
+        [tid]
+      );
+      // 2. احذف device_fingerprints — ستُعاد بالجلسة الجديدة الصحيحة
+      await sql(`DELETE FROM device_fingerprints WHERE telegram_id = $1`, [tid]);
+      // 3. احذف سجلات deny — لا تُراكم في حساب risk مستقبلاً
+      await sql(
+        `DELETE FROM security_logs WHERE telegram_id = $1 AND verdict = 'deny'`,
+        [tid]
+      );
     }
 
     // إنشاء جلسة جديدة
