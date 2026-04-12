@@ -786,13 +786,21 @@ body::before {
 }
 
 /* ── TASKS ── */
-#page-tasks { padding: 0 16px 20px; gap: 12px; }
+#page-tasks { padding: 0 16px 20px; gap: 0; }
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 50px 20px; text-align: center; color: var(--text-dim); }
 .empty-state .e-icon { font-size: 3.5rem; opacity: 0.4; }
 .empty-state p { font-size: 0.76rem; line-height: 1.65; }
 
+#tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
 .task-card {
   width: 100%;
+  min-height: 82px;
   background: var(--card);
   border: 1px solid var(--card-bdr);
   border-radius: 16px; padding: 13px 14px;
@@ -800,6 +808,7 @@ body::before {
   backdrop-filter: blur(14px);
   display: flex; align-items: center; gap: 12px;
   position: relative; overflow: hidden;
+  box-sizing: border-box;
 }
 .task-card::before {
   content: ''; position: absolute; inset: 0;
@@ -2347,7 +2356,7 @@ left: 25%;
   </div>
 
   <!-- Dynamic task cards injected here by JS -->
-  <div id="tasks-list"></div>
+  <div id="tasks-list" style="width:100%;display:flex;flex-direction:column;gap:14px;margin-top:4px;"></div>
 </div>
 
 <!-- PAGE: STORE -->
@@ -3100,7 +3109,7 @@ function switchPage(name) {
 }
 
 function syncWithdrawPage() {
-  document.getElementById('wd-bal').textContent = balance.toFixed(4);
+  document.getElementById('wd-bal').textContent = balance.toFixed(6);
   renderHistory();
 }
 
@@ -3110,9 +3119,9 @@ function setWdPct(pct) {
 
 function syncInvitePage() {
   document.getElementById('ref-friends').textContent    = referralFriends;
-  document.getElementById('ref-earned-val').textContent = referralBalance.toFixed(4);
+  document.getElementById('ref-earned-val').textContent = referralBalance.toFixed(6);
   const est = referralFriends > 0 ? referralBalance / referralFriends : 0;
-  document.getElementById('ref-estimate').textContent   = est.toFixed(4);
+  document.getElementById('ref-estimate').textContent   = est.toFixed(6);
   // Refresh ref link in case TG_ID loaded late
   const refEl = document.getElementById('ref-link');
   if (refEl && TG_ID) {
@@ -3218,7 +3227,7 @@ function renderFarm() {
 }
 
 function updateStats() {
-  const balStr = balance.toFixed(4);
+  const balStr = balance.toFixed(6);
   document.getElementById('bal-val').textContent   = balStr;
   document.getElementById('day-val').textContent   = day;
   document.getElementById('seeds-val').textContent = seeds;
@@ -3241,7 +3250,7 @@ function updateStats() {
   const lsHarv = document.getElementById('stat-harvests');
   if (lsHarv) lsHarv.textContent = totalHarvests;
   const lsToday = document.getElementById('stat-today');
-  if (lsToday) lsToday.textContent = todayEarnings.toFixed(4);
+  if (lsToday) lsToday.textContent = todayEarnings.toFixed(6);
   const lsEta = document.getElementById('stat-eta');
   if (lsEta) {
     const growing = cells.find(c => c.state === 'growing' && c.planted_at);
@@ -3316,7 +3325,7 @@ function spawnCoinBurst(cellEl, rewardAmt) {
   // floating "+0.0001" text above cell
   const txt = document.createElement('div');
   txt.className   = 'reward-text';
-  txt.textContent = `+${rewardAmt.toFixed(4)}`;
+  txt.textContent = `+${rewardAmt.toFixed(6)}`;
   cellEl.appendChild(txt);
   txt.addEventListener('animationend', () => txt.remove(), { once: true });
 
@@ -3777,7 +3786,7 @@ function renderHistory() {
         <div class="hi-date">${h.date}</div>
       </div>
       <div class="hi-right">
-        <div class="hi-amount">${h.amount.toFixed(4)} <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"></div>
+        <div class="hi-amount">${h.amount.toFixed(6)} <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"></div>
         <span class="hi-status ${h.status}">${h.status === 'pending' ? '<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Pending' : '✅ Done'}</span>
       </div>
     </div>
@@ -3916,7 +3925,15 @@ async function handleTask(taskId) {
     if (url) {
       if (tg?.openTelegramLink && url.includes('t.me')) tg.openTelegramLink(url);
       else if (tg?.openLink) tg.openLink(url);
-      else window.open(url, '_blank');
+      else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => document.body.removeChild(a), 100);
+      }
     }
 
     _taskState[taskId] = 'opened';
@@ -4140,7 +4157,7 @@ async function _dispatchAction(type, data) {
       playSound('harvest'); updateStats();
       document.getElementById('wd-fastpay').value = '';
       document.getElementById('wd-amount').value  = '';
-      document.getElementById('wd-bal').textContent = balance.toFixed(4);
+      document.getElementById('wd-bal').textContent = balance.toFixed(6);
       renderHistory();
       toast('✅ Withdrawal request submitted!');
       return { ok: true };
@@ -4502,16 +4519,31 @@ setInterval(async () => {
     const result = await _dbCall('get_state');
     if (!result.ok || !result.user) return;
     const u = result.user;
+
+    // تحديث القيم دائماً
     balance         = parseFloat(u.balance)         || 0;
     referralBalance = parseFloat(u.referral_balance) || 0;
     referralFriends = parseInt(u.referral_friends)   || 0;
     todayEarnings   = parseFloat(u.today_earn)       || 0;
     totalHarvests   = parseInt(u.total_harvests)     || 0;
+
+    // تحديث الـ cells فقط إذا تغير الـ state فعلاً
+    let cellsChanged = false;
     const sc = Array.isArray(u.cells) ? u.cells : [];
     if (sc.length === 3) {
-      sc.forEach((sv, i) => { if (cells[i] && cells[i].state !== sv.state) cells[i] = sv; });
+      sc.forEach((sv, i) => {
+        if (cells[i] && cells[i].state !== sv.state) {
+          cells[i] = sv;
+          cellsChanged = true;
+        }
+      });
     }
-    renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
+
+    // تحديث الـ UI بشكل انتقائي
+    updateStats();
+    if (cellsChanged) renderFarm();
+    syncWithdrawPage();
+    syncInvitePage();
   } finally {
     _pollActive = false;
   }
