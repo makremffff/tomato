@@ -72,6 +72,7 @@ async function bootstrap() {
         day               INT           NOT NULL DEFAULT 1,
         shadow_banned     BOOLEAN       NOT NULL DEFAULT FALSE,
         risk_score        INT           NOT NULL DEFAULT 0,
+        photo_url         TEXT,
         created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
         updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       )
@@ -226,6 +227,7 @@ async function bootstrap() {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_friends  INT         NOT NULL DEFAULT 0`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_balance  NUMERIC(18,6) NOT NULL DEFAULT 0`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hard_banned  BOOLEAN       NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url       TEXT`,
     ];
     for (const m of migrations) {
       try { await sql(m); } catch (_) {}
@@ -515,9 +517,9 @@ module.exports = async function handler(req, res) {
 
     // ── إنشاء/تحديث المستخدم أولاً (خارج transaction) ──
     await sql(
-      `INSERT INTO users (telegram_id, username) VALUES ($1, $2)
-       ON CONFLICT (telegram_id) DO UPDATE SET username = $2, updated_at = NOW()`,
-      [tid, tgUser.username || tgUser.first_name || null]
+      `INSERT INTO users (telegram_id, username, photo_url) VALUES ($1, $2, $3)
+       ON CONFLICT (telegram_id) DO UPDATE SET username = $2, photo_url = COALESCE($3, users.photo_url), updated_at = NOW()`,
+      [tid, tgUser.username || tgUser.first_name || null, tgUser.photo_url || null]
     );
 
     // ════════════════════════════════════════════════════════════════
@@ -1180,6 +1182,41 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ ok: false, error: 'Task already rewarded' });
       if (isShadowBanned) return res.status(200).json({ ok: true });
       return completeTask(task, tid, res);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  UPDATE_PHOTO — تحديث صورة المستخدم
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'update_photo') {
+      const { photo_url } = data;
+      if (!photo_url || typeof photo_url !== 'string')
+        return res.status(400).json({ ok: false, error: 'Missing or invalid photo_url' });
+
+      // تحقق بسيط من أن الرابط من Telegram CDN فقط
+      const allowedHosts = ['t.me', 'telegram.org', 'cdn1.telegram-cdn.org', 'cdn2.telegram-cdn.org', 'cdn4.telegram-cdn.org'];
+      let isAllowed = false;
+      try {
+        const parsed = new URL(photo_url);
+        isAllowed = allowedHosts.some(h => parsed.hostname === h || parsed.hostname.endsWith('.' + h));
+      } catch (_) {}
+
+      // إذا لم يكن من Telegram CDN، نقبله فقط إذا كان HTTPS
+      if (!isAllowed) {
+        try {
+          const parsed = new URL(photo_url);
+          if (parsed.protocol !== 'https:')
+            return res.status(400).json({ ok: false, error: 'Only HTTPS URLs are allowed' });
+        } catch (_) {
+          return res.status(400).json({ ok: false, error: 'Invalid URL format' });
+        }
+      }
+
+      await sql(
+        `UPDATE users SET photo_url = $2, updated_at = NOW() WHERE telegram_id = $1`,
+        [tid, photo_url]
+      );
+
+      return res.status(200).json({ ok: true, photo_url });
     }
 
     // ══════════════════════════════════════════════════════════════
