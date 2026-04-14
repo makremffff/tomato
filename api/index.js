@@ -1074,20 +1074,20 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ ok: false, error: 'Invalid ad_type' });
       }
 
-      // ── Cooldown: منع الطلبات المتوازية (5 ثواني بين كل reward) ──
-      const recentReward = await sql(
-        `SELECT created_at FROM security_logs
-         WHERE telegram_id = $1
-           AND action = 'reward_ad'
-           AND verdict = 'allow'
-           AND created_at > NOW() - INTERVAL '5 seconds'
-         LIMIT 1`,
+      // ── Cooldown: منع الطلبات المتوازية (3 ثواني بين كل reward) ──
+      // نستخدم ad_last_reward من جدول users مباشرة — أسرع وأدق من security_logs
+      const cooldownRows = await sql(
+        `SELECT ad_last_reward FROM users WHERE telegram_id = $1`,
         [tid]
       );
-      if (recentReward.length) {
-        await auditLog(tid, ipHash, fingerprint, 'reward_ad', 15, 'deny',
-          { reason: 'cooldown_active', ad_type });
-        return res.status(429).json({ ok: false, error: 'Please wait before claiming another reward' });
+      const lastRewardTime = cooldownRows[0]?.ad_last_reward;
+      if (lastRewardTime) {
+        const elapsedMs = Date.now() - new Date(lastRewardTime).getTime();
+        if (elapsedMs < 3000) {
+          await auditLog(tid, ipHash, fingerprint, 'reward_ad_cooldown', 5, 'deny',
+            { reason: 'cooldown_active', ad_type, elapsed_ms: elapsedMs });
+          return res.status(429).json({ ok: false, error: 'Please wait before claiming another reward' });
+        }
       }
 
       // ── فحص الحد اليومي من security_logs ──
