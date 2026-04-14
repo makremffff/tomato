@@ -228,6 +228,7 @@ async function bootstrap() {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_balance  NUMERIC(18,6) NOT NULL DEFAULT 0`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hard_banned  BOOLEAN       NOT NULL DEFAULT FALSE`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url       TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_last_reward  TIMESTAMPTZ`,
     ];
     for (const m of migrations) {
       try { await sql(m); } catch (_) {}
@@ -1056,10 +1057,14 @@ module.exports = async function handler(req, res) {
       const { ad_type } = data; // 'seed_single' | 'seed_bundle' | 'water'
 
       // ── تحديد نوع المكافأة من السيرفر فقط ──
+      // daily_max: الحد اليومي للوحدات (ليس حد صلب على الـ column)
+      // seed_single: 10 مشاهدات × 1 بذرة = 10 بذور/يوم
+      // seed_bundle: 4 حزم × 7 بذور   = 28 بذرة/يوم
+      // water:       6 مرات × 3 ماء   = 18 ماء/يوم
       const AD_REWARDS = {
         seed_single: { col: 'seeds',       amount: 1, daily_max: 10  },
-        seed_bundle: { col: 'seeds',       amount: 7, daily_max: 21  },
-        water:       { col: 'water_count', amount: 3, daily_max: 9   },
+        seed_bundle: { col: 'seeds',       amount: 7, daily_max: 28  },
+        water:       { col: 'water_count', amount: 3, daily_max: 18  },
       };
 
       const reward = AD_REWARDS[ad_type];
@@ -1067,6 +1072,22 @@ module.exports = async function handler(req, res) {
         await auditLog(tid, ipHash, fingerprint, 'reward_ad_invalid_type', 15, 'deny',
           { ad_type });
         return res.status(400).json({ ok: false, error: 'Invalid ad_type' });
+      }
+
+      // ── Cooldown: منع الطلبات المتوازية (5 ثواني بين كل reward) ──
+      const recentReward = await sql(
+        `SELECT created_at FROM security_logs
+         WHERE telegram_id = $1
+           AND action = 'reward_ad'
+           AND verdict = 'allow'
+           AND created_at > NOW() - INTERVAL '5 seconds'
+         LIMIT 1`,
+        [tid]
+      );
+      if (recentReward.length) {
+        await auditLog(tid, ipHash, fingerprint, 'reward_ad', 15, 'deny',
+          { reason: 'cooldown_active', ad_type });
+        return res.status(429).json({ ok: false, error: 'Please wait before claiming another reward' });
       }
 
       // ── فحص الحد اليومي من security_logs ──
@@ -1096,14 +1117,14 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ ok: true, [reward.col]: fakeRows[0]?.[reward.col] ?? 0 });
       }
 
-      // ── تطبيق المكافأة (LEAST يمنع تجاوز الحد الأقصى) ──
-      const MAX_RESOURCE = 10;
+      // ── تطبيق المكافأة (بدون حد صلب — السقف الوحيد هو الـ daily_max أعلاه) ──
       await sql(
         `UPDATE users
-         SET ${reward.col} = LEAST(${reward.col} + $2, $3),
-             updated_at    = NOW()
+         SET ${reward.col}   = ${reward.col} + $2,
+             ad_last_reward  = NOW(),
+             updated_at      = NOW()
          WHERE telegram_id = $1`,
-        [tid, reward.amount, MAX_RESOURCE]
+        [tid, reward.amount]
       );
 
       const updatedRows = await sql(
