@@ -3542,14 +3542,44 @@ let _adWaterInProgress = false;
 
 // ── Helper: استدعاء reward_ad endpoint بعد نجاح الإعلان ──
 async function _claimAdReward(ad_type) {
+  // ضمان وجود session حديث قبل الطلب
+  if (!_sessionId) {
+    console.warn('[AD_REWARD] No session — creating one...');
+    const ok = await _createSession();
+    if (!ok) {
+      toast('⚠️ Session error. Please reload.');
+      return false;
+    }
+  }
+
+  console.log('[AD_REWARD] Claiming reward for:', ad_type);
   const result = await _dbCall('reward_ad', { ad_type });
+  console.log('[AD_REWARD] Server response:', JSON.stringify(result));
+
   if (!result.ok) {
-    const msg = result.error === 'Daily limit reached'
-      ? '⚠️ Daily limit reached. Come back tomorrow!'
-      : '⚠️ Reward failed. Please try again.';
+    // عرض السبب الحقيقي من السيرفر بدلاً من رسالة عامة
+    const errorMap = {
+      'Daily limit reached':                    '⚠️ Daily limit reached. Come back tomorrow!',
+      'Please wait before claiming another reward': '⏳ Please wait a few seconds before next reward.',
+      'Nonce already used or missing':          '🔄 Security check failed — please try again.',
+      'Invalid or expired session':             '🔄 Session expired — reloading…',
+      'Session mismatch — please re-authenticate': '🔄 Auth error — please reload the app.',
+      'Too many requests':                      '⏳ Too many requests. Wait a moment.',
+      'Invalid ad_type':                        '❌ Invalid ad type.',
+    };
+    const serverErr = result.error || 'unknown';
+    const msg = errorMap[serverErr] || `⚠️ Reward failed: ${serverErr}`;
+    console.warn('[AD_REWARD] Failed:', serverErr);
     toast(msg);
+
+    // إذا كانت جلسة منتهية — حاول تجديدها للمرة القادمة
+    if (serverErr.includes('session') || serverErr.includes('Session')) {
+      _sessionId = null;
+      _createSession();
+    }
     return false;
   }
+
   // تحديث القيم محلياً من رد السيرفر
   if (result.seeds       !== undefined) seeds      = result.seeds;
   if (result.water_count !== undefined) waterCount = result.water_count;
@@ -3644,6 +3674,9 @@ async function _runWatchAd(count) {
   // كل الإعلانات اكتملت ✅ — الآن نطلب المكافأة من السيرفر
   txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Claiming reward…</span>`;
 
+  // ✅ FIX: cooldown 5s لضمان مرور وقت كافٍ بين إعلانات متتالية
+  await new Promise(r => setTimeout(r, 5000));
+
   const claimed = await _claimAdReward(ad_type);
   if (claimed) {
     const seedReward = count === 5 ? 7 : 1;
@@ -3728,6 +3761,9 @@ async function _runWatchWaterAd() {
 
   // كل الإعلانات اكتملت ✅
   txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Claiming reward…</span>`;
+
+  // ✅ FIX: cooldown 5s لضمان مرور وقت كافٍ بعد الإعلان الأخير
+  await new Promise(r => setTimeout(r, 5000));
 
   const claimed = await _claimAdReward('water');
   if (claimed) {
@@ -4275,6 +4311,9 @@ let _sessionId = null;
 
 // ── توليد Nonce فريد لكل طلب ──
 function _genNonce() {
+  // crypto.randomUUID() — أقوى وأبسط (مدعوم في كل المتصفحات الحديثة)
+  if (crypto?.randomUUID) return crypto.randomUUID();
+  // Fallback: 32 بايت عشوائي + timestamp
   const arr = new Uint8Array(16);
   crypto.getRandomValues(arr);
   return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('') + '_' + Date.now();
@@ -4454,13 +4493,25 @@ async function _dbCall(action, data = {}) {
   const needsNonce = !['get_state', 'load'].includes(action);
 
   try {
-    const fpStr = await _buildFingerprint();
+    // ✅ FIX: نستخدم نفس fingerprint في كل الطلبات (cached)
+    const fpStr    = await _buildFingerprint();
+    const initData = tg?.initData || '';
+
     const headers = {
       'Content-Type':  'application/json',
       'X-Fingerprint': fpStr,
     };
+
+    // ✅ FIX: إضافة X-Init-Data في كل طلب (Backend يحتاجه لبعض checks)
+    if (initData) headers['X-Init-Data'] = initData;
+
     if (_sessionId) headers['X-Session-Id'] = _sessionId;
-    if (needsNonce) headers['X-Nonce']      = _genNonce();
+
+    // ✅ FIX: nonce جديد لكل طلب غير read-only — يُولَّد مرة واحدة فقط هنا
+    const nonce = needsNonce ? _genNonce() : null;
+    if (nonce) headers['X-Nonce'] = nonce;
+
+    console.log(`[ZT] ${action} | session=${_sessionId?.slice(0,8) || 'none'} | nonce=${nonce?.slice(0,8) || 'skip'}`);
 
     const res = await fetch(API_BASE + '/api', {
       method: 'POST',
@@ -4468,14 +4519,18 @@ async function _dbCall(action, data = {}) {
       body: JSON.stringify({ action, data })
     });
 
+    // ✅ FIX: عند 401 نجدد الجلسة ونُولّد nonce جديد تلقائياً (لا نعيد نفس الـ nonce)
     if (res.status === 401) {
+      console.warn('[ZT] 401 received — renewing session for:', action);
       _sessionId = null;
       const renewed = await _createSession();
-      if (renewed) return _dbCall(action, data);
+      if (renewed) return _dbCall(action, data); // nonce جديد في الاستدعاء الجديد
       return { ok: false, error: 'auth_failed' };
     }
 
     const json = await res.json();
+    console.log(`[ZT] ${action} response:`, json);
+
     // ── فحص shadow ban من أي رد من السيرفر ──
     if (json.shadow_banned === true || json.is_banned === true) {
       showSecurityWall();
