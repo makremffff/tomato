@@ -3533,8 +3533,8 @@ function harvestAll() {
    ✅ كل reward يمر عبر reward_ad endpoint مع nonce
    ✅ add_resource لا يُستدعى مباشرة من الـ frontend
 ═══════════════════════════════════════════════════════ */
-const ADSGRAM_SEED_BLOCK_ID  = 'int-26836';   // ← blockId بتاع Seeds
-const ADSGRAM_WATER_BLOCK_ID = 'int-26836';   // ← blockId بتاع Water
+const ADSGRAM_SEED_BLOCK_ID  = 'int-27731';   // ← blockId بتاع Seeds
+const ADSGRAM_WATER_BLOCK_ID = 'int-27731';   // ← blockId بتاع Water
 
 const adCooldown = { seed: false, water: false };
 let _adSeedInProgress  = false;
@@ -3561,16 +3561,31 @@ async function _claimAdReward(ad_type) {
 // يُعيد Promise<true> عند النجاح، Promise<false> عند الفشل/الإغلاق
 function _showOneAd(blockId) {
   return new Promise((resolve) => {
-    if (!window.Adsgram) {
-      // خارج تيليغرام — محاكاة للديف
-      setTimeout(() => resolve(true), 1500);
+    // تحقق: هل نحن داخل Telegram WebApp؟
+    if (!tg || !tg.initData) {
+      // خارج تيليغرام — لا إعلانات حقيقية متاحة
+      console.warn('[ADS] Not inside Telegram WebApp — ads unavailable');
+      resolve(false);
       return;
     }
-    // init() جديد قبل كل show() — Adsgram لا يسمح بإعادة استخدام نفس الـ instance
-    const adc = window.Adsgram.init({ blockId });
-    adc.show()
-      .then(() => resolve(true))
-      .catch(() => resolve(false));
+    if (!window.Adsgram) {
+      console.warn('[ADS] Adsgram SDK not loaded');
+      resolve(false);
+      return;
+    }
+    try {
+      // init() جديد قبل كل show() — Adsgram لا يسمح بإعادة استخدام نفس الـ instance
+      const adc = window.Adsgram.init({ blockId });
+      adc.show()
+        .then(() => resolve(true))
+        .catch((err) => {
+          console.warn('[ADS] Ad failed/closed:', err?.message || err);
+          resolve(false);
+        });
+    } catch(e) {
+      console.warn('[ADS] Adsgram.init error:', e.message);
+      resolve(false);
+    }
   });
 }
 
