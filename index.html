@@ -3527,120 +3527,123 @@ function harvestAll() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   ADSGRAM — نظام الإعلانات الحقيقي
-   الإعلانات تُشغَّل ورا بعض تلقائياً (chain) بدون ضغط إضافي
-   Block IDs: استبدل YOUR_SEED_BLOCK_ID و YOUR_WATER_BLOCK_ID
-   بالـ blockId من لوحة تحكم Adsgram
+   ADSGRAM — نظام الإعلانات الحقيقي v2.0 (Zero-Trust)
+   ✅ Adsgram.init() جديد قبل كل show() — لا نخزّن instance
+   ✅ Reward يُعطى فقط بعد .then() ناجح من Adsgram
+   ✅ كل reward يمر عبر reward_ad endpoint مع nonce
+   ✅ add_resource لا يُستدعى مباشرة من الـ frontend
 ═══════════════════════════════════════════════════════ */
-const ADSGRAM_SEED_BLOCK_ID  = 'int-26836';   // ← ضع blockId بتاع Seeds
-const ADSGRAM_WATER_BLOCK_ID = 'int-26836';  // ← ضع blockId بتاع Water
-
-// Controllers — نُهيِّئها مرة واحدة
-// FIX-2: Adsgram يتطلب init() جديد بعد كل show() — لا نخزّن instance
-function getAdcSeed() {
-  if (!window.Adsgram) return null;
-  return window.Adsgram.init({ blockId: ADSGRAM_SEED_BLOCK_ID });
-}
-
-function getAdcWater() {
-  if (!window.Adsgram) return null;
-  return window.Adsgram.init({ blockId: ADSGRAM_WATER_BLOCK_ID });
-}
+const ADSGRAM_SEED_BLOCK_ID  = 'int-26836';   // ← blockId بتاع Seeds
+const ADSGRAM_WATER_BLOCK_ID = 'int-26836';   // ← blockId بتاع Water
 
 const adCooldown = { seed: false, water: false };
-// منع الغلتش: علامة "قيد التنفيذ" مستقلة عن cooldown
 let _adSeedInProgress  = false;
 let _adWaterInProgress = false;
 
-/* ── Seeds ad: واجهة موحّدة عبر fetchApi ── */
+// ── Helper: استدعاء reward_ad endpoint بعد نجاح الإعلان ──
+async function _claimAdReward(ad_type) {
+  const result = await _dbCall('reward_ad', { ad_type });
+  if (!result.ok) {
+    const msg = result.error === 'Daily limit reached'
+      ? '⚠️ Daily limit reached. Come back tomorrow!'
+      : '⚠️ Reward failed. Please try again.';
+    toast(msg);
+    return false;
+  }
+  // تحديث القيم محلياً من رد السيرفر
+  if (result.seeds       !== undefined) seeds      = result.seeds;
+  if (result.water_count !== undefined) waterCount = result.water_count;
+  updateStats();
+  return true;
+}
+
+// ── Helper: تشغيل إعلان واحد من Adsgram ──
+// يُعيد Promise<true> عند النجاح، Promise<false> عند الفشل/الإغلاق
+function _showOneAd(blockId) {
+  return new Promise((resolve) => {
+    if (!window.Adsgram) {
+      // خارج تيليغرام — محاكاة للديف
+      setTimeout(() => resolve(true), 1500);
+      return;
+    }
+    // init() جديد قبل كل show() — Adsgram لا يسمح بإعادة استخدام نفس الـ instance
+    const adc = window.Adsgram.init({ blockId });
+    adc.show()
+      .then(() => resolve(true))
+      .catch(() => resolve(false));
+  });
+}
+
+/* ── Seeds ad ── */
 function watchAd(count) {
   fetchApi({ type: 'watchAdSeed', data: { count } });
 }
 
-function _runWatchAd(count) {
-  // FIX-1: count=5 يُحيل إلى DOM id="ad-btn-3" (زر 7 seeds) — count=1 → "ad-btn-1"
+async function _runWatchAd(count) {
   if (adCooldown.seed || _adSeedInProgress) return;
   _adSeedInProgress = true;
+
   const domId  = count === 5 ? '3' : String(count);
   const btnEl  = document.getElementById('ad-btn-' + domId);
   const txtEl  = document.getElementById('txt-'    + domId);
   const progEl = document.getElementById('prog-'   + domId);
-  // Guard: إذا لم يوجد العنصر — حرّر الـ lock فوراً
+
   if (!btnEl || !txtEl || !progEl) { _adSeedInProgress = false; return; }
 
-  const adc = getAdcSeed();
-  if (!adc) {
-    // Adsgram لم يُحمَّل (خارج تيليغرام) — محاكاة للديفيلوب
-    _simulateAds(count, () => {
-      const seedReward = count === 5 ? 7 : count;
-      const src = count === 5 ? 'ad_seed_bundle' : 'ad_seed_single';
-      _dbAddResource('seeds', seedReward, src).then(() => {
-        playSound('reward');
-        _resetSeedBtn(count, btnEl, txtEl, progEl);
-        toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
-        showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
-          document.getElementById('nb-farm'), 0);
-        _adSeedInProgress = false;
-      });
-    }, () => {
-      _resetSeedBtn(count, btnEl, txtEl, progEl);
-      _adSeedInProgress = false;
-      toast('⚠️ Ad not available, try again later.');
-    });
-    return;
-  }
-
-  adCooldown.seed = true;
-  btnEl.disabled  = true;
+  adCooldown.seed  = true;
+  btnEl.disabled   = true;
   btnEl.classList.add('loading');
-  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad 1/${count}…</span>`;
   progEl.style.width = '0%';
 
+  const ad_type   = count === 5 ? 'seed_bundle' : 'seed_single';
+  const adsNeeded = count === 5 ? 5 : 1;        // عدد الإعلانات المطلوبة
   let watched = 0;
 
-  function showNextAd() {
-    adc.show()
-      .then(() => {
-        watched++;
-        if (watched < count) {
-          // انتظر 6 ثواني قبل تشغيل الإعلان التالي
-          let remaining = 6;
-          txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Next ad in ${remaining}s…</span>`;
-          const countdown = setInterval(() => {
-            remaining--;
-            if (remaining <= 0) {
-              clearInterval(countdown);
-              txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${watched + 1}/${count}…</span>`;
-              showNextAd();
-            } else {
-              txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Next ad in ${remaining}s…</span>`;
-            }
-          }, 1000);
-        } else {
-          // كل الإعلانات اتمشاهدت ✅
-          const seedReward = count === 5 ? 7 : count;
-          const src = count === 5 ? 'ad_seed_bundle' : 'ad_seed_single';
-          _dbAddResource('seeds', seedReward, src).then(() => {
-            playSound('reward');
-            _resetSeedBtn(count, btnEl, txtEl, progEl);
-            toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
-            showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
-              document.getElementById('nb-farm'), 0);
-            setTimeout(() => { adCooldown.seed = false; _adSeedInProgress = false; }, 4000);
-          });
-        }
-      })
-      .catch(() => {
-        // المستخدم أغلق أو حصل خطأ
-        _resetSeedBtn(count, btnEl, txtEl, progEl);
-        adCooldown.seed = false;
-        _adSeedInProgress = false;
-        if (watched > 0) toast(`🌱 Watched ${watched}/${count} ads — try again for full reward.`);
-        else toast('⚠️ Ad not available, try again later.');
-      });
+  for (let i = 0; i < adsNeeded; i++) {
+    // عرض progress
+    txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${i + 1}/${adsNeeded}…</span>`;
+    progEl.style.width = `${Math.round(((i) / adsNeeded) * 100)}%`;
+
+    const success = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
+    if (!success) {
+      // المستخدم أغلق أو خطأ
+      if (watched > 0) toast(`🌱 Watched ${watched}/${adsNeeded} — try again for full reward.`);
+      else              toast('⚠️ Ad not available, try again later.');
+      _resetSeedBtn(count, btnEl, txtEl, progEl);
+      adCooldown.seed = false;
+      _adSeedInProgress = false;
+      return;
+    }
+    watched++;
+    progEl.style.width = `${Math.round((watched / adsNeeded) * 100)}%`;
+
+    // انتظار 6 ثواني بين الإعلانات (ما عدا الأخير)
+    if (i < adsNeeded - 1) {
+      for (let s = 6; s > 0; s--) {
+        txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Next ad in ${s}s…</span>`;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
   }
 
-  showNextAd();
+  // كل الإعلانات اكتملت ✅ — الآن نطلب المكافأة من السيرفر
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Claiming reward…</span>`;
+
+  const claimed = await _claimAdReward(ad_type);
+  if (claimed) {
+    const seedReward = count === 5 ? 7 : 1;
+    playSound('reward');
+    toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
+    showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
+      document.getElementById('nb-farm'), 0);
+  }
+
+  progEl.style.width = '100%';
+  setTimeout(() => {
+    _resetSeedBtn(count, btnEl, txtEl, progEl);
+    adCooldown.seed = false;
+    _adSeedInProgress = false;
+  }, 1500);
 }
 
 function _resetSeedBtn(count, btnEl, txtEl, progEl) {
@@ -3650,39 +3653,27 @@ function _resetSeedBtn(count, btnEl, txtEl, progEl) {
   txtEl.textContent = count === 1 ? '▶ Watch Ad → Get 1 Seed' : '▶▶ Watch 5 Ads → Get 7 Seeds';
 }
 
-/* ── Water ad: واجهة موحّدة عبر fetchApi ── */
+/* ── Water ad ── */
 function watchWaterAd() {
   fetchApi({ type: 'watchAdWater' });
 }
 
-function _runWatchWaterAd() {
+async function _runWatchWaterAd() {
   if (adCooldown.water || _adWaterInProgress) return;
   _adWaterInProgress = true;
+
   const btnEl  = document.getElementById('ad-btn-w');
   const txtEl  = document.getElementById('txt-w');
   const progEl = document.getElementById('prog-w');
   const cntEl  = document.getElementById('water-ad-count');
-  const TOTAL  = 2; // عدد الإعلانات المطلوبة
+  const TOTAL  = 2;
 
-  const adc = getAdcWater();
-  if (!adc) {
-    // محاكاة للديفيلوب
-    _simulateAds(TOTAL, () => {
-      _giveWaterReward(txtEl, progEl, cntEl, btnEl);
-    }, () => {
-      _resetWaterBtn(txtEl, progEl, btnEl);
-      _adWaterInProgress = false;
-      toast('⚠️ Ad not available, try again later.');
-    });
-    return;
-  }
+  if (!btnEl || !txtEl || !progEl) { _adWaterInProgress = false; return; }
 
   adCooldown.water = true;
-  btnEl.disabled = true;
+  btnEl.disabled   = true;
   btnEl.classList.add('loading-w');
   progEl.style.width = '0%';
-
-  let watched = 0;
 
   function _updateDots(n) {
     for (let i = 1; i <= TOTAL; i++) {
@@ -3692,57 +3683,57 @@ function _runWatchWaterAd() {
     if (cntEl) cntEl.textContent = n;
   }
 
-  function showNextWaterAd() {
-    txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${watched + 1}/${TOTAL}…</span>`;
-    adc.show()
-      .then(() => {
-        watched++;
-        _updateDots(watched);
-        if (watched < TOTAL) {
-          // انتظر 6 ثواني قبل تشغيل الإعلان التالي
-          let remaining = 6;
-          txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23" > Next ad in ${remaining}s…</span>`;
-          const countdown = setInterval(() => {
-            remaining--;
-            if (remaining <= 0) {
-              clearInterval(countdown);
-              showNextWaterAd();
-            } else {
-              txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Next ad in ${remaining}s…</span>`;
-            }
-          }, 1000);
-        } else {
-          _giveWaterReward(txtEl, progEl, cntEl, btnEl);
-        }
-      })
-      .catch(() => {
-        _resetWaterBtn(txtEl, progEl, btnEl);
-        adCooldown.water = false;
-        _adWaterInProgress = false;
-        if (watched > 0) toast(`📺 Watched ${watched}/${TOTAL} — try again to complete.`);
-        else toast('⚠️ Ad not available, try again later.');
-      });
+  let watched = 0;
+
+  for (let i = 0; i < TOTAL; i++) {
+    txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${i + 1}/${TOTAL}…</span>`;
+    progEl.style.width = `${Math.round(((i) / TOTAL) * 100)}%`;
+
+    const success = await _showOneAd(ADSGRAM_WATER_BLOCK_ID);
+    if (!success) {
+      if (watched > 0) toast(`📺 Watched ${watched}/${TOTAL} — try again to complete.`);
+      else              toast('⚠️ Ad not available, try again later.');
+      _resetWaterBtn(txtEl, progEl, btnEl);
+      _updateDots(0);
+      adCooldown.water = false;
+      _adWaterInProgress = false;
+      return;
+    }
+    watched++;
+    _updateDots(watched);
+    progEl.style.width = `${Math.round((watched / TOTAL) * 100)}%`;
+
+    if (i < TOTAL - 1) {
+      for (let s = 6; s > 0; s--) {
+        txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Next ad in ${s}s…</span>`;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
   }
 
-  showNextWaterAd();
-}
+  // كل الإعلانات اكتملت ✅
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Claiming reward…</span>`;
 
-function _giveWaterReward(txtEl, progEl, cntEl, btnEl) {
-  _dbAddResource('water', 3, 'ad_water');
-  playSound('reward');
-  _resetWaterBtn(txtEl, progEl, btnEl);
-  // reset dots
-  for (let i = 1; i <= 2; i++) {
-    const d = document.getElementById('wdot-' + i);
-    if (d) d.classList.remove('filled');
+  const claimed = await _claimAdReward('water');
+  if (claimed) {
+    playSound('reward');
+    toast('💧 +3 Waters added! Go water your crops!');
+    showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
+      document.getElementById('nb-farm'), 0);
   }
-  if (cntEl) cntEl.textContent = '0';
-  toast('💧 +3 Waters added! Go water your crops!');
-  showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
-    document.getElementById('nb-farm'), 0);
-  setTimeout(() => { adCooldown.water = false; _adWaterInProgress = false; }, 3000);
-}
 
+  progEl.style.width = '100%';
+  setTimeout(() => {
+    _resetWaterBtn(txtEl, progEl, btnEl);
+    for (let i = 1; i <= TOTAL; i++) {
+      const d = document.getElementById('wdot-' + i);
+      if (d) d.classList.remove('filled');
+    }
+    if (cntEl) cntEl.textContent = '0';
+    adCooldown.water = false;
+    _adWaterInProgress = false;
+  }, 1500);
+}
 
 function _resetWaterBtn(txtEl, progEl, btnEl) {
   btnEl.classList.remove('loading-w');
@@ -3751,18 +3742,6 @@ function _resetWaterBtn(txtEl, progEl, btnEl) {
   txtEl.textContent = '💧 Watch 2 Ads → Get 3 Waters';
 }
 
-/* ── محاكاة للإعلانات خارج تيليغرام (للتطوير فقط) ── */
-function _simulateAds(count, onSuccess, onError) {
-  let i = 0;
-  function next() {
-    i++;
-    setTimeout(() => {
-      if (i < count) { next(); }
-      else { onSuccess(); }
-    }, 1500);
-  }
-  next();
-}
 
 function copyLink() {
   navigator.clipboard?.writeText(document.getElementById('ref-link').value).catch(() => {});
@@ -4534,16 +4513,7 @@ async function loadUser() {
   console.log('[ZT] User loaded via secure session');
 }
 
-// دالة مساعدة للإعلانات — تضيف موارد عبر السيرفر مع source صحيح
-async function _dbAddResource(type, amount, source) {
-  // source يُحدد الكمية في السيرفر — نتجاهل amount هنا (السيرفر يحدده)
-  const result = await _dbCall('add_resource', { type, source: source || 'ad_seed_single' });
-  if (!result.ok) return false;
-  if (type === 'seeds') seeds      = result.seeds      ?? seeds;
-  else                  waterCount = result.water_count ?? waterCount;
-  updateStats();
-  return true;
-}
+
 
 buildFarm();
 
