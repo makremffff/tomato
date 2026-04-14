@@ -3541,17 +3541,28 @@ let _adSeedInProgress  = false;
 let _adWaterInProgress = false;
 
 // ── Helper: استدعاء reward_ad endpoint بعد نجاح الإعلان ──
+let _claimInProgress = false; // منع الطلبات المكررة
+
 async function _claimAdReward(ad_type) {
+  // منع إرسال طلبين في نفس الوقت
+  if (_claimInProgress) {
+    console.warn('[AD_REWARD] Request already in progress — ignored');
+    return false;
+  }
+  _claimInProgress = true;
+
   // ضمان وجود session حديث قبل الطلب
   if (!_sessionId) {
     console.warn('[AD_REWARD] No session — creating one...');
     const ok = await _createSession();
     if (!ok) {
       toast('⚠️ Session error. Please reload.');
+      _claimInProgress = false;
       return false;
     }
   }
 
+  try {
   console.log('[AD_REWARD] Claiming reward for:', ad_type);
   const result = await _dbCall('reward_ad', { ad_type });
   console.log('[AD_REWARD] Server response:', JSON.stringify(result));
@@ -3585,6 +3596,9 @@ async function _claimAdReward(ad_type) {
   if (result.water_count !== undefined) waterCount = result.water_count;
   updateStats();
   return true;
+  } finally {
+    _claimInProgress = false;
+  }
 }
 
 // ── Helper: تشغيل إعلان واحد من Adsgram ──
@@ -3672,14 +3686,12 @@ async function _runWatchAd(count) {
   }
 
   // كل الإعلانات اكتملت ✅ — الآن نطلب المكافأة من السيرفر
-  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Claiming reward…</span>`;
-
-  // ✅ FIX: cooldown 5s لضمان مرور وقت كافٍ بين إعلانات متتالية
-  await new Promise(r => setTimeout(r, 5000));
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> جاري إضافة المكافأة…</span>`;
 
   const claimed = await _claimAdReward(ad_type);
   if (claimed) {
     const seedReward = count === 5 ? 7 : 1;
+    txtEl.innerHTML = `<span class="loadAd">✅ تمت إضافة المكافأة!</span>`;
     playSound('reward');
     toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
     showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
@@ -3760,13 +3772,11 @@ async function _runWatchWaterAd() {
   }
 
   // كل الإعلانات اكتملت ✅
-  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Claiming reward…</span>`;
-
-  // ✅ FIX: cooldown 5s لضمان مرور وقت كافٍ بعد الإعلان الأخير
-  await new Promise(r => setTimeout(r, 5000));
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> جاري إضافة المكافأة…</span>`;
 
   const claimed = await _claimAdReward('water');
   if (claimed) {
+    txtEl.innerHTML = `<span class="loadAd">✅ تمت إضافة المكافأة!</span>`;
     playSound('reward');
     toast('💧 +3 Waters added! Go water your crops!');
     showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
