@@ -72,6 +72,7 @@ async function bootstrap() {
         day               INT           NOT NULL DEFAULT 1,
         shadow_banned     BOOLEAN       NOT NULL DEFAULT FALSE,
         risk_score        INT           NOT NULL DEFAULT 0,
+        photo_url         TEXT,
         created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
         updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       )
@@ -226,6 +227,7 @@ async function bootstrap() {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_friends  INT         NOT NULL DEFAULT 0`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_balance  NUMERIC(18,6) NOT NULL DEFAULT 0`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hard_banned  BOOLEAN       NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url       TEXT`,
     ];
     for (const m of migrations) {
       try { await sql(m); } catch (_) {}
@@ -515,9 +517,9 @@ module.exports = async function handler(req, res) {
 
     // ── إنشاء/تحديث المستخدم أولاً (خارج transaction) ──
     await sql(
-      `INSERT INTO users (telegram_id, username) VALUES ($1, $2)
-       ON CONFLICT (telegram_id) DO UPDATE SET username = $2, updated_at = NOW()`,
-      [tid, tgUser.username || tgUser.first_name || null]
+      `INSERT INTO users (telegram_id, username, photo_url) VALUES ($1, $2, $3)
+       ON CONFLICT (telegram_id) DO UPDATE SET username = $2, photo_url = COALESCE($3, users.photo_url), updated_at = NOW()`,
+      [tid, tgUser.username || tgUser.first_name || null, tgUser.photo_url || null]
     );
 
     // ════════════════════════════════════════════════════════════════
@@ -1033,68 +1035,90 @@ module.exports = async function handler(req, res) {
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  ADD_RESOURCE — بذور/ماء (فقط من مصادر موثّقة)
+    //  ADD_RESOURCE — مغلق من الـ frontend ❌
+    //  يُستخدم فقط داخلياً عبر _internalAddResource()
+    //  أي طلب مباشر من العميل يُرفض فوراً
     // ══════════════════════════════════════════════════════════════
     if (action === 'add_resource') {
-      const type   = data.type;
-      const source = data.source || 'ad_seed_single';
+      await auditLog(tid, ipHash, fingerprint, 'add_resource_blocked', 30, 'deny',
+        { reason: 'direct_call_forbidden', hint: 'use reward_ad instead' });
+      return res.status(403).json({ ok: false, error: 'Use reward_ad action' });
+    }
 
-      if (!['seeds', 'water'].includes(type))
-        return res.status(400).json({ ok: false, error: 'Invalid resource type' });
+    // ══════════════════════════════════════════════════════════════
+    //  REWARD_AD — مكافأة الإعلان الموثّقة (Zero-Trust Ad Reward)
+    //  ✅ يتحقق من session + nonce + fingerprint (تم مسبقاً)
+    //  ✅ يمنع الـ abuse بحد يومي صارم مخزّن في security_logs
+    //  ✅ shadow ban: استجابة ناجحة زائفة بدون تعديل فعلي
+    //  ✅ logging كامل: كل مشاهدة + كل reward + كل رفض
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'reward_ad') {
+      const { ad_type } = data; // 'seed_single' | 'seed_bundle' | 'water'
 
-      // السيرفر يحدد الكمية والحد اليومي لكل مصدر
-      const ALLOWED_AMOUNTS = {
-        ad_seed_single: { seeds: 1,  daily_max: 10 },  // max 10 seeds/day من single ads
-        ad_seed_bundle: { seeds: 7,  daily_max: 21 },  // max 3 bundles/day = 21 seeds
-        ad_water:       { water: 3,  daily_max: 9  },  // max 3 refills/day = 9 water
-        task:           { seeds: 5,  water: 5, daily_max: 999 },
+      // ── تحديد نوع المكافأة من السيرفر فقط ──
+      const AD_REWARDS = {
+        seed_single: { col: 'seeds',       amount: 1, daily_max: 10  },
+        seed_bundle: { col: 'seeds',       amount: 7, daily_max: 21  },
+        water:       { col: 'water_count', amount: 3, daily_max: 9   },
       };
 
-      const resourceType = type === 'seeds' ? 'seeds' : 'water';
-      const allowed      = ALLOWED_AMOUNTS[source];
-      if (!allowed || allowed[resourceType] === undefined)
-        return res.status(400).json({ ok: false, error: 'Invalid source or resource type' });
+      const reward = AD_REWARDS[ad_type];
+      if (!reward) {
+        await auditLog(tid, ipHash, fingerprint, 'reward_ad_invalid_type', 15, 'deny',
+          { ad_type });
+        return res.status(400).json({ ok: false, error: 'Invalid ad_type' });
+      }
 
-      const amount    = allowed[resourceType];
-      const dailyMax  = allowed.daily_max || 999;
-      const today     = todayUTC();
-
-      // فحص الحد اليومي من audit log
-      const todayUsage = await sql(
+      // ── فحص الحد اليومي من security_logs ──
+      const usageRows = await sql(
         `SELECT COALESCE(SUM((detail->>'amount')::int), 0) AS used
          FROM security_logs
          WHERE telegram_id = $1
-           AND action = 'add_resource_' || $2
+           AND action = 'reward_ad'
+           AND detail->>'ad_type' = $2
            AND verdict = 'allow'
            AND created_at >= NOW() - INTERVAL '24 hours'`,
-        [tid, source]
+        [tid, ad_type]
       );
-      const usedToday = parseInt(todayUsage[0]?.used || 0);
-      if (usedToday + amount > dailyMax) {
-        await auditLog(tid, ipHash, fingerprint, 'add_resource_' + source, 10, 'deny',
-          { reason: 'daily_limit', used: usedToday, limit: dailyMax });
-        // Shadow يُعطي استجابة ناجحة زائفة — لا يكشف الحد
+      const usedToday = parseInt(usageRows[0]?.used || 0);
+
+      if (usedToday + reward.amount > reward.daily_max) {
+        await auditLog(tid, ipHash, fingerprint, 'reward_ad', 5, 'deny',
+          { reason: 'daily_limit', ad_type, used: usedToday, limit: reward.daily_max });
         return res.status(200).json({ ok: false, error: 'Daily limit reached' });
       }
 
-      // Shadow ban
-      if (isShadowBanned) return res.status(200).json({ ok: true, [resourceType === 'seeds' ? 'seeds' : 'water_count']: 0 });
+      // ── Shadow ban: رد ناجح زائف ──
+      if (isShadowBanned) {
+        await auditLog(tid, ipHash, fingerprint, 'reward_ad', 0, 'shadow',
+          { ad_type, amount: reward.amount, reason: 'shadow_ban_suppressed' });
+        const fakeRows = await sql(`SELECT ${reward.col} FROM users WHERE telegram_id = $1`, [tid]);
+        return res.status(200).json({ ok: true, [reward.col]: fakeRows[0]?.[reward.col] ?? 0 });
+      }
 
-      const col = type === 'seeds' ? 'seeds' : 'water_count';
-      const MAX = 10;
-
+      // ── تطبيق المكافأة (LEAST يمنع تجاوز الحد الأقصى) ──
+      const MAX_RESOURCE = 10;
       await sql(
-        `UPDATE users SET ${col} = LEAST(${col} + $2, $3), updated_at = NOW() WHERE telegram_id = $1`,
-        [tid, amount, MAX]
+        `UPDATE users
+         SET ${reward.col} = LEAST(${reward.col} + $2, $3),
+             updated_at    = NOW()
+         WHERE telegram_id = $1`,
+        [tid, reward.amount, MAX_RESOURCE]
       );
 
-      const rows = await sql(`SELECT ${col} FROM users WHERE telegram_id = $1`, [tid]);
+      const updatedRows = await sql(
+        `SELECT ${reward.col} FROM users WHERE telegram_id = $1`,
+        [tid]
+      );
+      const newValue = updatedRows[0]?.[reward.col] ?? 0;
 
-      // تسجيل في audit log مع الكمية للحد اليومي
-      await auditLog(tid, ipHash, fingerprint, 'add_resource_' + source, 0, 'allow',
-        { type, amount, source });
+      // ── تسجيل كامل: نوع الإعلان + الكمية + القيمة الجديدة ──
+      await auditLog(tid, ipHash, fingerprint, 'reward_ad', 0, 'allow',
+        { ad_type, amount: reward.amount, new_value: newValue });
 
-      return res.status(200).json({ ok: true, [col]: rows[0]?.[col] });
+      console.log(`[AD_REWARD] tid=${tid} ad_type=${ad_type} +${reward.amount} → ${reward.col}=${newValue}`);
+
+      return res.status(200).json({ ok: true, [reward.col]: newValue });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1180,6 +1204,41 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ ok: false, error: 'Task already rewarded' });
       if (isShadowBanned) return res.status(200).json({ ok: true });
       return completeTask(task, tid, res);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  UPDATE_PHOTO — تحديث صورة المستخدم
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'update_photo') {
+      const { photo_url } = data;
+      if (!photo_url || typeof photo_url !== 'string')
+        return res.status(400).json({ ok: false, error: 'Missing or invalid photo_url' });
+
+      // تحقق بسيط من أن الرابط من Telegram CDN فقط
+      const allowedHosts = ['t.me', 'telegram.org', 'cdn1.telegram-cdn.org', 'cdn2.telegram-cdn.org', 'cdn4.telegram-cdn.org'];
+      let isAllowed = false;
+      try {
+        const parsed = new URL(photo_url);
+        isAllowed = allowedHosts.some(h => parsed.hostname === h || parsed.hostname.endsWith('.' + h));
+      } catch (_) {}
+
+      // إذا لم يكن من Telegram CDN، نقبله فقط إذا كان HTTPS
+      if (!isAllowed) {
+        try {
+          const parsed = new URL(photo_url);
+          if (parsed.protocol !== 'https:')
+            return res.status(400).json({ ok: false, error: 'Only HTTPS URLs are allowed' });
+        } catch (_) {
+          return res.status(400).json({ ok: false, error: 'Invalid URL format' });
+        }
+      }
+
+      await sql(
+        `UPDATE users SET photo_url = $2, updated_at = NOW() WHERE telegram_id = $1`,
+        [tid, photo_url]
+      );
+
+      return res.status(200).json({ ok: true, photo_url });
     }
 
     // ══════════════════════════════════════════════════════════════
