@@ -1763,6 +1763,242 @@ body::before {
   .nb-btn span { font-size: 0.5rem; }
 }
 
+/* ══════════════════════════════════════
+   PROMO PILL BUTTON — in store-res-bar
+══════════════════════════════════════ */
+.promo-pill-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: linear-gradient(135deg, rgba(245,198,62,0.18) 0%, rgba(245,150,30,0.12) 100%);
+  border: 2px solid rgba(245,198,62,0.55);
+  border-radius: 18px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-family: 'DynaPuff', cursive;
+  transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), border-color 0.18s, box-shadow 0.18s;
+  box-shadow: 0 4px 18px rgba(245,198,62,0.22), inset 0 1px 0 rgba(255,235,120,0.18);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  min-width: 68px;
+}
+.promo-pill-btn::before {
+  content: '';
+  position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+  background: linear-gradient(80deg, transparent, rgba(255,220,100,0.22), transparent);
+  transform: skewX(-18deg);
+  animation: promoPillShimmer 3s ease-in-out infinite;
+}
+@keyframes promoPillShimmer { 0%{left:-100%} 40%{left:160%} 100%{left:160%} }
+.promo-pill-btn:active { transform: scale(0.93); }
+.promo-pill-icon { line-height: 1; }
+.promo-pill-icon svg { width: 26px; height: 26px; }
+.promo-pill-label {
+  font-size: 0.52rem; font-weight: 700;
+  color: rgba(245,198,62,0.95);
+  letter-spacing: 1px; text-transform: uppercase;
+}
+
+/* ══════════════════════════════════════
+   PROMO PAGE — Full screen
+══════════════════════════════════════ */
+#page-promo {
+  padding: 0 0 20px;
+  gap: 0;
+  /* ✅ منع تقلص العناصر عند فتح الكيبورد */
+  align-items: center;
+}
+/* الـ pg-item داخل صفحة البرومو لا تنكمش */
+#page-promo .pg-item {
+  flex-shrink: 0;
+}
+/* Input wrapper لا يؤثر على ارتفاع الكارد */
+#page-promo .promo-input-wrap {
+  contain: layout style;
+}
+/* Back row */
+.promo-back-row {
+  width: 100%; padding: 12px 20px 0;
+  display: flex; align-items: center;
+}
+.promo-back-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 22px; padding: 7px 14px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.64rem; font-weight: 700;
+  color: rgba(236,231,222,0.6);
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+.promo-back-btn:active { opacity: 0.65; }
+.promo-back-btn svg { flex-shrink: 0; }
+
+/* Hero */
+.promo-hero {
+  width: 100%; padding: 18px 20px 10px;
+  text-align: center;
+  position: relative;
+}
+.promo-hero-glow {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 200px; height: 120px;
+  background: radial-gradient(ellipse, rgba(245,198,62,0.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+.promo-hero-icon {
+  line-height: 1; margin-bottom: 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+.promo-hero-title {
+  font-size: 1.5rem; font-weight: 700;
+  background: linear-gradient(135deg, #ffe47a 0%, #f5c63e 45%, #d4900e 80%, #f5c63e 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  filter: drop-shadow(0 1px 8px rgba(245,198,62,0.35));
+  margin-bottom: 8px;
+}
+.promo-hero-sub {
+  font-size: 0.65rem; color: rgba(236,231,222,0.50);
+  line-height: 1.6; letter-spacing: 0.3px;
+}
+
+/* Main card */
+.promo-card {
+  width: calc(100% - 32px);
+  background: rgba(4,10,6,0.80);
+  border: 1px solid rgba(245,198,62,0.20);
+  border-radius: 22px;
+  padding: 20px 18px 18px;
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow:
+    0 12px 40px rgba(0,0,0,0.45),
+    inset 0 1px 0 rgba(255,230,100,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.4);
+  display: flex; flex-direction: column; gap: 14px;
+  position: relative; overflow: hidden;
+  /* ✅ FIX: منع الانكماش عند focus الإنبوت */
+  flex-shrink: 0;
+  min-height: 0;
+  contain: layout;
+}
+.promo-card-shimmer {
+  position: absolute; top: 0; left: 10%; right: 10%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(245,198,62,0.55), transparent);
+  pointer-events: none;
+}
+.promo-field-label {
+  font-size: 0.58rem; color: rgba(245,198,62,0.70);
+  text-transform: uppercase; letter-spacing: 2px; font-weight: 700;
+}
+
+/* Input wrapper */
+.promo-input-wrap {
+  display: flex; align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1.5px solid rgba(245,198,62,0.20);
+  border-radius: 14px;
+  padding: 0 12px;
+  transition: border-color 0.22s, box-shadow 0.22s;
+  gap: 8px;
+}
+.promo-input-wrap:focus-within {
+  border-color: rgba(245,198,62,0.55);
+  box-shadow: 0 0 0 3px rgba(245,198,62,0.08), 0 0 16px rgba(245,198,62,0.06);
+}
+.promo-input-prefix { font-size: 1rem; flex-shrink: 0; }
+.promo-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.92rem; font-weight: 700;
+  color: var(--text); padding: 13px 0;
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.promo-input::placeholder {
+  color: rgba(236,231,222,0.22); letter-spacing: 1px;
+  font-size: 0.72rem; font-weight: 400;
+}
+.promo-clear-btn {
+  background: rgba(255,255,255,0.08);
+  border: none; border-radius: 50%;
+  width: 22px; height: 22px; font-size: 0.6rem;
+  color: rgba(236,231,222,0.5);
+  cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.promo-clear-btn:active { background: rgba(255,255,255,0.15); }
+
+/* Status message */
+.promo-msg {
+  font-size: 0.68rem; font-weight: 700;
+  text-align: center; letter-spacing: 0.3px;
+  min-height: 18px;
+  transition: color 0.2s;
+}
+.promo-msg.success { color: var(--green); }
+.promo-msg.error   { color: var(--red); }
+.promo-msg.loading { color: rgba(236,231,222,0.45); }
+
+/* Submit button */
+.promo-submit-btn {
+  width: 100%; padding: 15px 16px;
+  border: none; border-radius: 14px;
+  font-family: 'DynaPuff', cursive;
+  font-size: 0.92rem; font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(135deg, #f7d05a 0%, #f5c63e 40%, #df920a 100%);
+  color: #1a0800;
+  box-shadow: 0 5px 18px rgba(245,198,62,0.28), 0 2px 0 rgba(180,120,0,0.4);
+  position: relative; overflow: hidden;
+  transition: transform 0.15s cubic-bezier(.34,1.56,.64,1), filter 0.15s, box-shadow 0.15s;
+}
+.promo-submit-btn:active { transform: scale(0.97) translateY(1px); filter: brightness(0.92); }
+.promo-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+.promo-submit-shimmer {
+  position: absolute; top: 0; left: -120%; width: 55%; height: 100%;
+  background: linear-gradient(80deg, transparent, rgba(255,255,255,0.30), transparent);
+  transform: skewX(-18deg);
+  animation: promoSubmitShimmer 2.4s ease-in-out infinite;
+}
+@keyframes promoSubmitShimmer { 0%{left:-120%} 40%{left:160%} 100%{left:160%} }
+.promo-submit-text { position: relative; z-index: 1; }
+
+/* Terms note */
+.promo-terms {
+  font-size: 0.52rem; color: rgba(236,231,222,0.28);
+  text-align: center; letter-spacing: 0.3px;
+}
+
+/* Rewards preview */
+.promo-rewards-preview {
+  width: calc(100% - 32px);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 18px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.promo-rewards-title {
+  font-size: 0.58rem; font-weight: 700;
+  color: rgba(236,231,222,0.35);
+  text-transform: uppercase; letter-spacing: 2px;
+  text-align: center;
+}
+.promo-rewards-grid {
+  display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+}
+.promo-reward-chip {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 22px; padding: 5px 13px;
+  font-size: 0.64rem; font-weight: 700;
+  color: rgba(236,231,222,0.55);
+  letter-spacing: 0.3px;
+}
+
 /* ── TOOLTIP HINTS ── */
 .hint-bubble {
   position: fixed;
@@ -2377,6 +2613,19 @@ left: 25%;
         <div class="rp-val" id="store-seeds-val">3</div>
       </div>
     </div>
+
+    <!-- PROMO CODE BUTTON — center between pills -->
+    <button class="promo-pill-btn" onclick="switchPage('promo')">
+      <span class="promo-pill-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" stroke="#f5c63e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="7" cy="7" r="1.5" fill="#f5c63e"/>
+          <path d="M15 9l-6 6" stroke="rgba(245,198,62,0.5)" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="promo-pill-label">Promo</span>
+    </button>
+
     <div class="store-res-pill rp-water">
       <div class="rp-ico-wrap">💧</div>
       <div class="rp-info">
@@ -2469,6 +2718,89 @@ left: 25%;
     <div class="seed-banner"><div class="sb-left"><div class="sb-val" id="store-seeds-val-legacy">3</div></div></div>
     <div class="water-banner"><div class="wb-left"><div class="wb-val" id="store-water-val-legacy">3</div></div></div>
     <div class="store-card"></div>
+  </div>
+
+</div>
+
+<!-- PAGE: PROMO CODE -->
+<div id="page-promo" class="page">
+
+  <!-- Back button -->
+  <div class="promo-back-row pg-item">
+    <button class="promo-back-btn" onclick="switchPage('store')">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      Back to Store
+    </button>
+  </div>
+
+  <!-- Hero -->
+  <div class="promo-hero pg-item">
+    <div class="promo-hero-glow"></div>
+    <div class="promo-hero-icon">
+      <img src="https://a2ad4f2f9s.findolucky.click/image/big-zoom.png" alt="gift" style="width:90px;height:90px;object-fit:contain;filter:drop-shadow(0 0 18px rgba(245,198,62,0.45));">
+    </div>
+    <div class="promo-hero-title">Promo Code</div>
+    <div class="promo-hero-sub">Enter your exclusive code and claim<br>instant bonus resources!</div>
+  </div>
+
+  <!-- Code input card -->
+  <div class="promo-card pg-item">
+    <!-- Shimmer top edge -->
+    <div class="promo-card-shimmer"></div>
+
+    <div class="promo-field-label">Your Code</div>
+    <div class="promo-input-wrap">
+      <span class="promo-input-prefix">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" stroke="rgba(245,198,62,0.7)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="7" cy="7" r="1.5" fill="rgba(245,198,62,0.7)"/>
+        </svg>
+      </span>
+      <input
+        class="promo-input"
+        id="promo-code-input"
+        type="text"
+        placeholder="TOMATO2025"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="characters"
+        spellcheck="false"
+        maxlength="24"
+        oninput="this.value = this.value.toUpperCase(); clearPromoMsg()"
+      >
+      <button class="promo-clear-btn" id="promo-clear" onclick="clearPromoInput()" style="display:none">✕</button>
+    </div>
+
+    <!-- Status message -->
+    <div class="promo-msg" id="promo-msg"></div>
+
+    <!-- Submit button -->
+    <button class="promo-submit-btn" id="promo-submit-btn" onclick="submitPromoCode()">
+      <span class="promo-submit-shimmer"></span>
+      <span class="promo-submit-text" id="promo-submit-txt">✨ Claim Reward</span>
+    </button>
+
+    <!-- Terms note -->
+    <div class="promo-terms">Each code can only be used once per account</div>
+  </div>
+
+  <!-- Rewards preview -->
+  <div class="promo-rewards-preview pg-item">
+    <div class="promo-rewards-title">Possible Rewards</div>
+    <div class="promo-rewards-grid">
+      <div class="promo-reward-chip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10" stroke="#a8e063" stroke-width="2"/><path d="M8 12l3 3 5-5" stroke="#a8e063" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Seeds
+      </div>
+      <div class="promo-reward-chip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:4px"><path d="M12 2C8 8 4 12 4 16a8 8 0 0016 0c0-4-4-8-8-14z" stroke="#81d4fa" stroke-width="2" stroke-linejoin="round" fill="rgba(41,182,246,0.15)"/></svg>Water
+      </div>
+      <div class="promo-reward-chip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:4px"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" stroke="#ffd740" stroke-width="2" stroke-linejoin="round" fill="rgba(255,215,64,0.15)"/></svg>TON
+      </div>
+      <div class="promo-reward-chip">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:4px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#ff9800" stroke-width="2" stroke-linejoin="round" fill="rgba(255,152,0,0.15)"/></svg>Boost
+      </div>
+    </div>
   </div>
 
 </div>
@@ -2598,9 +2930,9 @@ left: 25%;
 
     <!-- Email field -->
     <div class="wd-field">
-      <label class="wd-label">Faucet Pay Email</label>
+      <label class="wd-label">Faucet Pay Email or Ton wallet</label>
       <input class="wd-input" id="wd-fastpay" type="email"
-             placeholder="your@email.com" autocomplete="email">
+             placeholder="your@email.com or UQ...." autocomplete="email">
     </div>
 
     <!-- Amount field -->
@@ -2622,7 +2954,7 @@ left: 25%;
 
     <!-- Submit -->
     <button class="wd-submit" onclick="submitWithdraw()">
-      ⚡ Withdraw via Faucet Pay
+      ⚡ Withdraw via Ton wallet
     </button>
 
     <!-- Meta -->
@@ -3108,10 +3440,15 @@ function showHint(key, text, anchorEl, offsetY = -14) {
 function switchPage(name) {
   document.querySelectorAll('.page').forEach(p  => p.classList.remove('active'));
   document.querySelectorAll('.nb-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('page-' + name).classList.add('active');
-  document.getElementById('nb-'   + name).classList.add('active');
+  const pageEl = document.getElementById('page-' + name);
+  if (!pageEl) return;
+  pageEl.classList.add('active');
 
-  runPageAnim(document.getElementById('page-' + name));
+  // promo page has no navbar button — skip navbar highlight
+  const nbBtn = document.getElementById('nb-' + name);
+  if (nbBtn) nbBtn.classList.add('active');
+
+  runPageAnim(pageEl);
 
   if (name === 'withdraw') syncWithdrawPage();
   if (name === 'store') {
@@ -3129,6 +3466,101 @@ function switchPage(name) {
     setTimeout(() => showHint('farm-first', '👆 Tap any empty plot to plant your first tomato!',
       document.getElementById('farm-grid'), 10), 800);
   }
+  if (name === 'promo') {
+    // reset state when opening promo page
+    clearPromoMsg();
+    const inp = document.getElementById('promo-code-input');
+    if (inp) { inp.value = ''; updatePromoClearBtn(); }
+  }
+}
+
+/* ══════════════════════════════════════
+   PROMO CODE — Logic
+══════════════════════════════════════ */
+
+function updatePromoClearBtn() {
+  const inp = document.getElementById('promo-code-input');
+  const btn = document.getElementById('promo-clear');
+  if (!inp || !btn) return;
+  btn.style.display = inp.value.length > 0 ? 'flex' : 'none';
+}
+
+function clearPromoInput() {
+  const inp = document.getElementById('promo-code-input');
+  if (inp) { inp.value = ''; inp.focus(); }
+  updatePromoClearBtn();
+  clearPromoMsg();
+}
+
+function clearPromoMsg() {
+  const msg = document.getElementById('promo-msg');
+  if (msg) { msg.textContent = ''; msg.className = 'promo-msg'; }
+}
+
+function setPromoMsg(text, type) {
+  const msg = document.getElementById('promo-msg');
+  if (!msg) return;
+  msg.textContent = text;
+  msg.className   = 'promo-msg ' + type;
+}
+
+// Wire up the input to show/hide clear button
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('promo-code-input');
+  if (inp) inp.addEventListener('input', updatePromoClearBtn);
+});
+
+async function submitPromoCode() {
+  const inp    = document.getElementById('promo-code-input');
+  const btn    = document.getElementById('promo-submit-btn');
+  const txt    = document.getElementById('promo-submit-txt');
+  if (!inp) return;
+
+  const code = inp.value.trim().toUpperCase();
+  if (!code) { setPromoMsg('⚠️ Please enter a promo code', 'error'); return; }
+  if (!TG_ID) { setPromoMsg('⚠️ Open in Telegram to use promo codes', 'error'); return; }
+
+  // Disable button + loading state
+  btn.disabled   = true;
+  txt.textContent = '⏳ Checking code...';
+  setPromoMsg('Validating your code…', 'loading');
+
+  try {
+    const result = await _dbCall('redeem_promo', { code });
+
+    if (result.ok) {
+      // Apply rewards
+      if (result.seeds)  { seeds      += parseInt(result.seeds)      || 0; }
+      if (result.water)  { waterCount += parseInt(result.water)       || 0; }
+      if (result.balance){ balance    += parseFloat(result.balance)   || 0; }
+
+      updateStats();
+      inp.value = '';
+      updatePromoClearBtn();
+
+      const reward = result.reward_desc || '🎉 Reward claimed!';
+      setPromoMsg('✅ ' + reward, 'success');
+      txt.textContent = '✨ Claim Reward';
+
+      showToast('🎟️ Promo code applied! ' + reward);
+
+    } else {
+      const errMap = {
+        already_used:   '❌ This code has already been used',
+        invalid_code:   '❌ Invalid promo code',
+        expired:        '⏰ This code has expired',
+        not_found:      '❌ Code not found',
+      };
+      const msg = errMap[result.error] || ('❌ ' + (result.error || 'Invalid code'));
+      setPromoMsg(msg, 'error');
+      txt.textContent = '✨ Claim Reward';
+    }
+  } catch (e) {
+    setPromoMsg('⚠️ Connection error. Try again.', 'error');
+    txt.textContent = '✨ Claim Reward';
+  }
+
+  btn.disabled = false;
 }
 
 function syncWithdrawPage() {
