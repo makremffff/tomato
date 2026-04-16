@@ -1637,10 +1637,12 @@ body::before {
   border: 1px solid rgba(255,255,255,0.09);
   border-radius: 16px; padding: 13px 14px 13px 17px;
   display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   position: relative; overflow: hidden;
   transition: background 0.2s, border-color 0.2s;
+  min-height: 0;
 }
 .history-item:active { background: rgba(255,255,255,0.08); }
 /* accent left bar */
@@ -1658,17 +1660,23 @@ body::before {
   top: 0; left: 0; right: 0; height: 1px;
   background: linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.1) 50%, transparent 90%);
 }
-.hi-left { display: flex; flex-direction: column; gap: 4px; }
-.hi-left .hi-account { font-size: 0.75rem; font-weight: 700; color: rgba(255,255,255,0.9); }
-.hi-left .hi-date    { font-size: 0.57rem; color: rgba(255,255,255,0.35); }
-.hi-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.hi-right .hi-amount {
-  font-size: 0.9rem; font-weight: 700; color: #fff;
-  display: flex; align-items: center; gap: 4px; justify-content: flex-end;
+.hi-left { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
+.hi-left .hi-account {
+  font-size: 0.72rem; font-weight: 700; color: rgba(255,255,255,0.9);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
-.hi-right .hi-status { font-size: 0.55rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; display: inline-block; }
+.hi-left .hi-date    { font-size: 0.55rem; color: rgba(255,255,255,0.35); white-space: nowrap; }
+.hi-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+.hi-right .hi-amount {
+  font-size: 0.88rem; font-weight: 700; color: #fff;
+  display: flex; align-items: center; gap: 4px; justify-content: flex-end;
+  white-space: nowrap;
+}
+.hi-right .hi-status { font-size: 0.55rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; display: inline-block; white-space: nowrap; }
 .hi-status.pending { background: rgba(255,215,64,0.1);  color: #ffd740; border: 1px solid rgba(255,215,64,0.2); }
 .hi-status.done    { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
+.hi-status.rejected { background: rgba(255,80,80,0.1); color: #ff6b6b; border: 1px solid rgba(255,80,80,0.2); }
 
 /* ── COIN REWARD ANIMATION ── */
 @keyframes rewardTextFloat {
@@ -1771,19 +1779,19 @@ body::before {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  background: linear-gradient(135deg, rgba(245,198,62,0.18) 0%, rgba(245,150,30,0.12) 100%);
-  border: 2px solid rgba(245,198,62,0.55);
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(245,198,62,0.28) 0%, rgba(245,150,30,0.20) 100%);
+  border: 2.5px solid rgba(245,198,62,0.80);
   border-radius: 18px;
-  padding: 10px 18px;
+  padding: 12px 20px;
   cursor: pointer;
   font-family: 'DynaPuff', cursive;
   transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), border-color 0.18s, box-shadow 0.18s;
-  box-shadow: 0 4px 18px rgba(245,198,62,0.22), inset 0 1px 0 rgba(255,235,120,0.18);
+  box-shadow: 0 6px 22px rgba(245,198,62,0.38), inset 0 1px 0 rgba(255,235,120,0.28);
   flex-shrink: 0;
   position: relative;
   overflow: hidden;
-  min-width: 68px;
+  min-width: 80px;
 }
 .promo-pill-btn::before {
   content: '';
@@ -1795,11 +1803,12 @@ body::before {
 @keyframes promoPillShimmer { 0%{left:-100%} 40%{left:160%} 100%{left:160%} }
 .promo-pill-btn:active { transform: scale(0.93); }
 .promo-pill-icon { line-height: 1; }
-.promo-pill-icon svg { width: 26px; height: 26px; }
+.promo-pill-icon svg { width: 30px; height: 30px; }
 .promo-pill-label {
-  font-size: 0.52rem; font-weight: 700;
-  color: rgba(245,198,62,0.95);
+  font-size: 0.58rem; font-weight: 700;
+  color: rgba(255,225,80,1.0);
   letter-spacing: 1px; text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(245,198,62,0.5);
 }
 
 /* ══════════════════════════════════════
@@ -1988,7 +1997,7 @@ body::before {
   text-align: center;
 }
 .promo-rewards-grid {
-  display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  display: flex; gap: 8px; justify-content: center; flex-wrap: nowrap; align-items: center;
 }
 .promo-reward-chip {
   background: rgba(255,255,255,0.05);
@@ -2614,6 +2623,17 @@ left: 25%;
       </div>
     </div>
 
+    <!-- PROMO CODE BUTTON — enlarged and clearly visible -->
+    <button class="promo-pill-btn" onclick="switchPage('promo')">
+      <span class="promo-pill-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" stroke="#f5c63e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="7" cy="7" r="1.5" fill="#f5c63e"/>
+          <path d="M15 9l-6 6" stroke="rgba(245,198,62,0.5)" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="promo-pill-label">Redeem</span>
+    </button>
 
     <div class="store-res-pill rp-water">
       <div class="rp-ico-wrap">💧</div>
@@ -2786,9 +2806,7 @@ left: 25%;
       <div class="promo-reward-chip">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:4px"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" stroke="#ffd740" stroke-width="2" stroke-linejoin="round" fill="rgba(255,215,64,0.15)"/></svg>TON
       </div>
-      <div class="promo-reward-chip">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:4px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#ff9800" stroke-width="2" stroke-linejoin="round" fill="rgba(255,152,0,0.15)"/></svg>Boost
-      </div>
+
     </div>
   </div>
 
@@ -4368,18 +4386,31 @@ function renderHistory() {
     list.innerHTML = '<div class="history-empty">No withdrawals yet<br>Your history will appear here</div>';
     return;
   }
-  list.innerHTML = withdrawHistory.map(h => `
+  list.innerHTML = withdrawHistory.map(h => {
+    // Truncate long addresses: show first 6 + ... + last 4
+    const addr = h.account || '';
+    const displayAddr = addr.length > 16
+      ? addr.slice(0, 6) + '…' + addr.slice(-4)
+      : addr;
+    const icon = addr.includes('@') ? '⚡' : '💎';
+    const statusMap = {
+      pending:  `<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Pending`,
+      done:     `✅ Done`,
+      rejected: `❌ Rejected`,
+    };
+    const statusHtml = statusMap[h.status] || statusMap.pending;
+    return `
     <div class="history-item ${h.status}">
       <div class="hi-left">
-        <div class="hi-account">⚡ ${h.account}</div>
+        <div class="hi-account">${icon} ${displayAddr}</div>
         <div class="hi-date">${h.date}</div>
       </div>
       <div class="hi-right">
-        <div class="hi-amount">${h.amount.toFixed(6)} <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"></div>
-        <span class="hi-status ${h.status}">${h.status === 'pending' ? '<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Pending' : '✅ Done'}</span>
+        <div class="hi-amount">${h.amount.toFixed(4)} <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"></div>
+        <span class="hi-status ${h.status}">${statusHtml}</span>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 let toastTimer;
