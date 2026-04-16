@@ -3566,11 +3566,20 @@ async function submitPromoCode() {
 
     for (let i = 0; i < 2; i++) {
       txt.textContent = `📺 Loading Ad ${i + 1}/2…`;
-      const ok = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
-      if (!ok) {
+      const adResult = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
+      if (adResult !== 'ok') {
         btn.disabled = false;
         txt.textContent = '✨ Claim Reward';
-        setPromoMsg('⚠️ Ad failed or closed — please try again', 'error');
+        // رسالة مناسبة حسب سبب الفشل
+        if (adResult === 'no_telegram') {
+          setPromoMsg('⚠️ Open this app inside Telegram to watch ads', 'error');
+        } else if (adResult === 'no_sdk') {
+          setPromoMsg('⚠️ Ad system not ready — please reload and try again', 'error');
+        } else if (adResult === 'closed') {
+          setPromoMsg('⚠️ Ad was closed early — please watch the full ad', 'error');
+        } else {
+          setPromoMsg('⚠️ Ad failed to load — please try again in a moment', 'error');
+        }
         return;
       }
       if (i === 0) {
@@ -3619,6 +3628,7 @@ async function submitPromoCode() {
       toast('🎟️ ' + rewardSummary + ' — added to your account!');
 
     } else {
+      // FIX: رسائل واضحة بدون تكرار ❌
       const errMap = {
         already_used:   '❌ You have already used this code',
         user_limit:     '⚠️ This code has reached its usage limit',
@@ -3627,15 +3637,16 @@ async function submitPromoCode() {
         not_found:      '❌ Invalid or expired code',
         server_error:   '⚠️ Server error — please try again',
       };
-      // Prefer message from server if available, fall back to errMap
-      const msg = result.message
-        ? ('❌ ' + result.message)
-        : (errMap[result.error] || ('❌ ' + (result.error || 'Invalid code')));
-      setPromoMsg(msg, 'error');
+      // استخدم errMap أولاً، ثم message من السيرفر، ثم fallback
+      const errMsg = errMap[result.error]
+        || (result.message ? '❌ ' + result.message : null)
+        || '❌ ' + (result.error || 'Invalid code');
+      setPromoMsg(errMsg, 'error');
       txt.textContent = '✨ Claim Reward';
       _promoAdsDone = false;
     }
   } catch (e) {
+    console.error('[PROMO] submitPromoCode error:', e);
     setPromoMsg('⚠️ Connection error. Try again.', 'error');
     txt.textContent = '✨ Claim Reward';
     _promoAdsDone = false;
@@ -4116,32 +4127,32 @@ async function _claimAdReward(ad_type) {
 
 // ── Helper: show one ad from Adsgram ──
 // Returns Promise<true> on success, Promise<false> on failure/close
+// Returns: 'ok' | 'no_telegram' | 'no_sdk' | 'closed' | 'error'
 function _showOneAd(blockId) {
   return new Promise((resolve) => {
-    // Check: are we inside Telegram WebApp?
     if (!tg || !tg.initData) {
-      // Outside Telegram — no real ads available
-      console.warn('[ADS] Not inside Telegram WebApp — ads unavailable');
-      resolve(false);
+      console.warn('[ADS] Not inside Telegram WebApp');
+      resolve('no_telegram');
       return;
     }
     if (!window.Adsgram) {
       console.warn('[ADS] Adsgram SDK not loaded');
-      resolve(false);
+      resolve('no_sdk');
       return;
     }
     try {
       // Fresh init() before each show() — Adsgram doesn't allow reusing same instance
       const adc = window.Adsgram.init({ blockId });
       adc.show()
-        .then(() => resolve(true))
+        .then(() => resolve('ok'))
         .catch((err) => {
-          console.warn('[ADS] Ad failed/closed:', err?.message || err);
-          resolve(false);
+          const msg = err?.message || String(err) || '';
+          console.warn('[ADS] Ad failed/closed:', msg);
+          resolve(msg.toLowerCase().includes('block') ? 'closed' : 'error');
         });
     } catch(e) {
       console.warn('[ADS] Adsgram.init error:', e.message);
-      resolve(false);
+      resolve('error');
     }
   });
 }
@@ -4177,7 +4188,7 @@ async function _runWatchAd(count) {
     progEl.style.width = `${Math.round(((i) / adsNeeded) * 100)}%`;
 
     const success = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
-    if (!success) {
+    if (success !== 'ok') {
       // User closed or error
       if (watched > 0) toast(`🌱 Watched ${watched}/${adsNeeded} — try again for full reward.`);
       else              toast('⚠️ Ad not available, try again later.');
@@ -4263,7 +4274,7 @@ async function _runWatchWaterAd() {
     progEl.style.width = `${Math.round(((i) / TOTAL) * 100)}%`;
 
     const success = await _showOneAd(ADSGRAM_WATER_BLOCK_ID);
-    if (!success) {
+    if (success !== 'ok') {
       if (watched > 0) toast(`📺 Watched ${watched}/${TOTAL} — try again to complete.`);
       else              toast('⚠️ Ad not available, try again later.');
       _resetWaterBtn(txtEl, progEl, btnEl);
@@ -5207,20 +5218,6 @@ buildFarm();
     setTimeout(() => loadingEl.remove(), 900);
   }
 })();
-
-async function loadUser() {
-  if (!TG_ID) return;
-  await _createSession();
-  const result = await _dbCall('load', {
-    username:    TG_USERNAME || TG_FIRST || null,
-    referral_by: getReferralId()
-  });
-  if (!result.ok || !result.user) return;
-  if (result.user.shadow_banned === true) { showSecurityWall(); return; }
-  _applyUser(result.user);
-  renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
-  await loadAndRenderTasks();
-}
 
 /* ── POLLING — get_state كل 3 ثواني ── */
 let _pollActive = false;
