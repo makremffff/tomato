@@ -1651,7 +1651,9 @@ body::before {
   background: linear-gradient(180deg, rgba(0,200,255,0.85), rgba(0,200,255,0.05));
   border-radius: 16px 0 0 16px;
 }
-.history-item.done::before {
+.history-item.done::before,
+.history-item.completed::before,
+.history-item.approved::before {
   background: linear-gradient(180deg, rgba(105,240,174,0.2), rgba(105,240,174,0.05));
 }
 /* top shine line */
@@ -1674,9 +1676,11 @@ body::before {
   white-space: nowrap;
 }
 .hi-right .hi-status { font-size: 0.55rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; display: inline-block; white-space: nowrap; }
-.hi-status.pending { background: rgba(255,215,64,0.1);  color: #ffd740; border: 1px solid rgba(255,215,64,0.2); }
-.hi-status.done    { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
-.hi-status.rejected { background: rgba(255,80,80,0.1); color: #ff6b6b; border: 1px solid rgba(255,80,80,0.2); }
+.hi-status.pending   { background: rgba(255,215,64,0.1);  color: #ffd740; border: 1px solid rgba(255,215,64,0.2); }
+.hi-status.done      { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
+.hi-status.completed { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
+.hi-status.approved  { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
+.hi-status.rejected  { background: rgba(255,80,80,0.1);   color: #ff6b6b; border: 1px solid rgba(255,80,80,0.2); }
 
 /* ── COIN REWARD ANIMATION ── */
 @keyframes rewardTextFloat {
@@ -2949,7 +2953,7 @@ left: 25%;
           style="flex:1;padding:9px 4px;border-radius:11px;border:1.5px solid rgba(255,255,255,0.1);
                  background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.5);font-family:'DynaPuff',cursive;
                  font-size:0.7rem;font-weight:700;cursor:pointer;transition:all 0.18s;">
-          💎 TON Address
+          <img src="asesst/toncoin.png" width="14" style="vertical-align:middle;margin-right:3px"> TON Address
         </button>
       </div>
       <div id="wd-fp-field">
@@ -3594,32 +3598,41 @@ async function submitPromoCode() {
   try {
     const result = await _dbCall('redeem_promo', { code });
 
-    if (result.ok) {
-      // Apply rewards
-      if (result.seeds)  { seeds      += parseInt(result.seeds)      || 0; }
-      if (result.water)  { waterCount += parseInt(result.water)       || 0; }
-      if (result.balance){ balance    += parseFloat(result.balance)   || 0; }
+    if (result.ok && result.success) {
+      // Apply rewards locally
+      if (result.seeds)   { seeds      += parseInt(result.seeds)    || 0; }
+      if (result.water)   { waterCount += parseInt(result.water)     || 0; }
+      if (result.balance) { balance    += parseFloat(result.balance) || 0; }
 
       updateStats();
       inp.value = '';
       updatePromoClearBtn();
       _promoAdsDone = false;
 
-      const reward = result.reward_desc || '🎉 Reward claimed!';
-      setPromoMsg('✅ ' + reward, 'success');
-      txt.textContent = '✨ Claim Reward';
+      // Build reward summary string
+      const parts = [];
+      if (result.seeds   > 0) parts.push(`+${result.seeds} Seeds`);
+      if (result.water   > 0) parts.push(`+${result.water} Water`);
+      if (result.balance > 0) parts.push(`+${result.balance} TON`);
+      const rewardSummary = parts.length ? parts.join(' · ') : (result.reward_desc || 'Reward claimed!');
 
-      toast('🎟️ Promo code applied! ' + reward);
+      setPromoMsg('✅ Code redeemed successfully! ' + rewardSummary, 'success');
+      txt.textContent = '✨ Claim Reward';
+      toast('🎟️ ' + rewardSummary + ' — added to your account!');
 
     } else {
       const errMap = {
-        already_used:   '❌ This code has already been used',
-        user_limit:     '⚠️ This code has reached its user limit',
-        invalid_code:   '❌ Invalid promo code',
+        already_used:   '❌ You have already used this code',
+        user_limit:     '⚠️ This code has reached its usage limit',
+        invalid_code:   '❌ Invalid promo code format',
         expired:        '⏰ This code has expired',
-        not_found:      '❌ Code not found',
+        not_found:      '❌ Invalid or expired code',
+        server_error:   '⚠️ Server error — please try again',
       };
-      const msg = errMap[result.error] || ('❌ ' + (result.error || 'Invalid code'));
+      // Prefer message from server if available, fall back to errMap
+      const msg = result.message
+        ? ('❌ ' + result.message)
+        : (errMap[result.error] || ('❌ ' + (result.error || 'Invalid code')));
       setPromoMsg(msg, 'error');
       txt.textContent = '✨ Claim Reward';
       _promoAdsDone = false;
@@ -4188,12 +4201,12 @@ async function _runWatchAd(count) {
   }
 
   // All ads completed ✅ — now request reward from server
-  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> جاري إضافة المكافأة…</span>`;
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Adding reward...</span>`;
 
   const claimed = await _claimAdReward(ad_type);
   if (claimed) {
     const seedReward = count === 5 ? 7 : 1;
-    txtEl.innerHTML = `<span class="loadAd">✅ تمت إضافة المكافأة!</span>`;
+    txtEl.innerHTML = `<span class="loadAd">✅ Reward added!</span>`;
     playSound('reward');
     toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
     showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
@@ -4274,11 +4287,11 @@ async function _runWatchWaterAd() {
   }
 
   // كل الإعلانات اكتملت ✅
-  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> جاري إضافة المكافأة…</span>`;
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Adding reward...</span>`;
 
   const claimed = await _claimAdReward('water');
   if (claimed) {
-    txtEl.innerHTML = `<span class="loadAd">✅ تمت إضافة المكافأة!</span>`;
+    txtEl.innerHTML = `<span class="loadAd">✅ Reward added!</span>`;
     playSound('reward');
     toast('💧 +3 Waters added! Go water your crops!');
     showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
@@ -4354,7 +4367,7 @@ function setWdTab(tab) {
     tonF.style.display = '';
     if (methodName) methodName.textContent = 'TON Wallet';
     if (methodSub)  methodSub.textContent  = 'On-chain TON transfer';
-    if (submitTxt)  submitTxt.textContent  = '💎 Withdraw to TON Wallet';
+    if (submitTxt)  submitTxt.innerHTML = '<img src="asesst/toncoin.png" width="14" style="vertical-align:middle;margin-right:4px"> Withdraw to TON Wallet';
   }
 }
 
@@ -4392,11 +4405,13 @@ function renderHistory() {
     const displayAddr = addr.length > 16
       ? addr.slice(0, 6) + '…' + addr.slice(-4)
       : addr;
-    const icon = addr.includes('@') ? '⚡' : '💎';
+    const icon = addr.includes('@') ? '⚡' : '<img src="asesst/toncoin.png" width="13" style="vertical-align:middle">';
     const statusMap = {
-      pending:  `<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Pending`,
-      done:     `✅ Done`,
-      rejected: `❌ Rejected`,
+      pending:   `<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Pending`,
+      completed: `✅ Completed`,
+      approved:  `✅ Approved`,
+      done:      `✅ Done`,
+      rejected:  `❌ Rejected`,
     };
     const statusHtml = statusMap[h.status] || statusMap.pending;
     return `
@@ -4678,7 +4693,7 @@ async function fetchApi({ type, data = {} }) {
 
   } catch (err) {
     console.error('[fetchApi] error:', type, err);
-    toast('⚠️ خطأ: ' + (err.message || type));
+    toast('⚠️ Error: ' + (err.message || type));
     return { ok: false, error: err.message };
   }
 }
@@ -4755,7 +4770,7 @@ async function _dispatchAction(type, data) {
       harvestHistory.push(result.reward ?? TOMATO.reward);
       if (harvestHistory.length > 7) harvestHistory.shift();
       flashEdgeGlow(); updateStats();
-      showHint('harvest-first','✅ Harvested! +0.0001 💎 TON earned.\nPlant again to keep earning!', el, -10);
+      showHint('harvest-first','✅ Harvested! +0.0001 TON earned.\nPlant again to keep earning!', el, -10);
       setTimeout(() => {
         el.classList.remove('harvesting');
         renderFarm(); showSmartHint();
@@ -5225,6 +5240,19 @@ setInterval(async () => {
     referralFriends = parseInt(u.referral_friends)   || 0;
     todayEarnings   = parseFloat(u.today_earn)       || 0;
     totalHarvests   = parseInt(u.total_harvests)     || 0;
+
+    // Sync withdrawal history for real-time status updates (pending → completed/rejected)
+    if (Array.isArray(u.wd_history)) {
+      let historyChanged = false;
+      u.wd_history.forEach((serverEntry, i) => {
+        const local = withdrawHistory[i];
+        if (local && local.status !== serverEntry.status) {
+          withdrawHistory[i] = serverEntry;
+          historyChanged = true;
+        }
+      });
+      if (historyChanged) renderHistory();
+    }
 
     // Update cells only if state actually changed
     let cellsChanged = false;
