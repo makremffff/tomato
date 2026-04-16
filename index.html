@@ -3499,9 +3499,7 @@ function switchPage(name) {
       document.getElementById('farm-grid'), 10), 800);
   }
   if (name === 'promo') {
-    // Reset state when opening promo page
     clearPromoMsg();
-    _promoAdsDone = false;
     const inp = document.getElementById('promo-code-input');
     if (inp) { inp.value = ''; updatePromoClearBtn(); }
     const btn = document.getElementById('promo-submit-btn');
