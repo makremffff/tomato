@@ -1349,80 +1349,210 @@ module.exports = async function handler(req, res) {
     //  REDEEM_PROMO — Promo code redemption with user limit
     // ══════════════════════════════════════════════════════════════
     if (action === 'redeem_promo') {
-      const { code } = data;
-      if (!code || typeof code !== 'string')
-        return res.status(400).json({ ok: false, error: 'invalid_code' });
+      try {
+        const { code } = data;
 
-      const cleanCode = code.trim().toUpperCase().slice(0, 32);
+        // Validate payload
+        if (!code || typeof code !== 'string' || !code.trim()) {
+          return res.status(400).json({
+            ok: false,
+            success: false,
+            error: 'invalid_code',
+            message: 'Invalid or missing promo code'
+          });
+        }
 
-      // Fetch promo code details
-      const promoRows = await sql(
-        `SELECT * FROM promo_codes WHERE code = $1 AND is_active = TRUE`,
-        [cleanCode]
-      );
+        const cleanCode = code.trim().toUpperCase().slice(0, 32);
 
-      if (!promoRows.length)
-        return res.status(200).json({ ok: false, error: 'not_found' });
+        // Validate code format (alphanumeric + dashes only)
+        if (!/^[A-Z0-9_-]{2,32}$/.test(cleanCode)) {
+          return res.status(400).json({
+            ok: false,
+            success: false,
+            error: 'invalid_code',
+            message: 'Invalid code format'
+          });
+        }
 
-      const promo = promoRows[0];
+        // Fetch promo code details
+        const promoRows = await sql(
+          `SELECT * FROM promo_codes WHERE code = $1 AND is_active = TRUE`,
+          [cleanCode]
+        );
 
-      // Check expiry
-      if (promo.expires_at && new Date(promo.expires_at) < new Date())
-        return res.status(200).json({ ok: false, error: 'expired' });
+        if (!promoRows.length) {
+          console.log(`[PROMO] Code not found: ${cleanCode} | user: ${tid}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'not_found',
+            message: 'Invalid or expired code'
+          });
+        }
 
-      // Check user limit (max_uses)
-      if (promo.use_count >= promo.max_uses)
-        return res.status(200).json({ ok: false, error: 'user_limit' });
+        const promo = promoRows[0];
 
-      // Check if this user already used this code
-      const alreadyUsed = await sql(
-        `SELECT 1 FROM promo_redemptions WHERE code = $1 AND telegram_id = $2`,
-        [cleanCode, tid]
-      );
-      if (alreadyUsed.length)
-        return res.status(200).json({ ok: false, error: 'already_used' });
+        // Check expiry
+        if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+          console.log(`[PROMO] Code expired: ${cleanCode} | user: ${tid}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'expired',
+            message: 'Invalid or expired code'
+          });
+        }
 
-      // Shadow ban: fake success
-      if (isShadowBanned)
-        return res.status(200).json({ ok: true, reward_desc: promo.reward_desc || 'Reward claimed!' });
+        // Check global usage limit
+        if (promo.use_count >= promo.max_uses) {
+          console.log(`[PROMO] Code limit reached: ${cleanCode} | use_count=${promo.use_count}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'user_limit',
+            message: 'This code has reached its maximum usage limit'
+          });
+        }
 
-      // Apply rewards
-      await sql(
-        `UPDATE users
-         SET seeds       = seeds + $2,
-             water_count = water_count + $3,
-             balance     = balance + $4,
-             updated_at  = NOW()
-         WHERE telegram_id = $1`,
-        [tid, promo.seeds || 0, promo.water || 0, promo.balance || 0]
-      );
+        // Check if this user already redeemed this code
+        const alreadyUsed = await sql(
+          `SELECT 1 FROM promo_redemptions WHERE code = $1 AND telegram_id = $2`,
+          [cleanCode, tid]
+        );
+        if (alreadyUsed.length) {
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'already_used',
+            message: 'You have already used this code'
+          });
+        }
 
-      // Record redemption
-      await sql(
-        `INSERT INTO promo_redemptions (code, telegram_id) VALUES ($1, $2)`,
-        [cleanCode, tid]
-      );
+        // Shadow ban: fake success (no actual reward applied)
+        if (isShadowBanned) {
+          console.log(`[PROMO] Shadow ban fake success: code=${cleanCode} user=${tid}`);
+          return res.status(200).json({
+            ok: true,
+            success: true,
+            message: 'Code redeemed successfully',
+            reward: promo.reward_desc || 'Reward claimed!',
+            seeds: promo.seeds || 0,
+            water: promo.water || 0,
+            balance: promo.balance || 0,
+            reward_desc: promo.reward_desc || 'Reward claimed!'
+          });
+        }
 
-      // Increment use_count
-      await sql(
-        `UPDATE promo_codes SET use_count = use_count + 1 WHERE code = $1`,
-        [cleanCode]
-      );
+        // Apply rewards atomically
+        await sql(
+          `UPDATE users
+           SET seeds       = seeds + $2,
+               water_count = water_count + $3,
+               balance     = balance + $4,
+               updated_at  = NOW()
+           WHERE telegram_id = $1`,
+          [tid, promo.seeds || 0, promo.water || 0, promo.balance || 0]
+        );
 
-      return res.status(200).json({
-        ok: true,
-        seeds:       promo.seeds   || 0,
-        water:       promo.water   || 0,
-        balance:     promo.balance || 0,
-        reward_desc: promo.reward_desc || 'Reward claimed!'
-      });
+        // Record redemption to prevent re-use
+        await sql(
+          `INSERT INTO promo_redemptions (code, telegram_id) VALUES ($1, $2)`,
+          [cleanCode, tid]
+        );
+
+        // Increment global use counter
+        await sql(
+          `UPDATE promo_codes SET use_count = use_count + 1 WHERE code = $1`,
+          [cleanCode]
+        );
+
+        const rewardAmount = promo.balance || 0;
+        console.log(`[PROMO] Redeemed: code=${cleanCode} user=${tid} seeds=${promo.seeds||0} water=${promo.water||0} balance=${promo.balance||0}`);
+
+        return res.status(200).json({
+          ok: true,
+          success: true,
+          message: 'Code redeemed successfully',
+          reward: rewardAmount,
+          seeds:       promo.seeds   || 0,
+          water:       promo.water   || 0,
+          balance:     promo.balance || 0,
+          reward_desc: promo.reward_desc || 'Reward claimed!'
+        });
+
+      } catch (promoErr) {
+        console.error('[PROMO] Redemption error:', promoErr.message, promoErr.stack);
+        return res.status(500).json({
+          ok: false,
+          success: false,
+          error: 'server_error',
+          message: 'An error occurred while redeeming the code. Please try again.'
+        });
+      }
     }
 
-    return res.status(400).json({ error: 'Unknown action: ' + action });
+    // ══════════════════════════════════════════════════════════════
+    //  UPDATE_WITHDRAWAL — Admin endpoint to approve/reject withdrawals
+    //  Updates status from 'pending' → 'completed' or 'rejected'
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'update_withdrawal') {
+      const { target_tid, date, status: newStatus } = data;
+      const adminKey = req.headers['x-admin-key'] || '';
+
+      // Validate admin key
+      if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+
+      const allowedStatuses = ['completed', 'approved', 'rejected'];
+      if (!allowedStatuses.includes(newStatus)) {
+        return res.status(400).json({ ok: false, error: 'Invalid status. Use: completed, approved, or rejected' });
+      }
+
+      const targetId = parseInt(target_tid);
+      if (isNaN(targetId)) return res.status(400).json({ ok: false, error: 'Invalid target_tid' });
+
+      const rows = await sql('SELECT wd_history FROM users WHERE telegram_id = $1', [targetId]);
+      if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
+
+      const history = Array.isArray(rows[0].wd_history) ? rows[0].wd_history : [];
+      let updated = false;
+
+      // Find withdrawal by date or update the most recent pending one
+      const updatedHistory = history.map(entry => {
+        if (entry.status === 'pending') {
+          if (date && entry.date === date) {
+            updated = true;
+            return { ...entry, status: newStatus, updated_at: new Date().toISOString() };
+          } else if (!date && !updated) {
+            updated = true;
+            return { ...entry, status: newStatus, updated_at: new Date().toISOString() };
+          }
+        }
+        return entry;
+      });
+
+      if (!updated) return res.status(404).json({ ok: false, error: 'No matching pending withdrawal found' });
+
+      await sql(
+        `UPDATE users SET wd_history = $2, updated_at = NOW() WHERE telegram_id = $1`,
+        [targetId, JSON.stringify(updatedHistory)]
+      );
+
+      console.log(`[WITHDRAW] Status updated: user=${targetId} status=${newStatus} date=${date || 'latest'}`);
+      return res.status(200).json({ ok: true, message: `Withdrawal marked as ${newStatus}` });
+    }
+
+    return res.status(400).json({ ok: false, error: 'Unknown action', action });
 
   } catch (err) {
-    console.error('[API Error]', action, err.message, err.stack);
-    return res.status(500).json({ error: 'Server error', detail: err.message });
+    console.error('[API Error]', action || 'unknown', err.message, err.stack);
+    return res.status(500).json({
+      ok: false,
+      error: 'internal_server_error',
+      message: 'An unexpected error occurred. Please try again.',
+      ...(process.env.NODE_ENV !== 'production' && { detail: err.message })
+    });
   }
 };
 
