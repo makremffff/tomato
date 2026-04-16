@@ -234,6 +234,31 @@ async function bootstrap() {
       try { await sql(m); } catch (_) {}
     }
 
+    // ── Promo Codes table ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS promo_codes (
+        code          TEXT          PRIMARY KEY,
+        seeds         INT           NOT NULL DEFAULT 0,
+        water         INT           NOT NULL DEFAULT 0,
+        balance       NUMERIC(18,6) NOT NULL DEFAULT 0,
+        reward_desc   TEXT          NOT NULL DEFAULT '',
+        max_uses      INT           NOT NULL DEFAULT 100,
+        use_count     INT           NOT NULL DEFAULT 0,
+        expires_at    TIMESTAMPTZ,
+        is_active     BOOLEAN       NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await sql(`
+      CREATE TABLE IF NOT EXISTS promo_redemptions (
+        code          TEXT          NOT NULL,
+        telegram_id   BIGINT        NOT NULL,
+        redeemed_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (code, telegram_id)
+      )
+    `);
+
     console.log('[DB] Bootstrap OK — Zero Trust v3.0');
   } catch (e) {
     console.error('[DB] Bootstrap failed:', e.message);
@@ -1266,12 +1291,16 @@ module.exports = async function handler(req, res) {
     //  WITHDRAW
     // ══════════════════════════════════════════════════════════════
     if (action === 'withdraw') {
-      const { account, amount } = data;
+      const { account, amount, method } = data;
       const amt = parseFloat(amount);
+      const wdMethod = method === 'ton' ? 'ton' : 'fp';
 
       if (!account)               return res.status(400).json({ ok: false, error: 'Missing account' });
       if (isNaN(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'Invalid amount' });
       if (amt < 0.05)             return res.status(400).json({ ok: false, error: 'Minimum 0.05 TON' });
+      // Validate TON address format
+      if (wdMethod === 'ton' && !account.startsWith('UQ') && !account.startsWith('EQ'))
+        return res.status(400).json({ ok: false, error: 'Invalid TON address format' });
 
       // Shadow ban: نرفض السحب
       if (isShadowBanned) return res.status(403).json({ ok: false, error: 'Account under review' });
@@ -1283,7 +1312,7 @@ module.exports = async function handler(req, res) {
       // السيرفر يستخدم وقته فقط
       const now     = new Date();
       const dateStr = now.toISOString();
-      const entry   = { account, amount: amt, date: dateStr, status: 'pending' };
+      const entry   = { account, amount: amt, date: dateStr, status: 'pending', method: wdMethod };
       const history = Array.isArray(rows[0].wd_history) ? rows[0].wd_history : [];
       history.unshift(entry);
       if (history.length > 50) history.splice(50);
@@ -1314,6 +1343,79 @@ module.exports = async function handler(req, res) {
       );
 
       return res.status(200).json({ ok: true });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  REDEEM_PROMO — Promo code redemption with user limit
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'redeem_promo') {
+      const { code } = data;
+      if (!code || typeof code !== 'string')
+        return res.status(400).json({ ok: false, error: 'invalid_code' });
+
+      const cleanCode = code.trim().toUpperCase().slice(0, 32);
+
+      // Fetch promo code details
+      const promoRows = await sql(
+        `SELECT * FROM promo_codes WHERE code = $1 AND is_active = TRUE`,
+        [cleanCode]
+      );
+
+      if (!promoRows.length)
+        return res.status(200).json({ ok: false, error: 'not_found' });
+
+      const promo = promoRows[0];
+
+      // Check expiry
+      if (promo.expires_at && new Date(promo.expires_at) < new Date())
+        return res.status(200).json({ ok: false, error: 'expired' });
+
+      // Check user limit (max_uses)
+      if (promo.use_count >= promo.max_uses)
+        return res.status(200).json({ ok: false, error: 'user_limit' });
+
+      // Check if this user already used this code
+      const alreadyUsed = await sql(
+        `SELECT 1 FROM promo_redemptions WHERE code = $1 AND telegram_id = $2`,
+        [cleanCode, tid]
+      );
+      if (alreadyUsed.length)
+        return res.status(200).json({ ok: false, error: 'already_used' });
+
+      // Shadow ban: fake success
+      if (isShadowBanned)
+        return res.status(200).json({ ok: true, reward_desc: promo.reward_desc || 'Reward claimed!' });
+
+      // Apply rewards
+      await sql(
+        `UPDATE users
+         SET seeds       = seeds + $2,
+             water_count = water_count + $3,
+             balance     = balance + $4,
+             updated_at  = NOW()
+         WHERE telegram_id = $1`,
+        [tid, promo.seeds || 0, promo.water || 0, promo.balance || 0]
+      );
+
+      // Record redemption
+      await sql(
+        `INSERT INTO promo_redemptions (code, telegram_id) VALUES ($1, $2)`,
+        [cleanCode, tid]
+      );
+
+      // Increment use_count
+      await sql(
+        `UPDATE promo_codes SET use_count = use_count + 1 WHERE code = $1`,
+        [cleanCode]
+      );
+
+      return res.status(200).json({
+        ok: true,
+        seeds:       promo.seeds   || 0,
+        water:       promo.water   || 0,
+        balance:     promo.balance || 0,
+        reward_desc: promo.reward_desc || 'Reward claimed!'
+      });
     }
 
     return res.status(400).json({ error: 'Unknown action: ' + action });
