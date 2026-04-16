@@ -234,6 +234,31 @@ async function bootstrap() {
       try { await sql(m); } catch (_) {}
     }
 
+    // ── Promo Codes table ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS promo_codes (
+        code          TEXT          PRIMARY KEY,
+        seeds         INT           NOT NULL DEFAULT 0,
+        water         INT           NOT NULL DEFAULT 0,
+        balance       NUMERIC(18,6) NOT NULL DEFAULT 0,
+        reward_desc   TEXT          NOT NULL DEFAULT '',
+        max_uses      INT           NOT NULL DEFAULT 100,
+        use_count     INT           NOT NULL DEFAULT 0,
+        expires_at    TIMESTAMPTZ,
+        is_active     BOOLEAN       NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await sql(`
+      CREATE TABLE IF NOT EXISTS promo_redemptions (
+        code          TEXT          NOT NULL,
+        telegram_id   BIGINT        NOT NULL,
+        redeemed_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (code, telegram_id)
+      )
+    `);
+
     console.log('[DB] Bootstrap OK — Zero Trust v3.0');
   } catch (e) {
     console.error('[DB] Bootstrap failed:', e.message);
@@ -1266,12 +1291,16 @@ module.exports = async function handler(req, res) {
     //  WITHDRAW
     // ══════════════════════════════════════════════════════════════
     if (action === 'withdraw') {
-      const { account, amount } = data;
+      const { account, amount, method } = data;
       const amt = parseFloat(amount);
+      const wdMethod = method === 'ton' ? 'ton' : 'fp';
 
       if (!account)               return res.status(400).json({ ok: false, error: 'Missing account' });
       if (isNaN(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'Invalid amount' });
       if (amt < 0.05)             return res.status(400).json({ ok: false, error: 'Minimum 0.05 TON' });
+      // Validate TON address format
+      if (wdMethod === 'ton' && !account.startsWith('UQ') && !account.startsWith('EQ'))
+        return res.status(400).json({ ok: false, error: 'Invalid TON address format' });
 
       // Shadow ban: نرفض السحب
       if (isShadowBanned) return res.status(403).json({ ok: false, error: 'Account under review' });
@@ -1283,7 +1312,7 @@ module.exports = async function handler(req, res) {
       // السيرفر يستخدم وقته فقط
       const now     = new Date();
       const dateStr = now.toISOString();
-      const entry   = { account, amount: amt, date: dateStr, status: 'pending' };
+      const entry   = { account, amount: amt, date: dateStr, status: 'pending', method: wdMethod };
       const history = Array.isArray(rows[0].wd_history) ? rows[0].wd_history : [];
       history.unshift(entry);
       if (history.length > 50) history.splice(50);
@@ -1316,11 +1345,214 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    return res.status(400).json({ error: 'Unknown action: ' + action });
+    // ══════════════════════════════════════════════════════════════
+    //  REDEEM_PROMO — Promo code redemption with user limit
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'redeem_promo') {
+      try {
+        const { code } = data;
+
+        // Validate payload
+        if (!code || typeof code !== 'string' || !code.trim()) {
+          return res.status(400).json({
+            ok: false,
+            success: false,
+            error: 'invalid_code',
+            message: 'Invalid or missing promo code'
+          });
+        }
+
+        const cleanCode = code.trim().toUpperCase().slice(0, 32);
+
+        // Validate code format (alphanumeric + dashes only)
+        if (!/^[A-Z0-9_-]{2,32}$/.test(cleanCode)) {
+          return res.status(400).json({
+            ok: false,
+            success: false,
+            error: 'invalid_code',
+            message: 'Invalid code format'
+          });
+        }
+
+        // Fetch promo code details
+        const promoRows = await sql(
+          `SELECT * FROM promo_codes WHERE code = $1 AND is_active = TRUE`,
+          [cleanCode]
+        );
+
+        if (!promoRows.length) {
+          console.log(`[PROMO] Code not found: ${cleanCode} | user: ${tid}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'not_found',
+            message: 'Invalid or expired code'
+          });
+        }
+
+        const promo = promoRows[0];
+
+        // Check expiry
+        if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+          console.log(`[PROMO] Code expired: ${cleanCode} | user: ${tid}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'expired',
+            message: 'Invalid or expired code'
+          });
+        }
+
+        // Check global usage limit
+        if (promo.use_count >= promo.max_uses) {
+          console.log(`[PROMO] Code limit reached: ${cleanCode} | use_count=${promo.use_count}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'user_limit',
+            message: 'This code has reached its maximum usage limit'
+          });
+        }
+
+        // Check if this user already redeemed this code
+        const alreadyUsed = await sql(
+          `SELECT 1 FROM promo_redemptions WHERE code = $1 AND telegram_id = $2`,
+          [cleanCode, tid]
+        );
+        if (alreadyUsed.length) {
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'already_used',
+            message: 'You have already used this code'
+          });
+        }
+
+        // Shadow ban: fake success (no actual reward applied)
+        if (isShadowBanned) {
+          console.log(`[PROMO] Shadow ban fake success: code=${cleanCode} user=${tid}`);
+          return res.status(200).json({
+            ok: true,
+            success: true,
+            message: 'Code redeemed successfully',
+            reward: promo.reward_desc || 'Reward claimed!',
+            seeds: promo.seeds || 0,
+            water: promo.water || 0,
+            balance: promo.balance || 0,
+            reward_desc: promo.reward_desc || 'Reward claimed!'
+          });
+        }
+
+        // Apply rewards atomically
+        await sql(
+          `UPDATE users
+           SET seeds       = seeds + $2,
+               water_count = water_count + $3,
+               balance     = balance + $4,
+               updated_at  = NOW()
+           WHERE telegram_id = $1`,
+          [tid, promo.seeds || 0, promo.water || 0, promo.balance || 0]
+        );
+
+        // Record redemption to prevent re-use
+        await sql(
+          `INSERT INTO promo_redemptions (code, telegram_id) VALUES ($1, $2)`,
+          [cleanCode, tid]
+        );
+
+        // Increment global use counter
+        await sql(
+          `UPDATE promo_codes SET use_count = use_count + 1 WHERE code = $1`,
+          [cleanCode]
+        );
+
+        const rewardAmount = promo.balance || 0;
+        console.log(`[PROMO] Redeemed: code=${cleanCode} user=${tid} seeds=${promo.seeds||0} water=${promo.water||0} balance=${promo.balance||0}`);
+
+        return res.status(200).json({
+          ok: true,
+          success: true,
+          message: 'Code redeemed successfully',
+          reward: rewardAmount,
+          seeds:       promo.seeds   || 0,
+          water:       promo.water   || 0,
+          balance:     promo.balance || 0,
+          reward_desc: promo.reward_desc || 'Reward claimed!'
+        });
+
+      } catch (promoErr) {
+        console.error('[PROMO] Redemption error:', promoErr.message, promoErr.stack);
+        return res.status(500).json({
+          ok: false,
+          success: false,
+          error: 'server_error',
+          message: 'An error occurred while redeeming the code. Please try again.'
+        });
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  UPDATE_WITHDRAWAL — Admin endpoint to approve/reject withdrawals
+    //  Updates status from 'pending' → 'completed' or 'rejected'
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'update_withdrawal') {
+      const { target_tid, date, status: newStatus } = data;
+      const adminKey = req.headers['x-admin-key'] || '';
+
+      // Validate admin key
+      if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+
+      const allowedStatuses = ['completed', 'approved', 'rejected'];
+      if (!allowedStatuses.includes(newStatus)) {
+        return res.status(400).json({ ok: false, error: 'Invalid status. Use: completed, approved, or rejected' });
+      }
+
+      const targetId = parseInt(target_tid);
+      if (isNaN(targetId)) return res.status(400).json({ ok: false, error: 'Invalid target_tid' });
+
+      const rows = await sql('SELECT wd_history FROM users WHERE telegram_id = $1', [targetId]);
+      if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
+
+      const history = Array.isArray(rows[0].wd_history) ? rows[0].wd_history : [];
+      let updated = false;
+
+      // Find withdrawal by date or update the most recent pending one
+      const updatedHistory = history.map(entry => {
+        if (entry.status === 'pending') {
+          if (date && entry.date === date) {
+            updated = true;
+            return { ...entry, status: newStatus, updated_at: new Date().toISOString() };
+          } else if (!date && !updated) {
+            updated = true;
+            return { ...entry, status: newStatus, updated_at: new Date().toISOString() };
+          }
+        }
+        return entry;
+      });
+
+      if (!updated) return res.status(404).json({ ok: false, error: 'No matching pending withdrawal found' });
+
+      await sql(
+        `UPDATE users SET wd_history = $2, updated_at = NOW() WHERE telegram_id = $1`,
+        [targetId, JSON.stringify(updatedHistory)]
+      );
+
+      console.log(`[WITHDRAW] Status updated: user=${targetId} status=${newStatus} date=${date || 'latest'}`);
+      return res.status(200).json({ ok: true, message: `Withdrawal marked as ${newStatus}` });
+    }
+
+    return res.status(400).json({ ok: false, error: 'Unknown action', action });
 
   } catch (err) {
-    console.error('[API Error]', action, err.message, err.stack);
-    return res.status(500).json({ error: 'Server error', detail: err.message });
+    console.error('[API Error]', action || 'unknown', err.message, err.stack);
+    return res.status(500).json({
+      ok: false,
+      error: 'internal_server_error',
+      message: 'An unexpected error occurred. Please try again.',
+      ...(process.env.NODE_ENV !== 'production' && { detail: err.message })
+    });
   }
 };
 
