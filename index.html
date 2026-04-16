@@ -1637,10 +1637,12 @@ body::before {
   border: 1px solid rgba(255,255,255,0.09);
   border-radius: 16px; padding: 13px 14px 13px 17px;
   display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   position: relative; overflow: hidden;
   transition: background 0.2s, border-color 0.2s;
+  min-height: 0;
 }
 .history-item:active { background: rgba(255,255,255,0.08); }
 /* accent left bar */
@@ -1649,7 +1651,9 @@ body::before {
   background: linear-gradient(180deg, rgba(0,200,255,0.85), rgba(0,200,255,0.05));
   border-radius: 16px 0 0 16px;
 }
-.history-item.done::before {
+.history-item.done::before,
+.history-item.completed::before,
+.history-item.approved::before {
   background: linear-gradient(180deg, rgba(105,240,174,0.2), rgba(105,240,174,0.05));
 }
 /* top shine line */
@@ -1658,17 +1662,25 @@ body::before {
   top: 0; left: 0; right: 0; height: 1px;
   background: linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.1) 50%, transparent 90%);
 }
-.hi-left { display: flex; flex-direction: column; gap: 4px; }
-.hi-left .hi-account { font-size: 0.75rem; font-weight: 700; color: rgba(255,255,255,0.9); }
-.hi-left .hi-date    { font-size: 0.57rem; color: rgba(255,255,255,0.35); }
-.hi-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.hi-right .hi-amount {
-  font-size: 0.9rem; font-weight: 700; color: #fff;
-  display: flex; align-items: center; gap: 4px; justify-content: flex-end;
+.hi-left { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
+.hi-left .hi-account {
+  font-size: 0.72rem; font-weight: 700; color: rgba(255,255,255,0.9);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
-.hi-right .hi-status { font-size: 0.55rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; display: inline-block; }
-.hi-status.pending { background: rgba(255,215,64,0.1);  color: #ffd740; border: 1px solid rgba(255,215,64,0.2); }
-.hi-status.done    { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
+.hi-left .hi-date    { font-size: 0.55rem; color: rgba(255,255,255,0.35); white-space: nowrap; }
+.hi-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+.hi-right .hi-amount {
+  font-size: 0.88rem; font-weight: 700; color: #fff;
+  display: flex; align-items: center; gap: 4px; justify-content: flex-end;
+  white-space: nowrap;
+}
+.hi-right .hi-status { font-size: 0.55rem; font-weight: 700; padding: 3px 9px; border-radius: 20px; display: inline-block; white-space: nowrap; }
+.hi-status.pending   { background: rgba(255,215,64,0.1);  color: #ffd740; border: 1px solid rgba(255,215,64,0.2); }
+.hi-status.done      { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
+.hi-status.completed { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
+.hi-status.approved  { background: rgba(105,240,174,0.1); color: #69f0ae; border: 1px solid rgba(105,240,174,0.2); }
+.hi-status.rejected  { background: rgba(255,80,80,0.1);   color: #ff6b6b; border: 1px solid rgba(255,80,80,0.2); }
 
 /* ── COIN REWARD ANIMATION ── */
 @keyframes rewardTextFloat {
@@ -1771,19 +1783,19 @@ body::before {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  background: linear-gradient(135deg, rgba(245,198,62,0.18) 0%, rgba(245,150,30,0.12) 100%);
-  border: 2px solid rgba(245,198,62,0.55);
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(245,198,62,0.28) 0%, rgba(245,150,30,0.20) 100%);
+  border: 2.5px solid rgba(245,198,62,0.80);
   border-radius: 18px;
-  padding: 10px 18px;
+  padding: 12px 20px;
   cursor: pointer;
   font-family: 'DynaPuff', cursive;
   transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), border-color 0.18s, box-shadow 0.18s;
-  box-shadow: 0 4px 18px rgba(245,198,62,0.22), inset 0 1px 0 rgba(255,235,120,0.18);
+  box-shadow: 0 6px 22px rgba(245,198,62,0.38), inset 0 1px 0 rgba(255,235,120,0.28);
   flex-shrink: 0;
   position: relative;
   overflow: hidden;
-  min-width: 68px;
+  min-width: 80px;
 }
 .promo-pill-btn::before {
   content: '';
@@ -1795,11 +1807,12 @@ body::before {
 @keyframes promoPillShimmer { 0%{left:-100%} 40%{left:160%} 100%{left:160%} }
 .promo-pill-btn:active { transform: scale(0.93); }
 .promo-pill-icon { line-height: 1; }
-.promo-pill-icon svg { width: 26px; height: 26px; }
+.promo-pill-icon svg { width: 30px; height: 30px; }
 .promo-pill-label {
-  font-size: 0.52rem; font-weight: 700;
-  color: rgba(245,198,62,0.95);
+  font-size: 0.58rem; font-weight: 700;
+  color: rgba(255,225,80,1.0);
   letter-spacing: 1px; text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(245,198,62,0.5);
 }
 
 /* ══════════════════════════════════════
@@ -1856,21 +1869,21 @@ body::before {
 }
 .promo-hero-title {
   font-size: 1.5rem; font-weight: 700;
-  background: linear-gradient(135deg, #ffe47a 0%, #f5c63e 45%, #d4900e 80%, #f5c63e 100%);
+  background: linear-gradient(135deg, #fff176 0%, #ffe44d 40%, #ffab00 80%, #ffe44d 100%);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-  filter: drop-shadow(0 1px 8px rgba(245,198,62,0.35));
+  filter: drop-shadow(0 2px 14px rgba(255,220,0,0.7));
   margin-bottom: 8px;
 }
 .promo-hero-sub {
-  font-size: 0.65rem; color: rgba(236,231,222,0.50);
+  font-size: 0.65rem; color: rgba(255,245,200,0.80);
   line-height: 1.6; letter-spacing: 0.3px;
 }
 
 /* Main card */
 .promo-card {
   width: calc(100% - 32px);
-  background: rgba(4,10,6,0.80);
-  border: 1px solid rgba(245,198,62,0.20);
+  background: rgba(4,10,6,0.88);
+  border: 1px solid rgba(255,230,80,0.45);
   border-radius: 22px;
   padding: 20px 18px 18px;
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -1891,7 +1904,7 @@ body::before {
   pointer-events: none;
 }
 .promo-field-label {
-  font-size: 0.58rem; color: rgba(245,198,62,0.70);
+  font-size: 0.60rem; color: rgba(255,230,60,0.95);
   text-transform: uppercase; letter-spacing: 2px; font-weight: 700;
 }
 
@@ -1906,15 +1919,15 @@ body::before {
   gap: 8px;
 }
 .promo-input-wrap:focus-within {
-  border-color: rgba(245,198,62,0.55);
-  box-shadow: 0 0 0 3px rgba(245,198,62,0.08), 0 0 16px rgba(245,198,62,0.06);
+  border-color: rgba(255,235,80,0.90);
+  box-shadow: 0 0 0 4px rgba(255,220,0,0.15), 0 0 22px rgba(255,200,0,0.18);
 }
 .promo-input-prefix { font-size: 1rem; flex-shrink: 0; }
 .promo-input {
   flex: 1; background: transparent; border: none; outline: none;
   font-family: 'DynaPuff', cursive;
   font-size: 0.92rem; font-weight: 700;
-  color: var(--text); padding: 13px 0;
+  color: #fff8d0; padding: 13px 0;
   letter-spacing: 2px; text-transform: uppercase;
 }
 .promo-input::placeholder {
@@ -1939,9 +1952,9 @@ body::before {
   min-height: 18px;
   transition: color 0.2s;
 }
-.promo-msg.success { color: var(--green); }
-.promo-msg.error   { color: var(--red); }
-.promo-msg.loading { color: rgba(236,231,222,0.45); }
+.promo-msg.success { color: #69f0ae; text-shadow: 0 0 12px rgba(105,240,174,0.6); }
+.promo-msg.error   { color: #ff6b6b; text-shadow: 0 0 10px rgba(255,80,80,0.5); }
+.promo-msg.loading { color: rgba(255,240,180,0.70); }
 
 /* Submit button */
 .promo-submit-btn {
@@ -1950,9 +1963,9 @@ body::before {
   font-family: 'DynaPuff', cursive;
   font-size: 0.92rem; font-weight: 700;
   cursor: pointer;
-  background: linear-gradient(135deg, #f7d05a 0%, #f5c63e 40%, #df920a 100%);
+  background: linear-gradient(135deg, #ffe44d 0%, #ffca28 40%, #ff8f00 100%);
   color: #1a0800;
-  box-shadow: 0 5px 18px rgba(245,198,62,0.28), 0 2px 0 rgba(180,120,0,0.4);
+  box-shadow: 0 6px 24px rgba(255,200,0,0.50), 0 2px 0 rgba(180,100,0,0.5);
   position: relative; overflow: hidden;
   transition: transform 0.15s cubic-bezier(.34,1.56,.64,1), filter 0.15s, box-shadow 0.15s;
 }
@@ -1988,7 +2001,7 @@ body::before {
   text-align: center;
 }
 .promo-rewards-grid {
-  display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+  display: flex; gap: 8px; justify-content: center; flex-wrap: nowrap; align-items: center;
 }
 .promo-reward-chip {
   background: rgba(255,255,255,0.05);
@@ -2614,7 +2627,7 @@ left: 25%;
       </div>
     </div>
 
-    <!-- PROMO CODE BUTTON — center between pills -->
+    <!-- PROMO CODE BUTTON — enlarged and clearly visible -->
     <button class="promo-pill-btn" onclick="switchPage('promo')">
       <span class="promo-pill-icon">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2623,7 +2636,7 @@ left: 25%;
           <path d="M15 9l-6 6" stroke="rgba(245,198,62,0.5)" stroke-width="1.4" stroke-linecap="round"/>
         </svg>
       </span>
-      <span class="promo-pill-label">Promo</span>
+      <span class="promo-pill-label">Redeem</span>
     </button>
 
     <div class="store-res-pill rp-water">
@@ -2797,9 +2810,7 @@ left: 25%;
       <div class="promo-reward-chip">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:4px"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" stroke="#ffd740" stroke-width="2" stroke-linejoin="round" fill="rgba(255,215,64,0.15)"/></svg>TON
       </div>
-      <div class="promo-reward-chip">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:4px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#ff9800" stroke-width="2" stroke-linejoin="round" fill="rgba(255,152,0,0.15)"/></svg>Boost
-      </div>
+
     </div>
   </div>
 
@@ -2918,9 +2929,9 @@ left: 25%;
     <div class="wd-hero-sub">Syncs live after every harvest</div>
     <div class="wd-fp-pill">
       <div class="wd-fp-dot">⚡</div>
-      <div class="wd-fp-info">
-        <div class="wd-fp-name">Faucet Pay</div>
-        <div class="wd-fp-sub">Instant TON micro-payments</div>
+      <div class="wd-fp-info" id="wd-method-pill-info">
+        <div class="wd-fp-name" id="wd-method-name">FaucetPay</div>
+        <div class="wd-fp-sub" id="wd-method-sub">Instant TON micro-payments</div>
       </div>
     </div>
   </div>
@@ -2928,11 +2939,32 @@ left: 25%;
   <!-- ② GLASS FORM CARD -->
   <div class="wd-card pg-item">
 
-    <!-- Email field -->
+    <!-- Withdraw Method Toggle -->
     <div class="wd-field">
-      <label class="wd-label">Faucet Pay Email or Ton wallet</label>
-      <input class="wd-input" id="wd-fastpay" type="email"
-             placeholder="your@email.com or UQ...." autocomplete="email">
+      <label class="wd-label">Withdrawal Method</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button id="wd-tab-fp" onclick="setWdTab('fp')"
+          style="flex:1;padding:9px 4px;border-radius:11px;border:1.5px solid rgba(0,200,255,0.55);
+                 background:rgba(0,200,255,0.15);color:#00e5ff;font-family:'DynaPuff',cursive;
+                 font-size:0.7rem;font-weight:700;cursor:pointer;transition:all 0.18s;">
+          ⚡ FaucetPay
+        </button>
+        <button id="wd-tab-ton" onclick="setWdTab('ton')"
+          style="flex:1;padding:9px 4px;border-radius:11px;border:1.5px solid rgba(255,255,255,0.1);
+                 background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.5);font-family:'DynaPuff',cursive;
+                 font-size:0.7rem;font-weight:700;cursor:pointer;transition:all 0.18s;">
+          <img src="asesst/toncoin.png" width="14" style="vertical-align:middle;margin-right:3px"> TON Address
+        </button>
+      </div>
+      <div id="wd-fp-field">
+        <input class="wd-input" id="wd-fastpay" type="email"
+               placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div id="wd-ton-field" style="display:none;">
+        <input class="wd-input" id="wd-ton-addr" type="text"
+               placeholder="UQ... or EQ... TON wallet address" autocomplete="off"
+               style="font-size:0.74rem;letter-spacing:0.5px;">
+      </div>
     </div>
 
     <!-- Amount field -->
@@ -2954,7 +2986,7 @@ left: 25%;
 
     <!-- Submit -->
     <button class="wd-submit" onclick="submitWithdraw()">
-      ⚡ Withdraw via Ton wallet
+      <span id="wd-submit-txt">⚡ Withdraw via FaucetPay</span>
     </button>
 
     <!-- Meta -->
@@ -3032,17 +3064,17 @@ left: 25%;
 
 /* ═══════════════════════════
    TELEGRAM WEBAPP INIT
-   ✅ SDK يُحمَّل في <head> قبل هذا الكود
+   ✅ SDK is loaded in <head> before this code
 ═══════════════════════════ */
 
-// --- Step 1: تفعيل WebApp وطلب expand ---
+// --- Step 1: Activate WebApp and request expand ---
 const tg = (function() {
   try {
     const app = window.Telegram && window.Telegram.WebApp
                 ? window.Telegram.WebApp : null;
     if (app) {
-      app.ready();    // أبلغ تلغرام إن الـ Mini App جاهز
-      app.expand();   // فتح الـ Mini App بالشاشة الكاملة
+      app.ready();    // Tell Telegram the Mini App is ready
+      app.expand();   // Expand the Mini App to full screen
     }
     return app;
   } catch(e) {
@@ -3051,60 +3083,60 @@ const tg = (function() {
   }
 })();
 
-// --- Step 2: جلب بيانات المستخدم ---
-// الطريقة الصحيحة: initDataUnsafe.user متاح مباشرة بعد ready()
-// ملاحظة: photo_url غير مضمونة في كل إصدارات تلغرام
+// --- Step 2: Fetch user data ---
+// Correct method: initDataUnsafe.user is available directly after ready()
+// Note: photo_url is not guaranteed in all Telegram versions
 const tgUser = (function() {
   try {
-    // ① الطريقة الأولى والأفضل: initDataUnsafe (object جاهز)
+    // ① Best method: initDataUnsafe (ready object)
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
       const u = tg.initDataUnsafe.user;
-      // ✅ تحقق إن البيانات كاملة وليست فارغة
+      // ✅ Verify data is complete and not empty
       if (u.id) return u;
     }
 
-    // ② fallback: parse يدوي لـ initData (نص URL-encoded)
+    // ② fallback: manual parse of initData (URL-encoded string)
     if (tg && tg.initData && tg.initData.length > 0) {
       const params  = new URLSearchParams(tg.initData);
       const userStr = params.get('user');
       if (userStr) {
-        // initData مشفرة مرة واحدة فقط — لا حاجة لـ decodeURIComponent إضافي
+        // initData is encoded once only — no need for extra decodeURIComponent
         const parsed = JSON.parse(userStr);
         if (parsed && parsed.id) return parsed;
       }
     }
-    return null; // لا بيانات متاحة (مفتوح خارج تلغرام)
+    return null; // No data available (opened outside Telegram)
   } catch(e) {
     console.warn('[TG] User parse failed:', e);
     return null;
   }
 })();
 
-// ✅ قيم آمنة مع fallback لكل حقل
+// ✅ Safe values with fallback for each field
 const TG_ID       = tgUser?.id         ? String(tgUser.id)         : '';
 const TG_FIRST    = tgUser?.first_name ? String(tgUser.first_name)  : '';
 const TG_LAST     = tgUser?.last_name  ? String(tgUser.last_name)   : '';
 const TG_USERNAME = tgUser?.username   ? String(tgUser.username)    : '';
-// ⚠️ photo_url: متوفرة فقط في بعض إصدارات تلغرام وليس دائماً
+// ⚠️ photo_url: only available in some Telegram versions, not always
 const TG_PHOTO    = tgUser?.photo_url  ? String(tgUser.photo_url)   : '';
 const TG_FULLNAME = [TG_FIRST, TG_LAST].filter(Boolean).join(' ')   || 'Player';
 
-// للديبق — احذفها في الإنتاج
+// For debugging — remove in production
 console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!TG_PHOTO });
 
-// --- Step 3: عرض الصورة بكل حالاتها ---
+// --- Step 3: Display avatar for all cases ---
 (function setAvatar() {
   const avatarEl = document.getElementById('hud-avatar');
   if (!avatarEl) return;
 
-  // ② fallback: صورة مولّدة من الأحرف الأولى عبر ui-avatars
+  // ② fallback: initials-based avatar via ui-avatars
   function tryInitialsAvatar() {
     const initials = [TG_FIRST, TG_LAST].filter(Boolean).join('+') || TG_USERNAME || 'Player';
     const url = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(initials)
               + '&background=0098ea&color=fff&size=128&bold=true&rounded=true&format=png';
     avatarEl.removeAttribute('crossOrigin'); // لا تضع crossOrigin مع CDN خارجي
     avatarEl.onerror = function() {
-      // ③ آخر fallback: الصورة المحلية
+      // ③ Last fallback: local image
       avatarEl.onerror = null;
       avatarEl.src = 'user.jpg';
     };
@@ -3112,11 +3144,11 @@ console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!T
   }
 
   if (TG_PHOTO) {
-    // ① photo_url من تلغرام — بدون crossOrigin (Telegram CDN لا يدعمه)
+    // ① photo_url from Telegram — without crossOrigin (Telegram CDN doesn't support it)
     avatarEl.removeAttribute('crossOrigin');
     avatarEl.onerror = function() {
       avatarEl.onerror = null;
-      tryInitialsAvatar(); // ← ارجع للـ initials إذا فشل
+      tryInitialsAvatar(); // ← Fall back to initials if it fails
     };
     avatarEl.src = TG_PHOTO;
   } else {
@@ -3124,49 +3156,49 @@ console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!T
   }
 })();
 
-// --- Step 4: تحديث HUD (اسم + ID + رابط الإحالة) ---
+// --- Step 4: Update HUD (name + ID + referral link) ---
 (function setUserInfo() {
-  // ① اسم المستخدم في HUD — اسم أول فقط بدون @username أو ID
+  // ① Username in HUD — first name only, no @username or ID
   const nameEl = document.getElementById('hud-username');
   if (nameEl) {
-    // نعرض أول 4 حروف فقط من الاسم + "..." إذا كان أطول
+    // Show only first 4 characters + "…" if longer
     const full    = TG_FIRST || TG_USERNAME || 'Play';
     const display = full.length > 4 ? full.slice(0, 4) + '…' : full;
     nameEl.textContent = display;
   }
 
-  // ② إخفاء عنصر الـ ID تماماً
+  // ② Hide ID element completely
   const idEl = document.getElementById('hud-user-id');
   if (idEl) {
     idEl.style.display = 'none';
     idEl.textContent = '';
   }
 
-  // ③ رابط الإحالة
+  // ③ Referral link
   const refEl = document.getElementById('ref-link');
   if (refEl) {
-    // FIX: /earn يظهر مرة واحدة فقط
+    // FIX: /earn appears only once
     refEl.value = TG_ID
       ? `https://t.me/tamatoFarm_bot/earn?startapp=ref_${TG_ID}`
       : 'https://t.me/tamatoFarm_bot/earn?startapp=ref_UNKNOWN';
   }
 })();
 
-// ── استخراج referral_by من start_param بشكل موثوق ──
+// ── Reliably extract referral_by from start_param ──
 function getReferralId() {
   try {
-    // ① من initDataUnsafe مباشرة (Mini App عبر startapp=)
+    // ① Directly from initDataUnsafe (Mini App via startapp=)
     const sp = tg?.initDataUnsafe?.start_param || '';
     if (sp) return sp.replace('ref_', '').trim() || null;
 
-    // ② من initData (نص URL-encoded) كـ fallback
+    // ② From initData (URL-encoded string) as fallback
     if (tg?.initData) {
       const params = new URLSearchParams(tg.initData);
       const sp2 = params.get('start_param') || '';
       if (sp2) return sp2.replace('ref_', '').trim() || null;
     }
 
-    // ③ من URL الصفحة نفسها كـ fallback أخير
+    // ③ From page URL as last fallback
     const urlParams = new URLSearchParams(window.location.search);
     const sp3 = urlParams.get('startapp') || urlParams.get('start') || '';
     if (sp3) return sp3.replace('ref_', '').trim() || null;
@@ -3247,10 +3279,10 @@ function playSound(type) {
     master.connect(ctx.destination);
 
     if (type === 'plant') {
-      // ── زراعة: صوت ضربة تراب + طقطقة بذرة + رنين خفيف ──
+      // ── Plant: dirt thud + seed click + soft ring ──
       master.gain.setValueAtTime(0.28, now);
 
-      // 1) ضربة تراب — thud منخفض مع decay سريع
+      // 1) Dirt thud — low thud with fast decay
       const thud = ctx.createOscillator();
       const thudG = ctx.createGain();
       thud.type = 'sine';
@@ -3261,7 +3293,7 @@ function playSound(type) {
       thud.connect(thudG); thudG.connect(master);
       thud.start(now); thud.stop(now + 0.3);
 
-      // 2) طقطقة تراب — noise burst قصير
+      // 2) Dirt crackle — short noise burst
       const nBuf = ctx.createBuffer(1, ctx.sampleRate * 0.08, ctx.sampleRate);
       const nData = nBuf.getChannelData(0);
       for (let i = 0; i < nData.length; i++)
@@ -3276,7 +3308,7 @@ function playSound(type) {
       noise.connect(noiseF); noiseF.connect(noiseG); noiseG.connect(master);
       noise.start(now);
 
-      // 3) نبضة بذرة — ping خفيف بعد الضربة
+      // 3) Seed ping — soft ping after the thud
       const ping = ctx.createOscillator();
       const pingG = ctx.createGain();
       ping.type = 'triangle';
@@ -3351,10 +3383,10 @@ function playSound(type) {
     }
 
     else if (type === 'ready') {
-      // ── محصول جاهز: رنين جرس احتفالي صاعد ──
+      // ── Crop ready: ascending celebratory bell ──
       master.gain.setValueAtTime(0.26, now);
 
-      // نغمة 1 — Do
+      // Note 1 — Do
       const n1 = ctx.createOscillator(); const g1 = ctx.createGain();
       n1.type = 'sine'; n1.frequency.value = 523;
       g1.gain.setValueAtTime(0, now);
@@ -3363,7 +3395,7 @@ function playSound(type) {
       n1.connect(g1); g1.connect(master);
       n1.start(now); n1.stop(now + 0.65);
 
-      // نغمة 2 — Mi (بعد 0.12s)
+      // Note 2 — Mi (after 0.12s)
       const n2 = ctx.createOscillator(); const g2 = ctx.createGain();
       n2.type = 'sine'; n2.frequency.value = 659;
       g2.gain.setValueAtTime(0, now + 0.12);
@@ -3373,7 +3405,7 @@ function playSound(type) {
       n2.start(now + 0.12); n2
       .stop(now + 0.75);
 
-      // نغمة 3 — Sol (بعد 0.24s)
+      // Note 3 — Sol (after 0.24s)
       const n3 = ctx.createOscillator(); const g3 = ctx.createGain();
       n3.type = 'sine'; n3.frequency.value = 784;
       g3.gain.setValueAtTime(0, now + 0.24);
@@ -3382,7 +3414,7 @@ function playSound(type) {
       n3.connect(g3); g3.connect(master);
       n3.start(now + 0.24); n3.stop(now + 0.9);
 
-      // نغمة 4 — Do عالي (بعد 0.38s) — الختام
+      // Note 4 — High Do (after 0.38s) — finale
       const n4 = ctx.createOscillator(); const g4 = ctx.createGain();
       n4.type = 'triangle'; n4.frequency.value = 1047;
       g4.gain.setValueAtTime(0, now + 0.38);
@@ -3391,7 +3423,7 @@ function playSound(type) {
       n4.connect(g4); g4.connect(master);
       n4.start(now + 0.38); n4.stop(now + 1.15);
 
-      // لمسة shimmer فوق — نغمة خافتة جداً
+      // Shimmer touch — very faint note
       const sh = ctx.createOscillator(); const shG = ctx.createGain();
       sh.type = 'sine'; sh.frequency.value = 2093;
       shG.gain.setValueAtTime(0, now + 0.4);
@@ -3467,10 +3499,15 @@ function switchPage(name) {
       document.getElementById('farm-grid'), 10), 800);
   }
   if (name === 'promo') {
-    // reset state when opening promo page
+    // Reset state when opening promo page
     clearPromoMsg();
+    _promoAdsDone = false;
     const inp = document.getElementById('promo-code-input');
     if (inp) { inp.value = ''; updatePromoClearBtn(); }
+    const btn = document.getElementById('promo-submit-btn');
+    const txt = document.getElementById('promo-submit-txt');
+    if (btn) btn.disabled = false;
+    if (txt) txt.textContent = '✨ Claim Reward';
   }
 }
 
@@ -3510,54 +3547,100 @@ document.addEventListener('DOMContentLoaded', () => {
   if (inp) inp.addEventListener('input', updatePromoClearBtn);
 });
 
+// ── Promo Code: watch 2 ads first, then redeem ──
+let _promoAdsDone = false;
+
 async function submitPromoCode() {
-  const inp    = document.getElementById('promo-code-input');
-  const btn    = document.getElementById('promo-submit-btn');
-  const txt    = document.getElementById('promo-submit-txt');
+  const inp = document.getElementById('promo-code-input');
+  const btn = document.getElementById('promo-submit-btn');
+  const txt = document.getElementById('promo-submit-txt');
   if (!inp) return;
 
   const code = inp.value.trim().toUpperCase();
   if (!code) { setPromoMsg('⚠️ Please enter a promo code', 'error'); return; }
   if (!TG_ID) { setPromoMsg('⚠️ Open in Telegram to use promo codes', 'error'); return; }
 
-  // Disable button + loading state
-  btn.disabled   = true;
-  txt.textContent = '⏳ Checking code...';
-  setPromoMsg('Validating your code…', 'loading');
+  // ── Phase 1: Watch 2 ads before redeeming ──
+  if (!_promoAdsDone) {
+    btn.disabled = true;
+    txt.textContent = '📺 Watch Ad 1/2 first…';
+    setPromoMsg('Please watch 2 short ads to unlock redemption', 'loading');
 
+    for (let i = 0; i < 2; i++) {
+      txt.textContent = `📺 Loading Ad ${i + 1}/2…`;
+      const ok = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
+      if (!ok) {
+        btn.disabled = false;
+        txt.textContent = '✨ Claim Reward';
+        setPromoMsg('⚠️ Ad failed or closed — please try again', 'error');
+        return;
+      }
+      if (i === 0) {
+        // 5 second wait between ads
+        for (let s = 5; s > 0; s--) {
+          txt.textContent = `⏳ Next ad in ${s}s…`;
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+    }
+
+    _promoAdsDone = true;
+    txt.textContent = '⏳ Checking code...';
+    setPromoMsg('✅ Ads completed! Validating code…', 'loading');
+  } else {
+    // Disable button + loading state
+    btn.disabled = true;
+    txt.textContent = '⏳ Checking code...';
+    setPromoMsg('Validating your code…', 'loading');
+  }
+
+  // ── Phase 2: Redeem the code ──
   try {
     const result = await _dbCall('redeem_promo', { code });
 
-    if (result.ok) {
-      // Apply rewards
-      if (result.seeds)  { seeds      += parseInt(result.seeds)      || 0; }
-      if (result.water)  { waterCount += parseInt(result.water)       || 0; }
-      if (result.balance){ balance    += parseFloat(result.balance)   || 0; }
+    if (result.ok && result.success) {
+      // Apply rewards locally
+      if (result.seeds)   { seeds      += parseInt(result.seeds)    || 0; }
+      if (result.water)   { waterCount += parseInt(result.water)     || 0; }
+      if (result.balance) { balance    += parseFloat(result.balance) || 0; }
 
       updateStats();
       inp.value = '';
       updatePromoClearBtn();
+      _promoAdsDone = false;
 
-      const reward = result.reward_desc || '🎉 Reward claimed!';
-      setPromoMsg('✅ ' + reward, 'success');
+      // Build reward summary string
+      const parts = [];
+      if (result.seeds   > 0) parts.push(`+${result.seeds} Seeds`);
+      if (result.water   > 0) parts.push(`+${result.water} Water`);
+      if (result.balance > 0) parts.push(`+${result.balance} TON`);
+      const rewardSummary = parts.length ? parts.join(' · ') : (result.reward_desc || 'Reward claimed!');
+
+      setPromoMsg('✅ Code redeemed successfully! ' + rewardSummary, 'success');
       txt.textContent = '✨ Claim Reward';
-
-      showToast('🎟️ Promo code applied! ' + reward);
+      toast('🎟️ ' + rewardSummary + ' — added to your account!');
 
     } else {
       const errMap = {
-        already_used:   '❌ This code has already been used',
-        invalid_code:   '❌ Invalid promo code',
+        already_used:   '❌ You have already used this code',
+        user_limit:     '⚠️ This code has reached its usage limit',
+        invalid_code:   '❌ Invalid promo code format',
         expired:        '⏰ This code has expired',
-        not_found:      '❌ Code not found',
+        not_found:      '❌ Invalid or expired code',
+        server_error:   '⚠️ Server error — please try again',
       };
-      const msg = errMap[result.error] || ('❌ ' + (result.error || 'Invalid code'));
+      // Prefer message from server if available, fall back to errMap
+      const msg = result.message
+        ? ('❌ ' + result.message)
+        : (errMap[result.error] || ('❌ ' + (result.error || 'Invalid code')));
       setPromoMsg(msg, 'error');
       txt.textContent = '✨ Claim Reward';
+      _promoAdsDone = false;
     }
   } catch (e) {
     setPromoMsg('⚠️ Connection error. Try again.', 'error');
     txt.textContent = '✨ Claim Reward';
+    _promoAdsDone = false;
   }
 
   btn.disabled = false;
@@ -3580,12 +3663,12 @@ function syncInvitePage() {
   // Refresh ref link in case TG_ID loaded late
   const refEl = document.getElementById('ref-link');
   if (refEl && TG_ID) {
-    // FIX: /earn يظهر مرة واحدة فقط
+    // FIX: /earn appears only once
     refEl.value = `https://t.me/tamatoFarm_bot/earn?startapp=ref_${TG_ID}`;
   }
 }
 
-/* ── LOCAL TICK — عداد تنازلي محلي فقط، الـ state الحقيقي من السيرفر ── */
+/* ── LOCAL TICK — local countdown only, real state comes from server ── */
 setInterval(() => {
   let changed = false;
   cells.forEach(c => {
@@ -3638,7 +3721,7 @@ function renderFarm() {
     if (c.state !== 'empty' && c.watered) el.classList.add('watered');
     if (c.state === 'ready') el.classList.add('ready');
 
-    // حساب التقدم من planted_at
+    // Calculate progress from planted_at
     let pct = 0;
     if (c.state === 'growing' && c.planted_at) {
       const elapsed  = (Date.now() - new Date(c.planted_at).getTime()) / 1000;
@@ -3648,7 +3731,7 @@ function renderFarm() {
       pct = 100;
     }
 
-    // عداد تنازلي
+    // Countdown timer
     if (cd) {
       if (c.state === 'growing' && c.planted_at) {
         const remSec = Math.max(0, Math.ceil(
@@ -3959,31 +4042,31 @@ function harvestAll() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   ADSGRAM — نظام الإعلانات الحقيقي v2.0 (Zero-Trust)
-   ✅ Adsgram.init() جديد قبل كل show() — لا نخزّن instance
-   ✅ Reward يُعطى فقط بعد .then() ناجح من Adsgram
-   ✅ كل reward يمر عبر reward_ad endpoint مع nonce
-   ✅ add_resource لا يُستدعى مباشرة من الـ frontend
+   ADSGRAM — Real Ad System v2.0 (Zero-Trust)
+   ✅ Fresh Adsgram.init() before each show() — no cached instance
+   ✅ Reward only given after successful .then() from Adsgram
+   ✅ All rewards go through reward_ad endpoint with nonce
+   ✅ add_resource is never called directly from frontend
 ═══════════════════════════════════════════════════════ */
-const ADSGRAM_SEED_BLOCK_ID  = 'int-27731';   // ← blockId بتاع Seeds
-const ADSGRAM_WATER_BLOCK_ID = 'int-27731';   // ← blockId بتاع Water
+const ADSGRAM_SEED_BLOCK_ID  = 'int-27915';   // ← blockId بتاع Seeds
+const ADSGRAM_WATER_BLOCK_ID = 'int-27915';   // ← blockId بتاع Water
 
 const adCooldown = { seed: false, water: false };
 let _adSeedInProgress  = false;
 let _adWaterInProgress = false;
 
-// ── Helper: استدعاء reward_ad endpoint بعد نجاح الإعلان ──
-let _claimInProgress = false; // منع الطلبات المكررة
+// ── Helper: call reward_ad endpoint after successful ad ──
+let _claimInProgress = false; // Prevent duplicate requests
 
 async function _claimAdReward(ad_type) {
-  // منع إرسال طلبين في نفس الوقت
+  // Prevent sending two requests at the same time
   if (_claimInProgress) {
     console.warn('[AD_REWARD] Request already in progress — ignored');
     return false;
   }
   _claimInProgress = true;
 
-  // ضمان وجود session حديث قبل الطلب
+  // Ensure fresh session before request
   if (!_sessionId) {
     console.warn('[AD_REWARD] No session — creating one...');
     const ok = await _createSession();
@@ -4033,13 +4116,13 @@ async function _claimAdReward(ad_type) {
   }
 }
 
-// ── Helper: تشغيل إعلان واحد من Adsgram ──
-// يُعيد Promise<true> عند النجاح، Promise<false> عند الفشل/الإغلاق
+// ── Helper: show one ad from Adsgram ──
+// Returns Promise<true> on success, Promise<false> on failure/close
 function _showOneAd(blockId) {
   return new Promise((resolve) => {
-    // تحقق: هل نحن داخل Telegram WebApp؟
+    // Check: are we inside Telegram WebApp?
     if (!tg || !tg.initData) {
-      // خارج تيليغرام — لا إعلانات حقيقية متاحة
+      // Outside Telegram — no real ads available
       console.warn('[ADS] Not inside Telegram WebApp — ads unavailable');
       resolve(false);
       return;
@@ -4050,7 +4133,7 @@ function _showOneAd(blockId) {
       return;
     }
     try {
-      // init() جديد قبل كل show() — Adsgram لا يسمح بإعادة استخدام نفس الـ instance
+      // Fresh init() before each show() — Adsgram doesn't allow reusing same instance
       const adc = window.Adsgram.init({ blockId });
       adc.show()
         .then(() => resolve(true))
@@ -4091,13 +4174,13 @@ async function _runWatchAd(count) {
   let watched = 0;
 
   for (let i = 0; i < adsNeeded; i++) {
-    // عرض progress
+    // Show progress
     txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${i + 1}/${adsNeeded}…</span>`;
     progEl.style.width = `${Math.round(((i) / adsNeeded) * 100)}%`;
 
     const success = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
     if (!success) {
-      // المستخدم أغلق أو خطأ
+      // User closed or error
       if (watched > 0) toast(`🌱 Watched ${watched}/${adsNeeded} — try again for full reward.`);
       else              toast('⚠️ Ad not available, try again later.');
       _resetSeedBtn(count, btnEl, txtEl, progEl);
@@ -4108,7 +4191,7 @@ async function _runWatchAd(count) {
     watched++;
     progEl.style.width = `${Math.round((watched / adsNeeded) * 100)}%`;
 
-    // انتظار 6 ثواني بين الإعلانات (ما عدا الأخير)
+    // Wait 6 seconds between ads (except last)
     if (i < adsNeeded - 1) {
       for (let s = 6; s > 0; s--) {
         txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Next ad in ${s}s…</span>`;
@@ -4117,13 +4200,13 @@ async function _runWatchAd(count) {
     }
   }
 
-  // كل الإعلانات اكتملت ✅ — الآن نطلب المكافأة من السيرفر
-  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> جاري إضافة المكافأة…</span>`;
+  // All ads completed ✅ — now request reward from server
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Adding reward...</span>`;
 
   const claimed = await _claimAdReward(ad_type);
   if (claimed) {
     const seedReward = count === 5 ? 7 : 1;
-    txtEl.innerHTML = `<span class="loadAd">✅ تمت إضافة المكافأة!</span>`;
+    txtEl.innerHTML = `<span class="loadAd">✅ Reward added!</span>`;
     playSound('reward');
     toast(`🌱 +${seedReward} Seed${seedReward > 1 ? 's' : ''} added!`);
     showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
@@ -4204,11 +4287,11 @@ async function _runWatchWaterAd() {
   }
 
   // كل الإعلانات اكتملت ✅
-  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> جاري إضافة المكافأة…</span>`;
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Adding reward...</span>`;
 
   const claimed = await _claimAdReward('water');
   if (claimed) {
-    txtEl.innerHTML = `<span class="loadAd">✅ تمت إضافة المكافأة!</span>`;
+    txtEl.innerHTML = `<span class="loadAd">✅ Reward added!</span>`;
     playSound('reward');
     toast('💧 +3 Waters added! Go water your crops!');
     showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
@@ -4256,11 +4339,53 @@ function shareLink() {
   }
 }
 
+// ── Withdraw method tab toggle ──
+let _wdTab = 'fp';
+function setWdTab(tab) {
+  _wdTab = tab;
+  const fpBtn  = document.getElementById('wd-tab-fp');
+  const tonBtn = document.getElementById('wd-tab-ton');
+  const fpF    = document.getElementById('wd-fp-field');
+  const tonF   = document.getElementById('wd-ton-field');
+  const methodName = document.getElementById('wd-method-name');
+  const methodSub  = document.getElementById('wd-method-sub');
+  const submitTxt  = document.getElementById('wd-submit-txt');
+  const activeStyle = 'flex:1;padding:9px 4px;border-radius:11px;border:1.5px solid rgba(0,200,255,0.55);background:rgba(0,200,255,0.15);color:#00e5ff;font-family:\'DynaPuff\',cursive;font-size:0.7rem;font-weight:700;cursor:pointer;transition:all 0.18s;';
+  const inactStyle  = 'flex:1;padding:9px 4px;border-radius:11px;border:1.5px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:rgba(255,255,255,0.5);font-family:\'DynaPuff\',cursive;font-size:0.7rem;font-weight:700;cursor:pointer;transition:all 0.18s;';
+  if (tab === 'fp') {
+    fpBtn.style.cssText  = activeStyle;
+    tonBtn.style.cssText = inactStyle;
+    fpF.style.display  = '';
+    tonF.style.display = 'none';
+    if (methodName) methodName.textContent = 'FaucetPay';
+    if (methodSub)  methodSub.textContent  = 'Instant TON micro-payments';
+    if (submitTxt)  submitTxt.textContent  = '⚡ Withdraw via FaucetPay';
+  } else {
+    tonBtn.style.cssText = activeStyle;
+    fpBtn.style.cssText  = inactStyle;
+    fpF.style.display  = 'none';
+    tonF.style.display = '';
+    if (methodName) methodName.textContent = 'TON Wallet';
+    if (methodSub)  methodSub.textContent  = 'On-chain TON transfer';
+    if (submitTxt)  submitTxt.innerHTML = '<img src="asesst/toncoin.png" width="14" style="vertical-align:middle;margin-right:4px"> Withdraw to TON Wallet';
+  }
+}
+
 function submitWithdraw() {
   if (_lock('withdraw', 2500)) return;
-  const account = document.getElementById('wd-fastpay').value.trim();
+  let account;
+  if (_wdTab === 'fp') {
+    account = document.getElementById('wd-fastpay').value.trim();
+    if (!account) { playSound('error'); toast('❌ Enter your FaucetPay email!'); return; }
+  } else {
+    account = document.getElementById('wd-ton-addr').value.trim();
+    if (!account) { playSound('error'); toast('❌ Enter your TON wallet address!'); return; }
+    if (!account.startsWith('UQ') && !account.startsWith('EQ')) {
+      playSound('error'); toast('❌ Invalid TON address! Must start with UQ or EQ'); return;
+    }
+  }
   const amount  = parseFloat(document.getElementById('wd-amount').value);
-  fetchApi({ type: 'withdraw', data: { account, amount } });
+  fetchApi({ type: 'withdraw', data: { account, amount, method: _wdTab } });
 }
 
 function renderHistory() {
@@ -4274,18 +4399,33 @@ function renderHistory() {
     list.innerHTML = '<div class="history-empty">No withdrawals yet<br>Your history will appear here</div>';
     return;
   }
-  list.innerHTML = withdrawHistory.map(h => `
+  list.innerHTML = withdrawHistory.map(h => {
+    // Truncate long addresses: show first 6 + ... + last 4
+    const addr = h.account || '';
+    const displayAddr = addr.length > 16
+      ? addr.slice(0, 6) + '…' + addr.slice(-4)
+      : addr;
+    const icon = addr.includes('@') ? '⚡' : '<img src="asesst/toncoin.png" width="13" style="vertical-align:middle">';
+    const statusMap = {
+      pending:   `<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Pending`,
+      completed: `✅ Completed`,
+      approved:  `✅ Approved`,
+      done:      `✅ Done`,
+      rejected:  `❌ Rejected`,
+    };
+    const statusHtml = statusMap[h.status] || statusMap.pending;
+    return `
     <div class="history-item ${h.status}">
       <div class="hi-left">
-        <div class="hi-account">⚡ ${h.account}</div>
+        <div class="hi-account">${icon} ${displayAddr}</div>
         <div class="hi-date">${h.date}</div>
       </div>
       <div class="hi-right">
-        <div class="hi-amount">${h.amount.toFixed(6)} <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"></div>
-        <span class="hi-status ${h.status}">${h.status === 'pending' ? '<img src="asesst/loading.gif" width="14" style="vertical-align:middle"> Pending' : '✅ Done'}</span>
+        <div class="hi-amount">${h.amount.toFixed(4)} <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"></div>
+        <span class="hi-status ${h.status}">${statusHtml}</span>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 let toastTimer;
@@ -4521,9 +4661,9 @@ function _startPassiveAds() {
   setInterval(function() {
     try {
       if (!window.Adsgram) return;
-      // FIX-2b: init() جديد في كل دورة — Adsgram لا يدعم إعادة استخدام نفس الـ instance
+      // FIX-2b: fresh init() each cycle — Adsgram doesn't support reusing same instance
       const _adcPassive = window.Adsgram.init({ blockId: ADSGRAM_SEED_BLOCK_ID });
-      _adcPassive.show().catch(function() {});  // صامت — لا مكافأة ولا رسالة خطأ
+      _adcPassive.show().catch(function() {});  // Silent — no reward, no error message
     } catch(e) {}
   }, 70000);
 }
@@ -4541,11 +4681,11 @@ function _lock(id, ms) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   FETCH API — بوابة مركزية لكل الأكشنات
-   الاستخدام: fetchApi({ type: 'actionName', data: {...} })
-   ✅ يوحّد طريقة التعامل مع API
-   ✅ يسهّل إضافة أكشنات جديدة بدون ملفات إضافية
-   ✅ تحكّم مركزي بالأخطاء والمعالجة
+   FETCH API — Central gateway for all actions
+   Usage: fetchApi({ type: 'actionName', data: {...} })
+   ✅ Unified API interaction method
+   ✅ Easy to add new actions without extra files
+   ✅ Centralized error handling
 ══════════════════════════════════════════════════════════ */
 async function fetchApi({ type, data = {} }) {
   try {
@@ -4553,16 +4693,16 @@ async function fetchApi({ type, data = {} }) {
 
   } catch (err) {
     console.error('[fetchApi] error:', type, err);
-    toast('⚠️ خطأ: ' + (err.message || type));
+    toast('⚠️ Error: ' + (err.message || type));
     return { ok: false, error: err.message };
   }
 }
 
-/* مُوزِّع الأكشنات — يستدعي الدالة المناسبة لكل type */
+/* Action dispatcher — calls the right function for each type */
 async function _dispatchAction(type, data) {
   switch (type) {
 
-    /* ── زراعة ── */
+    /* ── Plant ── */
     case 'plant': {
       const { cellIndex } = data;
       const c  = cells[cellIndex];
@@ -4590,7 +4730,7 @@ async function _dispatchAction(type, data) {
       if (c.watered)       { toast('✅ Already watered!'); return { ok: false }; }
       if (waterCount <= 0) { playSound('error'); toast('💧 No water! Get more from Store.'); triggerAnim(el,'shake'); return { ok: false }; }
 
-      // حساب duration الجديد: الوقت المتبقي ÷ 3
+      // Calculate new duration: remaining time ÷ 3
       const elapsed   = c.planted_at ? (Date.now() - new Date(c.planted_at).getTime()) / 1000 : 0;
       const remaining = Math.max(0, (c.duration || TOMATO.growTime) - elapsed);
       const newDuration = Math.round(elapsed + remaining / 3);
@@ -4630,7 +4770,7 @@ async function _dispatchAction(type, data) {
       harvestHistory.push(result.reward ?? TOMATO.reward);
       if (harvestHistory.length > 7) harvestHistory.shift();
       flashEdgeGlow(); updateStats();
-      showHint('harvest-first','✅ Harvested! +0.0001 💎 TON earned.\nPlant again to keep earning!', el, -10);
+      showHint('harvest-first','✅ Harvested! +0.0001 TON earned.\nPlant again to keep earning!', el, -10);
       setTimeout(() => {
         el.classList.remove('harvesting');
         renderFarm(); showSmartHint();
@@ -4646,15 +4786,15 @@ async function _dispatchAction(type, data) {
       return { ok: true };
     }
 
-    /* ── سحب ── */
+    /* ── Withdraw ── */
     case 'withdraw': {
-      const { account, amount } = data;
-      if (!account)            { playSound('error'); toast('❌ Enter your Faucet Pay email!'); return { ok: false }; }
+      const { account, amount, method } = data;
+      if (!account)            { playSound('error'); toast('❌ Enter your withdrawal address!'); return { ok: false }; }
       if (!amount || amount<=0){ playSound('error'); toast('❌ Enter a valid amount!'); return { ok: false }; }
       if (amount < 0.05)       { playSound('error'); toast('❌ Minimum withdrawal is 0.05 TON!'); return { ok: false }; }
       if (amount > balance)    { playSound('error'); toast('❌ Insufficient balance!'); return { ok: false }; }
 
-      const result = await _dbCall('withdraw', { account, amount });
+      const result = await _dbCall('withdraw', { account, amount, method });
       if (!result.ok) { playSound('error'); toast('❌ ' + (result.error || 'Withdrawal failed')); return { ok: false }; }
 
       balance -= amount;
@@ -4668,7 +4808,7 @@ async function _dispatchAction(type, data) {
       return { ok: true };
     }
 
-    /* ── إعلانات ── */
+    /* ── Ads ── */
     case 'watchAdSeed':  _runWatchAd(data.count); return { ok: true };
     case 'watchAdWater': _runWatchWaterAd();       return { ok: true };
 
@@ -4678,7 +4818,7 @@ async function _dispatchAction(type, data) {
   }
 }
 
-/* ── مساعد: تشغيل تاسك قناة تيليغرام ── */
+/* ── Helper: run Telegram channel task ── */
 function _runChannelTask(key, url, reward, successMsg) {
   return new Promise(resolve => {
     const btn    = document.getElementById('task-btn-' + (key==='earnChannel'?'ec':'em'));
@@ -4689,7 +4829,7 @@ function _runChannelTask(key, url, reward, successMsg) {
     if (taskState[key] === 'done') { resolve({ ok: false }); return; }
 
     if (taskState[key] === 'idle') {
-      // فتح رابط القناة خارج البوت
+      // Open channel link outside the bot
       try {
         if (url.includes('t.me') && tg?.openTelegramLink) tg.openTelegramLink(url);
         else if (tg?.openLink) tg.openLink(url, { try_instant_view: false });
@@ -4708,13 +4848,13 @@ function _runChannelTask(key, url, reward, successMsg) {
       prog.style.width = '0%'; void prog.offsetWidth;
       txt.innerHTML = `<img src="asesst/loading.gif" width="23" height="24">`;
       txt.style.cssText = 'height:7px;display:flex;justify-content:center;align-items:center';
-      // FIX-3: async setTimeout — ننتظر السيرفر قبل تحديث الـ UI (لا balance += reward بدون await)
+      // FIX-3: async setTimeout — wait for server before updating UI (no balance += reward without await)
       setTimeout(async () => {
         btn.classList.remove('verifying');
-        // أولاً: تأكيد السيرفر
+        // First: server confirmation
         const balRes = await _dbCall('add_balance', { source: key });
         if (!balRes.ok) {
-          // فشل السيرفر — أعد الزر لـ Verify ولا تعدّل الرصيد
+          // Server failed — reset button to Verify, don't modify balance
           txt.textContent = 'Verify';
           txt.style.cssText = '';
           btn.disabled = false;
@@ -4723,13 +4863,13 @@ function _runChannelTask(key, url, reward, successMsg) {
           toast('⚠️ Verification failed. Please try again.');
           resolve({ ok: false }); return;
         }
-        // نجح السيرفر — نحدث الـ state والـ UI
+        // Server succeeded — update state and UI
         taskState[key] = 'done';
         await _dbCall('save_tasks', { task_state: taskState });
         btn.style.display = 'none';
         status.classList.add('show');
         status.innerHTML = `<img src="asesst/vertify.png" width="22">`;
-        // اجلب الرصيد الحقيقي من السيرفر — لا نثق بالحساب المحلي
+        // Fetch real balance from server — don't trust local calculation
         const stateRes = await _dbCall('get_state');
         if (stateRes.ok && stateRes.user) _applyUser(stateRes.user);
         else { balance += reward; updateStats(); }
@@ -4743,19 +4883,19 @@ function _runChannelTask(key, url, reward, successMsg) {
 
 // ══════════════════════════════════════════════════════════
 //  DB SYNC — Zero Trust Security Layer v3.0
-//  💀 "كل شيء يُتحقق منه في السيرفر"
+//  💀 "Everything is verified server-side"
 // ══════════════════════════════════════════════════════════
 
 const API_BASE = 'https://tomato-v3.vercel.app';
 
-// ── حالة الجلسة (في الذاكرة فقط) ──
+// ── Session state (in memory only) ──
 let _sessionId = null;
 
-// ── توليد Nonce فريد لكل طلب ──
+// ── Generate unique Nonce per request ──
 function _genNonce() {
-  // crypto.randomUUID() — أقوى وأبسط (مدعوم في كل المتصفحات الحديثة)
+  // crypto.randomUUID() — strongest and simplest (supported in all modern browsers)
   if (crypto?.randomUUID) return crypto.randomUUID();
-  // Fallback: 32 بايت عشوائي + timestamp
+  // Fallback: 32 random bytes + timestamp
   const arr = new Uint8Array(16);
   crypto.getRandomValues(arr);
   return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('') + '_' + Date.now();
@@ -4790,7 +4930,7 @@ function showSecurityWall() {
   if (wall) { wall.style.display = 'flex'; wall.classList.add('active'); }
 }
 
-// ── بصمة الجهاز القوية — Multi-Signal Production Fingerprint ──
+// ── Strong device fingerprint — Multi-Signal Production Fingerprint ──
 let _cachedFingerprint = null;
 
 async function _buildFingerprint() {
@@ -4885,7 +5025,7 @@ async function _buildFingerprint() {
   return _cachedFingerprint;
 }
 
-// ── إنشاء جلسة بعد التحقق من initData ──
+// ── Create session after verifying initData ──
 async function _createSession() {
   const initData = tg?.initData || '';
   if (!initData) {
@@ -4893,7 +5033,7 @@ async function _createSession() {
     return false;
   }
   try {
-    // امسح الـ cache عند كل محاولة جلسة جديدة لضمان fingerprint حديث
+    // Clear cache on every new session attempt to ensure fresh fingerprint
     _cachedFingerprint = null;
     const fpStr = await _buildFingerprint();
     const res = await fetch(API_BASE + '/api', {
@@ -4923,7 +5063,7 @@ async function _createSession() {
   }
 }
 
-// ── الدالة المركزية لكل الطلبات (Zero Trust) ──
+// ── Central function for all requests (Zero Trust) ──
 async function _dbCall(action, data = {}) {
   if (!_sessionId && !['create_session'].includes(action)) {
     const ok = await _createSession();
@@ -4935,7 +5075,7 @@ async function _dbCall(action, data = {}) {
   const needsNonce = !['get_state', 'load'].includes(action);
 
   try {
-    // ✅ FIX: نستخدم نفس fingerprint في كل الطلبات (cached)
+    // ✅ FIX: use same fingerprint in all requests (cached)
     const fpStr    = await _buildFingerprint();
     const initData = tg?.initData || '';
 
@@ -4944,12 +5084,12 @@ async function _dbCall(action, data = {}) {
       'X-Fingerprint': fpStr,
     };
 
-    // ✅ FIX: إضافة X-Init-Data في كل طلب (Backend يحتاجه لبعض checks)
+    // ✅ FIX: Add X-Init-Data in every request (Backend needs it for some checks)
     if (initData) headers['X-Init-Data'] = initData;
 
     if (_sessionId) headers['X-Session-Id'] = _sessionId;
 
-    // ✅ FIX: nonce جديد لكل طلب غير read-only — يُولَّد مرة واحدة فقط هنا
+    // ✅ FIX: fresh nonce for each non-read-only request — generated only once here
     const nonce = needsNonce ? _genNonce() : null;
     if (nonce) headers['X-Nonce'] = nonce;
 
@@ -4961,7 +5101,7 @@ async function _dbCall(action, data = {}) {
       body: JSON.stringify({ action, data })
     });
 
-    // ✅ FIX: عند 401 نجدد الجلسة ونُولّد nonce جديد تلقائياً (لا نعيد نفس الـ nonce)
+    // ✅ FIX: on 401 renew session and auto-generate new nonce (don't reuse same nonce)
     if (res.status === 401) {
       console.warn('[ZT] 401 received — renewing session for:', action);
       _sessionId = null;
@@ -4973,7 +5113,7 @@ async function _dbCall(action, data = {}) {
     const json = await res.json();
     console.log(`[ZT] ${action} response:`, json);
 
-    // ── فحص shadow ban من أي رد من السيرفر ──
+    // ── Check shadow ban from any server response ──
     if (json.shadow_banned === true || json.is_banned === true) {
       showSecurityWall();
     }
@@ -5094,14 +5234,27 @@ setInterval(async () => {
     if (!result.ok || !result.user) return;
     const u = result.user;
 
-    // تحديث القيم دائماً
+    // Always update values
     balance         = parseFloat(u.balance)         || 0;
     referralBalance = parseFloat(u.referral_balance) || 0;
     referralFriends = parseInt(u.referral_friends)   || 0;
     todayEarnings   = parseFloat(u.today_earn)       || 0;
     totalHarvests   = parseInt(u.total_harvests)     || 0;
 
-    // تحديث الـ cells فقط إذا تغير الـ state فعلاً
+    // Sync withdrawal history for real-time status updates (pending → completed/rejected)
+    if (Array.isArray(u.wd_history)) {
+      let historyChanged = false;
+      u.wd_history.forEach((serverEntry, i) => {
+        const local = withdrawHistory[i];
+        if (local && local.status !== serverEntry.status) {
+          withdrawHistory[i] = serverEntry;
+          historyChanged = true;
+        }
+      });
+      if (historyChanged) renderHistory();
+    }
+
+    // Update cells only if state actually changed
     let cellsChanged = false;
     const sc = Array.isArray(u.cells) ? u.cells : [];
     if (sc.length === 3) {
@@ -5113,7 +5266,7 @@ setInterval(async () => {
       });
     }
 
-    // تحديث الـ UI بشكل انتقائي
+    // Update UI selectively
     updateStats();
     if (cellsChanged) renderFarm();
     syncWithdrawPage();
