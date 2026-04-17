@@ -100,11 +100,15 @@ async function bootstrap() {
       CREATE TABLE IF NOT EXISTS nonces (
         nonce         TEXT          PRIMARY KEY,
         telegram_id   BIGINT        NOT NULL,
-        used_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        is_used       BOOLEAN       NOT NULL DEFAULT FALSE,
+        used_at       TIMESTAMPTZ,
         expires_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW() + INTERVAL '5 minutes'
       )
     `);
-    await sql(`CREATE INDEX IF NOT EXISTS idx_nonces_expires ON nonces(expires_at)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_nonces_expires  ON nonces(expires_at)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_nonces_telegram ON nonces(telegram_id, is_used)`);
+    try { await sql(`ALTER TABLE nonces ADD COLUMN IF NOT EXISTS is_used BOOLEAN NOT NULL DEFAULT FALSE`); } catch (_) {}
+    try { await sql(`ALTER TABLE nonces ALTER COLUMN used_at DROP NOT NULL`); } catch (_) {}
 
     // ── جدول Rate Limiting ──
     await sql(`
@@ -349,21 +353,33 @@ function isFingerprintMatch(stored, current, storedIp, currentIp) {
   return false;
 }
 
-// ── تحقق من Nonce (منع Replay Attacks) ──
+// ── توليد Nonce من السيرفر ──
+async function generateNonce(tid) {
+  await sql(`DELETE FROM nonces WHERE expires_at < NOW()`);
+  const nonce = crypto.randomBytes(24).toString('hex');
+  await sql(
+    `INSERT INTO nonces (nonce, telegram_id, is_used) VALUES ($1, $2, FALSE)`,
+    [nonce, tid]
+  );
+  return nonce;
+}
+
+// ── تحقق من Nonce (السيرفر هو من أصدره) ──
 async function checkNonce(tid, nonce) {
   if (!nonce) return false;
 
-  // تنظيف القديم
-  await sql(`DELETE FROM nonces WHERE expires_at < NOW()`);
-
-  // هل استُخدم من قبل؟
-  const existing = await sql(`SELECT 1 FROM nonces WHERE nonce = $1`, [nonce]);
-  if (existing.length) return false;
-
-  // تسجيله
-  await sql(
-    `INSERT INTO nonces (nonce, telegram_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+  // هل الـ nonce صادر من السيرفر لهذا المستخدم ولم يُستخدم بعد؟
+  const rows = await sql(
+    `SELECT 1 FROM nonces
+     WHERE nonce = $1 AND telegram_id = $2 AND is_used = FALSE AND expires_at > NOW()`,
     [nonce, tid]
+  );
+  if (!rows.length) return false;
+
+  // تعليمه كـ مستخدم
+  await sql(
+    `UPDATE nonces SET is_used = TRUE, used_at = NOW() WHERE nonce = $1`,
+    [nonce]
   );
   return true;
 }
@@ -739,7 +755,8 @@ module.exports = async function handler(req, res) {
       await auditLog(tid, ipHash, fingerprint, 'create_session', 0, 'allow',
         { tg_id: tid, is_new_account: isNewAccount });
 
-      return res.status(200).json({ ok: true, session_id: sid });
+      const firstNonce = await generateNonce(tid);
+      return res.status(200).json({ ok: true, session_id: sid, nonce: firstNonce });
 
     } catch (txErr) {
       try { await db('ROLLBACK'); } catch (_) {}
@@ -889,8 +906,10 @@ module.exports = async function handler(req, res) {
       const trueReferralFriends = parseInt(realFriendsCount[0]?.cnt || 0);
 
       // Shadow-banned users get real data but rewards are silently ignored upstream
+      const loadNonce = await generateNonce(tid);
       return res.status(200).json({
         ok: true,
+        nonce: loadNonce,
         user: { ...user, cells: resolved, referral_friends: trueReferralFriends }
       });
     }
@@ -924,8 +943,10 @@ module.exports = async function handler(req, res) {
       );
       const trueReferralFriends2 = parseInt(realFriendsCount2[0]?.cnt || 0);
 
+      const stateNonce = await generateNonce(tid);
       return res.status(200).json({
         ok: true,
+        nonce: stateNonce,
         user: { ...user, cells: resolved, referral_friends: trueReferralFriends2 }
       });
     }
