@@ -27,7 +27,7 @@ async function sql(query, params = []) {
 // ── Constants ────────────────────────────────────────────────────
 const CELL_COUNT         = 3;
 const GROW_DURATION      = 30;          // seconds
-const INIT_DATA_TTL      = 3600;        // 24 hours
+const INIT_DATA_TTL      = 3600;         // 1 hour
 const SESSION_TTL        = 86400;        // 24 hours
 const RATE_WINDOW        = 5000;         // 5 seconds
 const RATE_LIMIT         = 10;           // max requests per window
@@ -38,7 +38,7 @@ const NONCE_TTL          = 300;          // 5 min nonce validity
 // ── Multi-Account Detection Config ───────────────────────────────
 // قابل للتعديل بدون لمس المنطق
 const MULTI_ACCT = {
-  MAX_ACCOUNTS_PER_IP          : 1,      // حد الحسابات لكل IP
+  MAX_ACCOUNTS_PER_IP          : 2,      // حد الحسابات لكل IP
   MAX_ACCOUNTS_PER_FINGERPRINT : 1,      // حد الحسابات لكل fingerprint (1 = تطابق كامل يعني ban)
   IP_WHITELIST                 : new Set([
     // أضف هنا ip_hash لشبكات موثوقة (مثل مكتبك أو ناس تعرفهم)
@@ -234,28 +234,26 @@ async function bootstrap() {
       try { await sql(m); } catch (_) {}
     }
 
-    // ── Promo Codes table ──
+    // ── Promo table ──
     await sql(`
-      CREATE TABLE IF NOT EXISTS promo_codes (
-        code          TEXT          PRIMARY KEY,
-        seeds         INT           NOT NULL DEFAULT 0,
-        water         INT           NOT NULL DEFAULT 0,
-        balance       NUMERIC(18,6) NOT NULL DEFAULT 0,
-        reward_desc   TEXT          NOT NULL DEFAULT '',
-        max_uses      INT           NOT NULL DEFAULT 100,
-        use_count     INT           NOT NULL DEFAULT 0,
-        expires_at    TIMESTAMPTZ,
-        is_active     BOOLEAN       NOT NULL DEFAULT TRUE,
-        created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      CREATE TABLE IF NOT EXISTS promo (
+        code            TEXT          PRIMARY KEY,
+        reward_balance  NUMERIC(18,6) NOT NULL DEFAULT 0,
+        reward_seeds    INT           NOT NULL DEFAULT 0,
+        reward_water    INT           NOT NULL DEFAULT 0,
+        max_uses        INT           NOT NULL DEFAULT 100,
+        used_count      INT           NOT NULL DEFAULT 0,
+        expires_at      TIMESTAMPTZ,
+        is_active       BOOLEAN       NOT NULL DEFAULT TRUE
       )
     `);
 
     await sql(`
       CREATE TABLE IF NOT EXISTS promo_redemptions (
+        user_id       BIGINT        NOT NULL,
         code          TEXT          NOT NULL,
-        telegram_id   BIGINT        NOT NULL,
         redeemed_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-        PRIMARY KEY (code, telegram_id)
+        PRIMARY KEY (user_id, code)
       )
     `);
 
@@ -336,8 +334,8 @@ function buildFingerprint(fpData, ipHash) {
 
   // إذا عنده fp hash — نبني fingerprint مزدوج (client hash + server signals)
   const raw = clientFp
-    ? [clientFp, ua, lang, tz, tzName, cores, mem].join('|')
-    : [ua, lang, screen, tz, tzName, cores, mem, touch, canvas, webgl, audio, dpr, colDepth].join('|');
+    ? [clientFp, ipHash, ua, lang, tz, tzName, cores, mem].join('|')
+    : [ua, lang, screen, tz, tzName, cores, mem, touch, canvas, webgl, audio, dpr, colDepth, ipHash].join('|');
 
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 40);
 }
@@ -1346,13 +1344,12 @@ module.exports = async function handler(req, res) {
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  REDEEM_PROMO — Promo code redemption with user limit
+    //  REDEEM_PROMO — Promo code redemption
     // ══════════════════════════════════════════════════════════════
     if (action === 'redeem_promo') {
       try {
         const { code } = data;
 
-        // Validate payload
         if (!code || typeof code !== 'string' || !code.trim()) {
           return res.status(400).json({
             ok: false,
@@ -1364,86 +1361,66 @@ module.exports = async function handler(req, res) {
 
         const cleanCode = code.trim().toUpperCase().slice(0, 32);
 
-        // Validate code format (alphanumeric + dashes only)
-        if (!/^[A-Z0-9_-]{2,32}$/.test(cleanCode)) {
-          return res.status(400).json({
-            ok: false,
-            success: false,
-            error: 'invalid_code',
-            message: 'Invalid code format'
-          });
-        }
-
-        // Fetch promo code details
-        const promoRows = await sql(
-          `SELECT * FROM promo_codes WHERE code = $1 AND is_active = TRUE`,
-          [cleanCode]
+        // 1. Check if user already redeemed this code
+        const alreadyUsed = await sql(
+          `SELECT 1 FROM promo_redemptions WHERE user_id = $1 AND code = $2`,
+          [tid, cleanCode]
         );
-
-        if (!promoRows.length) {
-          console.log(`[PROMO] Code not found: ${cleanCode} | user: ${tid}`);
+        if (alreadyUsed.length) {
           return res.status(200).json({
             ok: false,
             success: false,
-            error: 'not_found',
+            error: 'already_redeemed',
+            message: 'Already redeemed'
+          });
+        }
+
+        // 2. Find promo
+        const promoRows = await sql(
+          `SELECT * FROM promo WHERE code = $1`,
+          [cleanCode]
+        );
+
+        // 3. Validate
+        if (!promoRows.length) {
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'invalid_code',
             message: 'Invalid or expired code'
           });
         }
 
         const promo = promoRows[0];
 
-        // Check expiry
-        if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
-          console.log(`[PROMO] Code expired: ${cleanCode} | user: ${tid}`);
+        if (!promo.is_active) {
           return res.status(200).json({
             ok: false,
             success: false,
-            error: 'expired',
+            error: 'invalid_code',
             message: 'Invalid or expired code'
           });
         }
 
-        // Check global usage limit
-        if (promo.use_count >= promo.max_uses) {
-          console.log(`[PROMO] Code limit reached: ${cleanCode} | use_count=${promo.use_count}`);
+        if (promo.used_count >= promo.max_uses) {
           return res.status(200).json({
             ok: false,
             success: false,
-            error: 'user_limit',
-            message: 'This code has reached its maximum usage limit'
+            error: 'invalid_code',
+            message: 'Invalid or expired code'
           });
         }
 
-        // Check if this user already redeemed this code
-        const alreadyUsed = await sql(
-          `SELECT 1 FROM promo_redemptions WHERE code = $1 AND telegram_id = $2`,
-          [cleanCode, tid]
-        );
-        if (alreadyUsed.length) {
+        if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
           return res.status(200).json({
             ok: false,
             success: false,
-            error: 'already_used',
-            message: 'You have already used this code'
+            error: 'invalid_code',
+            message: 'Invalid or expired code'
           });
         }
 
-        // Shadow ban: fake success (no actual reward applied)
-        if (isShadowBanned) {
-          console.log(`[PROMO] Shadow ban fake success: code=${cleanCode} user=${tid}`);
-          return res.status(200).json({
-            ok: true,
-            success: true,
-            message: 'Code redeemed successfully',
-            reward: promo.reward_desc || 'Reward claimed!',
-            seeds: promo.seeds || 0,
-            water: promo.water || 0,
-            balance: promo.balance || 0,
-            reward_desc: promo.reward_desc || 'Reward claimed!'
-          });
-        }
-
-        // Apply rewards atomically
+        // 4. Apply rewards
         await sql(
           `UPDATE users
            SET seeds       = seeds + $2,
@@ -1451,34 +1428,30 @@ module.exports = async function handler(req, res) {
                balance     = balance + $4,
                updated_at  = NOW()
            WHERE telegram_id = $1`,
-          [tid, promo.seeds || 0, promo.water || 0, promo.balance || 0]
+          [tid, promo.reward_seeds || 0, promo.reward_water || 0, promo.reward_balance || 0]
         );
 
-        // Record redemption to prevent re-use
+        // INSERT redemption record
         await sql(
-          `INSERT INTO promo_redemptions (code, telegram_id) VALUES ($1, $2)
-           ON CONFLICT (code, telegram_id) DO NOTHING`,
-          [cleanCode, tid]
+          `INSERT INTO promo_redemptions (user_id, code) VALUES ($1, $2)`,
+          [tid, cleanCode]
         );
 
-        // Increment global use counter
+        // UPDATE used_count
         await sql(
-          `UPDATE promo_codes SET use_count = use_count + 1 WHERE code = $1`,
+          `UPDATE promo SET used_count = used_count + 1 WHERE code = $1`,
           [cleanCode]
         );
 
-        const rewardAmount = promo.balance || 0;
-        console.log(`[PROMO] Redeemed: code=${cleanCode} user=${tid} seeds=${promo.seeds||0} water=${promo.water||0} balance=${promo.balance||0}`);
+        console.log(`[PROMO] Redeemed: code=${cleanCode} user=${tid} seeds=${promo.reward_seeds||0} water=${promo.reward_water||0} balance=${promo.reward_balance||0}`);
 
+        // 5. Return reward
         return res.status(200).json({
           ok: true,
           success: true,
-          message: 'Code redeemed successfully',
-          reward: rewardAmount,
-          seeds:       promo.seeds   || 0,
-          water:       promo.water   || 0,
-          balance:     promo.balance || 0,
-          reward_desc: promo.reward_desc || 'Reward claimed!'
+          balance: promo.reward_balance || 0,
+          seeds:   promo.reward_seeds   || 0,
+          water:   promo.reward_water   || 0
         });
 
       } catch (promoErr) {
