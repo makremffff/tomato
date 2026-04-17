@@ -38,7 +38,7 @@ const NONCE_TTL          = 300;          // 5 min nonce validity
 // ── Multi-Account Detection Config ───────────────────────────────
 // قابل للتعديل بدون لمس المنطق
 const MULTI_ACCT = {
-  MAX_ACCOUNTS_PER_IP          : 2,      // حد الحسابات لكل IP
+  MAX_ACCOUNTS_PER_IP          : 1,      // حد الحسابات لكل IP
   MAX_ACCOUNTS_PER_FINGERPRINT : 1,      // حد الحسابات لكل fingerprint (1 = تطابق كامل يعني ban)
   IP_WHITELIST                 : new Set([
     // أضف هنا ip_hash لشبكات موثوقة (مثل مكتبك أو ناس تعرفهم)
@@ -1366,11 +1366,11 @@ module.exports = async function handler(req, res) {
 
         // Validate code format (alphanumeric + dashes only)
         if (!/^[A-Z0-9_-]{2,32}$/.test(cleanCode)) {
-          return res.status(400).json({
+          return res.status(200).json({
             ok: false,
             success: false,
-            error: 'invalid_code',
-            message: 'Invalid code format'
+            error: 'not_found',
+            message: 'Invalid or expired code'
           });
         }
 
