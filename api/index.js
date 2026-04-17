@@ -85,30 +85,21 @@ async function bootstrap() {
         telegram_id   BIGINT        NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
         ip_hash       TEXT          NOT NULL,
         fingerprint   TEXT          NOT NULL,
+        current_nonce TEXT,
         created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
         expires_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
         is_valid      BOOLEAN       NOT NULL DEFAULT TRUE
       )
     `);
+    // Migration: إضافة current_nonce للجدول القديم
+    try { await sql(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS current_nonce TEXT`); } catch (_) {}
     await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_telegram    ON sessions(telegram_id)`);
     await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_expires     ON sessions(expires_at)`);
     await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_ip_hash     ON sessions(ip_hash)`);
     await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_fingerprint ON sessions(fingerprint)`);
 
-    // ── جدول Nonce (منع إعادة الإرسال) ──
-    // حذف الجدول القديم وإعادة إنشائه بالـ schema الجديد
-    await sql(`DROP TABLE IF EXISTS nonces CASCADE`);
-    await sql(`
-      CREATE TABLE IF NOT EXISTS nonces (
-        nonce         TEXT          PRIMARY KEY,
-        telegram_id   BIGINT        NOT NULL,
-        is_used       BOOLEAN       NOT NULL DEFAULT FALSE,
-        used_at       TIMESTAMPTZ,
-        expires_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW() + INTERVAL '5 minutes'
-      )
-    `);
-    await sql(`CREATE INDEX IF NOT EXISTS idx_nonces_expires  ON nonces(expires_at)`);
-    await sql(`CREATE INDEX IF NOT EXISTS idx_nonces_telegram ON nonces(telegram_id, is_used)`);
+    // ── حذف جدول nonces القديم (لم يعد مطلوباً) ──
+    try { await sql(`DROP TABLE IF EXISTS nonces CASCADE`); } catch (_) {}
 
     // ── جدول Rate Limiting ──
     await sql(`
@@ -353,35 +344,39 @@ function isFingerprintMatch(stored, current, storedIp, currentIp) {
   return false;
 }
 
-// ── توليد Nonce من السيرفر ──
-async function generateNonce(tid) {
-  await sql(`DELETE FROM nonces WHERE expires_at < NOW()`);
+// ── توليد Nonce وحفظه في الـ session مباشرة ──
+// لا يوجد جدول منفصل — الـ nonce مخزّن في sessions.current_nonce
+async function generateNonce(sessionId) {
   const nonce = crypto.randomBytes(24).toString('hex');
   await sql(
-    `INSERT INTO nonces (nonce, telegram_id, is_used) VALUES ($1, $2, FALSE)`,
-    [nonce, tid]
+    `UPDATE sessions SET current_nonce = $2 WHERE session_id = $1`,
+    [sessionId, nonce]
   );
   return nonce;
 }
 
-// ── تحقق من Nonce (السيرفر هو من أصدره) ──
-async function checkNonce(tid, nonce) {
-  if (!nonce) return false;
+// ── تحقق من Nonce ومقارنته بما في الـ session ──
+// بعد التحقق يُولَّد nonce جديد فوراً ويُحفظ في الـ session
+async function checkAndRotateNonce(sessionId, nonce) {
+  if (!nonce) return { valid: false, nextNonce: null };
 
-  // هل الـ nonce صادر من السيرفر لهذا المستخدم ولم يُستخدم بعد؟
+  // جلب الـ nonce الحالي من الـ session
   const rows = await sql(
-    `SELECT 1 FROM nonces
-     WHERE nonce = $1 AND telegram_id = $2 AND is_used = FALSE AND expires_at > NOW()`,
-    [nonce, tid]
+    `SELECT current_nonce FROM sessions WHERE session_id = $1 AND is_valid = TRUE`,
+    [sessionId]
   );
-  if (!rows.length) return false;
+  if (!rows.length) return { valid: false, nextNonce: null };
 
-  // تعليمه كـ مستخدم
+  const stored = rows[0].current_nonce;
+  if (!stored || stored !== nonce) return { valid: false, nextNonce: null };
+
+  // توليد nonce جديد فوراً وحفظه — يمنع إعادة الاستخدام
+  const nextNonce = crypto.randomBytes(24).toString('hex');
   await sql(
-    `UPDATE nonces SET is_used = TRUE, used_at = NOW() WHERE nonce = $1`,
-    [nonce]
+    `UPDATE sessions SET current_nonce = $2 WHERE session_id = $1`,
+    [sessionId, nextNonce]
   );
-  return true;
+  return { valid: true, nextNonce };
 }
 
 // ── Rate Limiting (sliding window) ──
@@ -755,7 +750,7 @@ module.exports = async function handler(req, res) {
       await auditLog(tid, ipHash, fingerprint, 'create_session', 0, 'allow',
         { tg_id: tid, is_new_account: isNewAccount });
 
-      const firstNonce = await generateNonce(tid);
+      const firstNonce = await generateNonce(sid);
       return res.status(200).json({ ok: true, session_id: sid, nonce: firstNonce });
 
     } catch (txErr) {
@@ -810,13 +805,15 @@ module.exports = async function handler(req, res) {
   }
 
   // ── Nonce Check ──
+  let nextNonce = null;
   if (!['get_state', 'load'].includes(action)) {
-    const nonceValid = await checkNonce(tid, nonce);
-    if (!nonceValid) {
+    const { valid, nextNonce: nn } = await checkAndRotateNonce(sessionId, nonce);
+    if (!valid) {
       await updateUserRisk(tid, 20);
-      await auditLog(tid, ipHash, fingerprint, action, 20, 'deny', { reason: 'nonce_replay' });
+      await auditLog(tid, ipHash, fingerprint, action, 20, 'deny', { reason: 'nonce_invalid' });
       return res.status(400).json({ ok: false, error: 'Nonce already used or missing' });
     }
+    nextNonce = nn;
   }
 
   // ── Risk Score Check ──
@@ -906,7 +903,7 @@ module.exports = async function handler(req, res) {
       const trueReferralFriends = parseInt(realFriendsCount[0]?.cnt || 0);
 
       // Shadow-banned users get real data but rewards are silently ignored upstream
-      const loadNonce = await generateNonce(tid);
+      const loadNonce = await generateNonce(sessionId);
       return res.status(200).json({
         ok: true,
         nonce: loadNonce,
@@ -943,7 +940,7 @@ module.exports = async function handler(req, res) {
       );
       const trueReferralFriends2 = parseInt(realFriendsCount2[0]?.cnt || 0);
 
-      const stateNonce = await generateNonce(tid);
+      const stateNonce = await generateNonce(sessionId);
       return res.status(200).json({
         ok: true,
         nonce: stateNonce,
@@ -975,7 +972,7 @@ module.exports = async function handler(req, res) {
         [tid, JSON.stringify(cells)]
       );
 
-      return res.status(200).json({ ok: true, cells });
+      return res.status(200).json({ ok: true, cells, nonce: nextNonce });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1038,6 +1035,7 @@ module.exports = async function handler(req, res) {
 
       return res.status(200).json({
         ok: true, cells,
+        nonce:        nextNonce,
         reward:       SERVER_REWARD,
         balance:      parseFloat(updatedUser[0]?.balance      || 0),
         today_earn:   parseFloat(updatedUser[0]?.today_earn   || 0),
@@ -1076,7 +1074,7 @@ module.exports = async function handler(req, res) {
         [tid, JSON.stringify(cells)]
       );
 
-      return res.status(200).json({ ok: true, cells });
+      return res.status(200).json({ ok: true, cells, nonce: nextNonce });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1183,7 +1181,7 @@ module.exports = async function handler(req, res) {
 
       console.log(`[AD_REWARD] tid=${tid} ad_type=${ad_type} +${reward.amount} → ${reward.col}=${newValue}`);
 
-      return res.status(200).json({ ok: true, [reward.col]: newValue });
+      return res.status(200).json({ ok: true, nonce: nextNonce, [reward.col]: newValue });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1303,7 +1301,7 @@ module.exports = async function handler(req, res) {
         [tid, photo_url]
       );
 
-      return res.status(200).json({ ok: true, photo_url });
+      return res.status(200).json({ ok: true, nonce: nextNonce, photo_url });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1341,7 +1339,7 @@ module.exports = async function handler(req, res) {
         [tid, amt, JSON.stringify(history)]
       );
 
-      return res.status(200).json({ ok: true, entry });
+      return res.status(200).json({ ok: true, nonce: nextNonce, entry });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1470,6 +1468,7 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({
           ok: true,
           success: true,
+          nonce:   nextNonce,
           balance: promo.reward_balance || 0,
           seeds:   promo.reward_seeds   || 0,
           water:   promo.reward_water   || 0
