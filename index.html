@@ -3596,9 +3596,14 @@ async function submitPromoCode() {
 
   // ── Phase 2: Redeem the code ──
   try {
-    const result = await _dbCall('redeem_promo', { code });
+    const res    = await fetch(API_BASE + '/api/promo', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ user_id: parseInt(TG_ID), code }),
+    });
+    const result = await res.json();
 
-    if (result.ok && result.success) {
+    if (result.success) {
       // Apply rewards locally
       if (result.seeds)   { seeds      += parseInt(result.seeds)    || 0; }
       if (result.water)   { waterCount += parseInt(result.water)     || 0; }
@@ -3614,7 +3619,7 @@ async function submitPromoCode() {
       if (result.seeds   > 0) parts.push(`+${result.seeds} Seeds`);
       if (result.water   > 0) parts.push(`+${result.water} Water`);
       if (result.balance > 0) parts.push(`+${result.balance} TON`);
-      const rewardSummary = parts.length ? parts.join(' · ') : (result.reward_desc || 'Reward claimed!');
+      const rewardSummary = parts.length ? parts.join(' · ') : 'Reward claimed!';
 
       setPromoMsg('✅ Code redeemed successfully! ' + rewardSummary, 'success');
       txt.textContent = '✨ Claim Reward';
@@ -3622,17 +3627,10 @@ async function submitPromoCode() {
 
     } else {
       const errMap = {
-        already_used:   '❌ You have already used this code',
-        user_limit:     '⚠️ This code has reached its usage limit',
-        invalid_code:   '❌ Invalid promo code format',
-        expired:        '⏰ This code has expired',
-        not_found:      '❌ Invalid or expired code',
-        server_error:   '⚠️ Server error — please try again',
+        'Already redeemed':          '❌ You have already used this code',
+        'Invalid or expired code':   '❌ Invalid or expired code',
       };
-      // Prefer message from server if available, fall back to errMap
-      const msg = result.message
-        ? ('❌ ' + result.message)
-        : (errMap[result.error] || ('❌ ' + (result.error || 'Invalid code')));
+      const msg = errMap[result.error] || ('❌ ' + (result.error || 'Invalid code'));
       setPromoMsg(msg, 'error');
       txt.textContent = '✨ Claim Reward';
       _promoAdsDone = false;
