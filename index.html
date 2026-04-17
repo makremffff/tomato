@@ -3549,6 +3549,7 @@ document.addEventListener('DOMContentLoaded', () => {
 let _promoAdsDone = false;
 
 async function submitPromoCode() {
+  if (_lock('promo-submit', 3000)) return;   // ← منع double-submit
   const inp = document.getElementById('promo-code-input');
   const btn = document.getElementById('promo-submit-btn');
   const txt = document.getElementById('promo-submit-txt');
@@ -4163,7 +4164,11 @@ function watchAd(count) {
 }
 
 async function _runWatchAd(count) {
-  if (adCooldown.seed || _adSeedInProgress) return;
+  if (adCooldown.seed || _adSeedInProgress) {
+    toast('⏳ Ad already in progress, please wait...');
+    return;
+  }
+
   _adSeedInProgress = true;
 
   const domId  = count === 5 ? '3' : String(count);
@@ -4190,8 +4195,11 @@ async function _runWatchAd(count) {
     const success = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
     if (success !== 'ok') {
       // User closed or error
-      if (watched > 0) toast(`🌱 Watched ${watched}/${adsNeeded} — try again for full reward.`);
-      else              toast('⚠️ Ad not available, try again later.');
+      if (success === 'no_telegram')    toast('❌ Open the app inside Telegram to watch ads.');
+      else if (success === 'no_sdk')    toast('❌ Server error: Ad SDK not loaded. Try reloading.');
+      else if (success === 'closed')    toast('⚠️ Ad closed early — please watch the full ad.');
+      else if (watched > 0)             toast(`🌱 Watched ${watched}/${adsNeeded} — try again for full reward.`);
+      else                              toast('⚠️ Ad not available, try again later.');
       _resetSeedBtn(count, btnEl, txtEl, progEl);
       adCooldown.seed = false;
       _adSeedInProgress = false;
@@ -4243,7 +4251,10 @@ function watchWaterAd() {
 }
 
 async function _runWatchWaterAd() {
-  if (adCooldown.water || _adWaterInProgress) return;
+  if (adCooldown.water || _adWaterInProgress) {
+    toast('⏳ Ad already in progress, please wait...');
+    return;
+  }
   _adWaterInProgress = true;
 
   const btnEl  = document.getElementById('ad-btn-w');
@@ -4275,8 +4286,11 @@ async function _runWatchWaterAd() {
 
     const success = await _showOneAd(ADSGRAM_WATER_BLOCK_ID);
     if (success !== 'ok') {
-      if (watched > 0) toast(`📺 Watched ${watched}/${TOTAL} — try again to complete.`);
-      else              toast('⚠️ Ad not available, try again later.');
+      if (success === 'no_telegram')    toast('❌ Open the app inside Telegram to watch ads.');
+      else if (success === 'no_sdk')    toast('❌ Server error: Ad SDK not loaded. Try reloading.');
+      else if (success === 'closed')    toast('⚠️ Ad closed early — please watch the full ad.');
+      else if (watched > 0)             toast(`📺 Watched ${watched}/${TOTAL} — try again to complete.`);
+      else                              toast('⚠️ Ad not available, try again later.');
       _resetWaterBtn(txtEl, progEl, btnEl);
       _updateDots(0);
       adCooldown.water = false;
@@ -5042,8 +5056,8 @@ async function _createSession() {
     return false;
   }
   try {
-    // Clear cache on every new session attempt to ensure fresh fingerprint
-    _cachedFingerprint = null;
+    // ✅ FIX: لا نمسح الـ cache — نفس الـ fingerprint يجب أن يُرسل في كل الطلبات
+    // مسح الـ cache يسبب fingerprint_mismatch لأن audio/canvas قد يختلفان قليلاً
     const fpStr = await _buildFingerprint();
     const res = await fetch(API_BASE + '/api', {
       method: 'POST',
