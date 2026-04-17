@@ -3499,7 +3499,9 @@ function switchPage(name) {
       document.getElementById('farm-grid'), 10), 800);
   }
   if (name === 'promo') {
+    // Reset state when opening promo page
     clearPromoMsg();
+    _promoAdsDone = false;
     const inp = document.getElementById('promo-code-input');
     if (inp) { inp.value = ''; updatePromoClearBtn(); }
     const btn = document.getElementById('promo-submit-btn');
@@ -3549,7 +3551,6 @@ document.addEventListener('DOMContentLoaded', () => {
 let _promoAdsDone = false;
 
 async function submitPromoCode() {
-  if (_lock('promo-submit', 3000)) return;   // ← منع double-submit
   const inp = document.getElementById('promo-code-input');
   const btn = document.getElementById('promo-submit-btn');
   const txt = document.getElementById('promo-submit-txt');
@@ -3567,20 +3568,11 @@ async function submitPromoCode() {
 
     for (let i = 0; i < 2; i++) {
       txt.textContent = `📺 Loading Ad ${i + 1}/2…`;
-      const adResult = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
-      if (adResult !== 'ok') {
+      const ok = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
+      if (!ok) {
         btn.disabled = false;
         txt.textContent = '✨ Claim Reward';
-        // رسالة مناسبة حسب سبب الفشل
-        if (adResult === 'no_telegram') {
-          setPromoMsg('⚠️ Open this app inside Telegram to watch ads', 'error');
-        } else if (adResult === 'no_sdk') {
-          setPromoMsg('⚠️ Ad system not ready — please reload and try again', 'error');
-        } else if (adResult === 'closed') {
-          setPromoMsg('⚠️ Ad was closed early — please watch the full ad', 'error');
-        } else {
-          setPromoMsg('⚠️ Ad failed to load — please try again in a moment', 'error');
-        }
+        setPromoMsg('⚠️ Ad failed or closed — please try again', 'error');
         return;
       }
       if (i === 0) {
@@ -3629,7 +3621,6 @@ async function submitPromoCode() {
       toast('🎟️ ' + rewardSummary + ' — added to your account!');
 
     } else {
-      // FIX: رسائل واضحة بدون تكرار ❌
       const errMap = {
         already_used:   '❌ You have already used this code',
         user_limit:     '⚠️ This code has reached its usage limit',
@@ -3638,16 +3629,15 @@ async function submitPromoCode() {
         not_found:      '❌ Invalid or expired code',
         server_error:   '⚠️ Server error — please try again',
       };
-      // استخدم errMap أولاً، ثم message من السيرفر، ثم fallback
-      const errMsg = errMap[result.error]
-        || (result.message ? '❌ ' + result.message : null)
-        || '❌ ' + (result.error || 'Invalid code');
-      setPromoMsg(errMsg, 'error');
+      // Prefer message from server if available, fall back to errMap
+      const msg = result.message
+        ? ('❌ ' + result.message)
+        : (errMap[result.error] || ('❌ ' + (result.error || 'Invalid code')));
+      setPromoMsg(msg, 'error');
       txt.textContent = '✨ Claim Reward';
       _promoAdsDone = false;
     }
   } catch (e) {
-    console.error('[PROMO] submitPromoCode error:', e);
     setPromoMsg('⚠️ Connection error. Try again.', 'error');
     txt.textContent = '✨ Claim Reward';
     _promoAdsDone = false;
@@ -4068,7 +4058,7 @@ let _adWaterInProgress = false;
 // ── Helper: call reward_ad endpoint after successful ad ──
 let _claimInProgress = false; // Prevent duplicate requests
 
-async function _claimAdReward(ad_type) {
+async function _claimAdReward(ad_type, ad_nonce) {
   // Prevent sending two requests at the same time
   if (_claimInProgress) {
     console.warn('[AD_REWARD] Request already in progress — ignored');
@@ -4089,7 +4079,8 @@ async function _claimAdReward(ad_type) {
 
   try {
   console.log('[AD_REWARD] Claiming reward for:', ad_type);
-  const result = await _dbCall('reward_ad', { ad_type });
+  // ✅ nonce يأتي من السيرفر (start_ad) — لا يُولَّد هنا أبداً
+  const result = await _dbCall('reward_ad', { ad_type, ad_nonce });
   console.log('[AD_REWARD] Server response:', JSON.stringify(result));
 
   if (!result.ok) {
@@ -4128,32 +4119,32 @@ async function _claimAdReward(ad_type) {
 
 // ── Helper: show one ad from Adsgram ──
 // Returns Promise<true> on success, Promise<false> on failure/close
-// Returns: 'ok' | 'no_telegram' | 'no_sdk' | 'closed' | 'error'
 function _showOneAd(blockId) {
   return new Promise((resolve) => {
+    // Check: are we inside Telegram WebApp?
     if (!tg || !tg.initData) {
-      console.warn('[ADS] Not inside Telegram WebApp');
-      resolve('no_telegram');
+      // Outside Telegram — no real ads available
+      console.warn('[ADS] Not inside Telegram WebApp — ads unavailable');
+      resolve(false);
       return;
     }
     if (!window.Adsgram) {
       console.warn('[ADS] Adsgram SDK not loaded');
-      resolve('no_sdk');
+      resolve(false);
       return;
     }
     try {
       // Fresh init() before each show() — Adsgram doesn't allow reusing same instance
       const adc = window.Adsgram.init({ blockId });
       adc.show()
-        .then(() => resolve('ok'))
+        .then(() => resolve(true))
         .catch((err) => {
-          const msg = err?.message || String(err) || '';
-          console.warn('[ADS] Ad failed/closed:', msg);
-          resolve(msg.toLowerCase().includes('block') ? 'closed' : 'error');
+          console.warn('[ADS] Ad failed/closed:', err?.message || err);
+          resolve(false);
         });
     } catch(e) {
       console.warn('[ADS] Adsgram.init error:', e.message);
-      resolve('error');
+      resolve(false);
     }
   });
 }
@@ -4164,11 +4155,7 @@ function watchAd(count) {
 }
 
 async function _runWatchAd(count) {
-  if (adCooldown.seed || _adSeedInProgress) {
-    toast('⏳ Ad already in progress, please wait...');
-    return;
-  }
-
+  if (adCooldown.seed || _adSeedInProgress) return;
   _adSeedInProgress = true;
 
   const domId  = count === 5 ? '3' : String(count);
@@ -4184,8 +4171,31 @@ async function _runWatchAd(count) {
   progEl.style.width = '0%';
 
   const ad_type   = count === 5 ? 'seed_bundle' : 'seed_single';
-  const adsNeeded = count === 5 ? 5 : 1;        // عدد الإعلانات المطلوبة
+  const adsNeeded = count === 5 ? 5 : 1;
   let watched = 0;
+
+  // ✅ طلب nonce من السيرفر قبل بدء الإعلانات (session-based)
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="16" style="vertical-align:middle"> Preparing…</span>`;
+  let adNonce = null;
+  try {
+    const startRes = await _dbCall('start_ad', {});
+    if (!startRes?.ok || !startRes?.ad_nonce) {
+      toast('⚠️ Could not start ad session. Try again.');
+      _resetSeedBtn(count, btnEl, txtEl, progEl);
+      adCooldown.seed = false;
+      _adSeedInProgress = false;
+      return;
+    }
+    adNonce = startRes.ad_nonce;
+    console.log('[AD] nonce issued by server ✅');
+  } catch (e) {
+    console.warn('[AD] start_ad failed:', e.message);
+    toast('⚠️ Network error. Try again.');
+    _resetSeedBtn(count, btnEl, txtEl, progEl);
+    adCooldown.seed = false;
+    _adSeedInProgress = false;
+    return;
+  }
 
   for (let i = 0; i < adsNeeded; i++) {
     // Show progress
@@ -4193,13 +4203,10 @@ async function _runWatchAd(count) {
     progEl.style.width = `${Math.round(((i) / adsNeeded) * 100)}%`;
 
     const success = await _showOneAd(ADSGRAM_SEED_BLOCK_ID);
-    if (success !== 'ok') {
+    if (!success) {
       // User closed or error
-      if (success === 'no_telegram')    toast('❌ Open the app inside Telegram to watch ads.');
-      else if (success === 'no_sdk')    toast('❌ Server error: Ad SDK not loaded. Try reloading.');
-      else if (success === 'closed')    toast('⚠️ Ad closed early — please watch the full ad.');
-      else if (watched > 0)             toast(`🌱 Watched ${watched}/${adsNeeded} — try again for full reward.`);
-      else                              toast('⚠️ Ad not available, try again later.');
+      if (watched > 0) toast(`🌱 Watched ${watched}/${adsNeeded} — try again for full reward.`);
+      else              toast('⚠️ Ad not available, try again later.');
       _resetSeedBtn(count, btnEl, txtEl, progEl);
       adCooldown.seed = false;
       _adSeedInProgress = false;
@@ -4217,10 +4224,10 @@ async function _runWatchAd(count) {
     }
   }
 
-  // All ads completed ✅ — now request reward from server
+  // All ads completed ✅ — now request reward from server with server-issued nonce
   txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Adding reward...</span>`;
 
-  const claimed = await _claimAdReward(ad_type);
+  const claimed = await _claimAdReward(ad_type, adNonce);
   if (claimed) {
     const seedReward = count === 5 ? 7 : 1;
     txtEl.innerHTML = `<span class="loadAd">✅ Reward added!</span>`;
@@ -4251,10 +4258,7 @@ function watchWaterAd() {
 }
 
 async function _runWatchWaterAd() {
-  if (adCooldown.water || _adWaterInProgress) {
-    toast('⏳ Ad already in progress, please wait...');
-    return;
-  }
+  if (adCooldown.water || _adWaterInProgress) return;
   _adWaterInProgress = true;
 
   const btnEl  = document.getElementById('ad-btn-w');
@@ -4278,6 +4282,29 @@ async function _runWatchWaterAd() {
     if (cntEl) cntEl.textContent = n;
   }
 
+  // ✅ طلب nonce من السيرفر قبل بدء الإعلانات (session-based)
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="16" style="vertical-align:middle"> Preparing…</span>`;
+  let waterAdNonce = null;
+  try {
+    const startRes = await _dbCall('start_ad', {});
+    if (!startRes?.ok || !startRes?.ad_nonce) {
+      toast('⚠️ Could not start ad session. Try again.');
+      _resetWaterBtn(txtEl, progEl, btnEl);
+      adCooldown.water = false;
+      _adWaterInProgress = false;
+      return;
+    }
+    waterAdNonce = startRes.ad_nonce;
+    console.log('[AD] nonce issued by server ✅');
+  } catch (e) {
+    console.warn('[AD] start_ad failed:', e.message);
+    toast('⚠️ Network error. Try again.');
+    _resetWaterBtn(txtEl, progEl, btnEl);
+    adCooldown.water = false;
+    _adWaterInProgress = false;
+    return;
+  }
+
   let watched = 0;
 
   for (let i = 0; i < TOTAL; i++) {
@@ -4285,12 +4312,9 @@ async function _runWatchWaterAd() {
     progEl.style.width = `${Math.round(((i) / TOTAL) * 100)}%`;
 
     const success = await _showOneAd(ADSGRAM_WATER_BLOCK_ID);
-    if (success !== 'ok') {
-      if (success === 'no_telegram')    toast('❌ Open the app inside Telegram to watch ads.');
-      else if (success === 'no_sdk')    toast('❌ Server error: Ad SDK not loaded. Try reloading.');
-      else if (success === 'closed')    toast('⚠️ Ad closed early — please watch the full ad.');
-      else if (watched > 0)             toast(`📺 Watched ${watched}/${TOTAL} — try again to complete.`);
-      else                              toast('⚠️ Ad not available, try again later.');
+    if (!success) {
+      if (watched > 0) toast(`📺 Watched ${watched}/${TOTAL} — try again to complete.`);
+      else              toast('⚠️ Ad not available, try again later.');
       _resetWaterBtn(txtEl, progEl, btnEl);
       _updateDots(0);
       adCooldown.water = false;
@@ -4312,7 +4336,7 @@ async function _runWatchWaterAd() {
   // كل الإعلانات اكتملت ✅
   txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="20"> Adding reward...</span>`;
 
-  const claimed = await _claimAdReward('water');
+  const claimed = await _claimAdReward('water', waterAdNonce);
   if (claimed) {
     txtEl.innerHTML = `<span class="loadAd">✅ Reward added!</span>`;
     playSound('reward');
@@ -5056,8 +5080,8 @@ async function _createSession() {
     return false;
   }
   try {
-    // ✅ FIX: لا نمسح الـ cache — نفس الـ fingerprint يجب أن يُرسل في كل الطلبات
-    // مسح الـ cache يسبب fingerprint_mismatch لأن audio/canvas قد يختلفان قليلاً
+    // Clear cache on every new session attempt to ensure fresh fingerprint
+    _cachedFingerprint = null;
     const fpStr = await _buildFingerprint();
     const res = await fetch(API_BASE + '/api', {
       method: 'POST',
@@ -5232,6 +5256,20 @@ buildFarm();
     setTimeout(() => loadingEl.remove(), 900);
   }
 })();
+
+async function loadUser() {
+  if (!TG_ID) return;
+  await _createSession();
+  const result = await _dbCall('load', {
+    username:    TG_USERNAME || TG_FIRST || null,
+    referral_by: getReferralId()
+  });
+  if (!result.ok || !result.user) return;
+  if (result.user.shadow_banned === true) { showSecurityWall(); return; }
+  _applyUser(result.user);
+  renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
+  await loadAndRenderTasks();
+}
 
 /* ── POLLING — get_state كل 3 ثواني ── */
 let _pollActive = false;
