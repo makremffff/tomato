@@ -27,7 +27,7 @@ async function sql(query, params = []) {
 // ── Constants ────────────────────────────────────────────────────
 const CELL_COUNT         = 3;
 const GROW_DURATION      = 30;          // seconds
-const INIT_DATA_TTL      = 3600;         // 1 hour
+const INIT_DATA_TTL      = 3600;        // 24 hours
 const SESSION_TTL        = 86400;        // 24 hours
 const RATE_WINDOW        = 5000;         // 5 seconds
 const RATE_LIMIT         = 10;           // max requests per window
@@ -336,8 +336,8 @@ function buildFingerprint(fpData, ipHash) {
 
   // إذا عنده fp hash — نبني fingerprint مزدوج (client hash + server signals)
   const raw = clientFp
-    ? [clientFp, ipHash, ua, lang, tz, tzName, cores, mem].join('|')
-    : [ua, lang, screen, tz, tzName, cores, mem, touch, canvas, webgl, audio, dpr, colDepth, ipHash].join('|');
+    ? [clientFp, ua, lang, tz, tzName, cores, mem].join('|')
+    : [ua, lang, screen, tz, tzName, cores, mem, touch, canvas, webgl, audio, dpr, colDepth].join('|');
 
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 40);
 }
@@ -1366,11 +1366,11 @@ module.exports = async function handler(req, res) {
 
         // Validate code format (alphanumeric + dashes only)
         if (!/^[A-Z0-9_-]{2,32}$/.test(cleanCode)) {
-          return res.status(200).json({
+          return res.status(400).json({
             ok: false,
             success: false,
-            error: 'not_found',
-            message: 'Invalid or expired code'
+            error: 'invalid_code',
+            message: 'Invalid code format'
           });
         }
 
@@ -1456,7 +1456,8 @@ module.exports = async function handler(req, res) {
 
         // Record redemption to prevent re-use
         await sql(
-          `INSERT INTO promo_redemptions (code, telegram_id) VALUES ($1, $2)`,
+          `INSERT INTO promo_redemptions (code, telegram_id) VALUES ($1, $2)
+           ON CONFLICT (code, telegram_id) DO NOTHING`,
           [cleanCode, tid]
         );
 
