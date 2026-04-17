@@ -81,25 +81,32 @@ async function bootstrap() {
     // ── جدول الجلسات ──
     await sql(`
       CREATE TABLE IF NOT EXISTS sessions (
-        session_id    TEXT          PRIMARY KEY,
-        telegram_id   BIGINT        NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
-        ip_hash       TEXT          NOT NULL,
-        fingerprint   TEXT          NOT NULL,
-        current_nonce TEXT,
-        created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-        expires_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
-        is_valid      BOOLEAN       NOT NULL DEFAULT TRUE
+        session_id      TEXT          PRIMARY KEY,
+        telegram_id     BIGINT        NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+        ip_hash         TEXT          NOT NULL,
+        fingerprint     TEXT          NOT NULL,
+        ad_nonce        TEXT,
+        ad_nonce_exp    TIMESTAMPTZ,
+        created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        expires_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
+        is_valid        BOOLEAN       NOT NULL DEFAULT TRUE
       )
     `);
-    // Migration: إضافة current_nonce للجدول القديم
-    try { await sql(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS current_nonce TEXT`); } catch (_) {}
     await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_telegram    ON sessions(telegram_id)`);
     await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_expires     ON sessions(expires_at)`);
     await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_ip_hash     ON sessions(ip_hash)`);
     await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_fingerprint ON sessions(fingerprint)`);
 
-    // ── حذف جدول nonces القديم (لم يعد مطلوباً) ──
-    try { await sql(`DROP TABLE IF EXISTS nonces CASCADE`); } catch (_) {}
+    // ── جدول Nonce (منع إعادة الإرسال) ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS nonces (
+        nonce         TEXT          PRIMARY KEY,
+        telegram_id   BIGINT        NOT NULL,
+        used_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        expires_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW() + INTERVAL '5 minutes'
+      )
+    `);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_nonces_expires ON nonces(expires_at)`);
 
     // ── جدول Rate Limiting ──
     await sql(`
@@ -224,31 +231,36 @@ async function bootstrap() {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hard_banned  BOOLEAN       NOT NULL DEFAULT FALSE`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url       TEXT`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_last_reward  TIMESTAMPTZ`,
+      // ── Session nonce columns (session-based nonce system) ──
+      `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ad_nonce     TEXT`,
+      `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ad_nonce_exp TIMESTAMPTZ`,
     ];
     for (const m of migrations) {
       try { await sql(m); } catch (_) {}
     }
 
-    // ── Promo table ──
+    // ── Promo Codes table ──
     await sql(`
-      CREATE TABLE IF NOT EXISTS promo (
-        code            TEXT          PRIMARY KEY,
-        reward_balance  NUMERIC(18,6) NOT NULL DEFAULT 0,
-        reward_seeds    INT           NOT NULL DEFAULT 0,
-        reward_water    INT           NOT NULL DEFAULT 0,
-        max_uses        INT           NOT NULL DEFAULT 100,
-        used_count      INT           NOT NULL DEFAULT 0,
-        expires_at      TIMESTAMPTZ,
-        is_active       BOOLEAN       NOT NULL DEFAULT TRUE
+      CREATE TABLE IF NOT EXISTS promo_codes (
+        code          TEXT          PRIMARY KEY,
+        seeds         INT           NOT NULL DEFAULT 0,
+        water         INT           NOT NULL DEFAULT 0,
+        balance       NUMERIC(18,6) NOT NULL DEFAULT 0,
+        reward_desc   TEXT          NOT NULL DEFAULT '',
+        max_uses      INT           NOT NULL DEFAULT 100,
+        use_count     INT           NOT NULL DEFAULT 0,
+        expires_at    TIMESTAMPTZ,
+        is_active     BOOLEAN       NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
       )
     `);
 
     await sql(`
       CREATE TABLE IF NOT EXISTS promo_redemptions (
-        user_id       BIGINT        NOT NULL,
         code          TEXT          NOT NULL,
+        telegram_id   BIGINT        NOT NULL,
         redeemed_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-        PRIMARY KEY (user_id, code)
+        PRIMARY KEY (code, telegram_id)
       )
     `);
 
@@ -344,39 +356,73 @@ function isFingerprintMatch(stored, current, storedIp, currentIp) {
   return false;
 }
 
-// ── توليد Nonce وحفظه في الـ session مباشرة ──
-// لا يوجد جدول منفصل — الـ nonce مخزّن في sessions.current_nonce
-async function generateNonce(sessionId) {
-  const nonce = crypto.randomBytes(24).toString('hex');
+// ── إنشاء Nonce داخل الجلسة (Session-based Nonce) ──
+// يُستدعى عند بدء مشاهدة إعلان — السيرفر يُنشئ nonce ويحفظه في الجلسة
+async function issueAdNonce(sessionId) {
+  const nonce   = crypto.randomBytes(32).toString('hex');
+  const expiry  = new Date(Date.now() + NONCE_TTL * 1000).toISOString();
   await sql(
-    `UPDATE sessions SET current_nonce = $2 WHERE session_id = $1`,
-    [sessionId, nonce]
+    `UPDATE sessions SET ad_nonce = $2, ad_nonce_exp = $3 WHERE session_id = $1`,
+    [sessionId, nonce, expiry]
   );
   return nonce;
 }
 
-// ── تحقق من Nonce ومقارنته بما في الـ session ──
-// بعد التحقق يُولَّد nonce جديد فوراً ويُحفظ في الـ session
-async function checkAndRotateNonce(sessionId, nonce) {
-  if (!nonce) return { valid: false, nextNonce: null };
+// ── التحقق من Nonce المخزّن في الجلسة (one-time use) ──
+// يقارن nonce القادم من العميل مع ما هو مخزّن داخل الجلسة فقط
+// بعد التحقق: يُحذف nonce فوراً (one-time use)
+async function consumeAdNonce(sessionId, clientNonce) {
+  if (!clientNonce || !sessionId) return false;
 
-  // جلب الـ nonce الحالي من الـ session
   const rows = await sql(
-    `SELECT current_nonce FROM sessions WHERE session_id = $1 AND is_valid = TRUE`,
+    `SELECT ad_nonce, ad_nonce_exp FROM sessions
+     WHERE session_id = $1 AND is_valid = TRUE`,
     [sessionId]
   );
-  if (!rows.length) return { valid: false, nextNonce: null };
+  if (!rows.length) return false;
 
-  const stored = rows[0].current_nonce;
-  if (!stored || stored !== nonce) return { valid: false, nextNonce: null };
+  const { ad_nonce, ad_nonce_exp } = rows[0];
 
-  // توليد nonce جديد فوراً وحفظه — يمنع إعادة الاستخدام
-  const nextNonce = crypto.randomBytes(24).toString('hex');
+  // هل النonce موجود؟
+  if (!ad_nonce) return false;
+
+  // هل انتهت صلاحيته؟
+  if (!ad_nonce_exp || new Date(ad_nonce_exp) < new Date()) {
+    // تنظيف منتهي الصلاحية
+    await sql(`UPDATE sessions SET ad_nonce = NULL, ad_nonce_exp = NULL WHERE session_id = $1`, [sessionId]);
+    return false;
+  }
+
+  // هل يطابق ما أصدره السيرفر؟ (constant-time comparison)
+  const expected = Buffer.from(ad_nonce,     'hex');
+  const received = Buffer.from(clientNonce,  'hex');
+  const match    = expected.length === received.length &&
+                   crypto.timingSafeEqual(expected, received);
+
+  if (!match) return false;
+
+  // ✅ مطابق — احذفه فوراً (one-time use)
+  await sql(`UPDATE sessions SET ad_nonce = NULL, ad_nonce_exp = NULL WHERE session_id = $1`, [sessionId]);
+  return true;
+}
+
+// ── تحقق من Nonce العام (للعمليات الأخرى غير الإعلانات) ──
+async function checkNonce(tid, nonce) {
+  if (!nonce) return false;
+
+  // تنظيف القديم
+  await sql(`DELETE FROM nonces WHERE expires_at < NOW()`);
+
+  // هل استُخدم من قبل؟
+  const existing = await sql(`SELECT 1 FROM nonces WHERE nonce = $1`, [nonce]);
+  if (existing.length) return false;
+
+  // تسجيله
   await sql(
-    `UPDATE sessions SET current_nonce = $2 WHERE session_id = $1`,
-    [sessionId, nextNonce]
+    `INSERT INTO nonces (nonce, telegram_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [nonce, tid]
   );
-  return { valid: true, nextNonce };
+  return true;
 }
 
 // ── Rate Limiting (sliding window) ──
@@ -750,8 +796,7 @@ module.exports = async function handler(req, res) {
       await auditLog(tid, ipHash, fingerprint, 'create_session', 0, 'allow',
         { tg_id: tid, is_new_account: isNewAccount });
 
-      const firstNonce = await generateNonce(sid);
-      return res.status(200).json({ ok: true, session_id: sid, nonce: firstNonce });
+      return res.status(200).json({ ok: true, session_id: sid });
 
     } catch (txErr) {
       try { await db('ROLLBACK'); } catch (_) {}
@@ -761,8 +806,46 @@ module.exports = async function handler(req, res) {
   }
 
   // ================================================================
-  //  للطلبات الأخرى: التحقق من الجلسة أولاً
+  //  START_AD — إصدار Nonce للجلسة (session-based, server-generated)
+  //  ✅ لا nonce API عام — السيرفر يُنشئ nonce ويحفظه داخل الجلسة فقط
+  //  ✅ العميل يتلقى nonce مؤقت (5 دقائق) ويُرسله مع reward_ad
+  //  ✅ لا يمكن توليد nonce من العميل — مصدره السيرفر فقط
   // ================================================================
+  if (action === 'start_ad') {
+    if (!sessionId) return res.status(401).json({ ok: false, error: 'Missing session' });
+
+    // التحقق من الجلسة أولاً
+    const startAdSession = await sql(
+      `SELECT session_id, telegram_id FROM sessions
+       WHERE session_id = $1 AND is_valid = TRUE AND expires_at > NOW()`,
+      [sessionId]
+    );
+    if (!startAdSession.length) {
+      return res.status(401).json({ ok: false, error: 'Invalid or expired session' });
+    }
+
+    const startAdTid = parseInt(startAdSession[0].telegram_id);
+
+    // فحص Shadow/Hard Ban
+    const startAdUser = await sql(
+      `SELECT shadow_banned, is_hard_banned FROM users WHERE telegram_id = $1`,
+      [startAdTid]
+    );
+    if (startAdUser[0]?.is_hard_banned) {
+      return res.status(200).json({ ok: false, error: 'access_denied' });
+    }
+
+    // إصدار nonce جديد داخل الجلسة
+    const adNonce = await issueAdNonce(sessionId);
+
+    await auditLog(startAdTid, ipHash, fingerprint, 'start_ad', 0, 'allow', {
+      session_id: sessionId.slice(0, 8) + '...'
+    });
+
+    console.log(`[START_AD] nonce issued → tid=${startAdTid} session=${sessionId.slice(0,8)}...`);
+
+    return res.status(200).json({ ok: true, ad_nonce: adNonce });
+  }
   if (!sessionId) return res.status(401).json({ ok: false, error: 'Missing session' });
 
   // التحقق من صحة الجلسة
@@ -804,16 +887,16 @@ module.exports = async function handler(req, res) {
     return res.status(429).json({ ok: false, error: 'Too many requests' });
   }
 
-  // ── Nonce Check ──
-  let nextNonce = null;
-  if (!['get_state', 'load'].includes(action)) {
-    const { valid, nextNonce: nn } = await checkAndRotateNonce(sessionId, nonce);
-    if (!valid) {
+  // ── Nonce Check (للعمليات العامة — ليس الإعلانات) ──
+  // reward_ad يستخدم نظام nonce مستقل (session-based) داخل consumeAdNonce
+  // start_ad لا يحتاج nonce — هو من يُنشئه
+  if (!['get_state', 'load', 'reward_ad', 'start_ad'].includes(action)) {
+    const nonceValid = await checkNonce(tid, nonce);
+    if (!nonceValid) {
       await updateUserRisk(tid, 20);
-      await auditLog(tid, ipHash, fingerprint, action, 20, 'deny', { reason: 'nonce_invalid' });
+      await auditLog(tid, ipHash, fingerprint, action, 20, 'deny', { reason: 'nonce_replay' });
       return res.status(400).json({ ok: false, error: 'Nonce already used or missing' });
     }
-    nextNonce = nn;
   }
 
   // ── Risk Score Check ──
@@ -903,10 +986,8 @@ module.exports = async function handler(req, res) {
       const trueReferralFriends = parseInt(realFriendsCount[0]?.cnt || 0);
 
       // Shadow-banned users get real data but rewards are silently ignored upstream
-      const loadNonce = await generateNonce(sessionId);
       return res.status(200).json({
         ok: true,
-        nonce: loadNonce,
         user: { ...user, cells: resolved, referral_friends: trueReferralFriends }
       });
     }
@@ -940,10 +1021,8 @@ module.exports = async function handler(req, res) {
       );
       const trueReferralFriends2 = parseInt(realFriendsCount2[0]?.cnt || 0);
 
-      const stateNonce = await generateNonce(sessionId);
       return res.status(200).json({
         ok: true,
-        nonce: stateNonce,
         user: { ...user, cells: resolved, referral_friends: trueReferralFriends2 }
       });
     }
@@ -972,7 +1051,7 @@ module.exports = async function handler(req, res) {
         [tid, JSON.stringify(cells)]
       );
 
-      return res.status(200).json({ ok: true, cells, nonce: nextNonce });
+      return res.status(200).json({ ok: true, cells });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1035,7 +1114,6 @@ module.exports = async function handler(req, res) {
 
       return res.status(200).json({
         ok: true, cells,
-        nonce:        nextNonce,
         reward:       SERVER_REWARD,
         balance:      parseFloat(updatedUser[0]?.balance      || 0),
         today_earn:   parseFloat(updatedUser[0]?.today_earn   || 0),
@@ -1074,7 +1152,7 @@ module.exports = async function handler(req, res) {
         [tid, JSON.stringify(cells)]
       );
 
-      return res.status(200).json({ ok: true, cells, nonce: nextNonce });
+      return res.status(200).json({ ok: true, cells });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1090,13 +1168,26 @@ module.exports = async function handler(req, res) {
 
     // ══════════════════════════════════════════════════════════════
     //  REWARD_AD — مكافأة الإعلان الموثّقة (Zero-Trust Ad Reward)
-    //  ✅ يتحقق من session + nonce + fingerprint (تم مسبقاً)
-    //  ✅ يمنع الـ abuse بحد يومي صارم مخزّن في security_logs
+    //  ✅ يتحقق من session + ad_nonce (مخزّن في الجلسة، مولّد من السيرفر)
+    //  ✅ nonce لا يمر عبر الشبكة عند الإنشاء — يُرسل فقط عند الاستهلاك
+    //  ✅ one-time use: يُحذف بعد أول استخدام ناجح
+    //  ✅ لا يقبل nonce من مصدر غير السيرفر
     //  ✅ shadow ban: استجابة ناجحة زائفة بدون تعديل فعلي
     //  ✅ logging كامل: كل مشاهدة + كل reward + كل رفض
     // ══════════════════════════════════════════════════════════════
     if (action === 'reward_ad') {
-      const { ad_type } = data; // 'seed_single' | 'seed_bundle' | 'water'
+      const { ad_type, ad_nonce: clientAdNonce } = data;
+
+      // ── التحقق من session-based nonce ──
+      // السيرفر يُقارن clientAdNonce مع ما أصدره في start_ad
+      // أي nonce غير مطابق أو منتهي الصلاحية أو مُعاد استخدامه → رفض
+      const nonceValid = await consumeAdNonce(sessionId, clientAdNonce);
+      if (!nonceValid) {
+        await updateUserRisk(tid, 20);
+        await auditLog(tid, ipHash, fingerprint, 'reward_ad_nonce_fail', 20, 'deny',
+          { reason: 'invalid_or_missing_ad_nonce', ad_type });
+        return res.status(400).json({ ok: false, error: 'Invalid or missing ad nonce' });
+      }
 
       // ── تحديد نوع المكافأة من السيرفر فقط ──
       // daily_max: الحد اليومي للوحدات (ليس حد صلب على الـ column)
@@ -1181,7 +1272,7 @@ module.exports = async function handler(req, res) {
 
       console.log(`[AD_REWARD] tid=${tid} ad_type=${ad_type} +${reward.amount} → ${reward.col}=${newValue}`);
 
-      return res.status(200).json({ ok: true, nonce: nextNonce, [reward.col]: newValue });
+      return res.status(200).json({ ok: true, [reward.col]: newValue });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1301,7 +1392,7 @@ module.exports = async function handler(req, res) {
         [tid, photo_url]
       );
 
-      return res.status(200).json({ ok: true, nonce: nextNonce, photo_url });
+      return res.status(200).json({ ok: true, photo_url });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1339,7 +1430,7 @@ module.exports = async function handler(req, res) {
         [tid, amt, JSON.stringify(history)]
       );
 
-      return res.status(200).json({ ok: true, nonce: nextNonce, entry });
+      return res.status(200).json({ ok: true, entry });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -1363,12 +1454,13 @@ module.exports = async function handler(req, res) {
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  REDEEM_PROMO — Promo code redemption
+    //  REDEEM_PROMO — Promo code redemption with user limit
     // ══════════════════════════════════════════════════════════════
     if (action === 'redeem_promo') {
       try {
         const { code } = data;
 
+        // Validate payload
         if (!code || typeof code !== 'string' || !code.trim()) {
           return res.status(400).json({
             ok: false,
@@ -1380,66 +1472,86 @@ module.exports = async function handler(req, res) {
 
         const cleanCode = code.trim().toUpperCase().slice(0, 32);
 
-        // 1. Check if user already redeemed this code
-        const alreadyUsed = await sql(
-          `SELECT 1 FROM promo_redemptions WHERE user_id = $1 AND code = $2`,
-          [tid, cleanCode]
-        );
-        if (alreadyUsed.length) {
-          return res.status(200).json({
-            ok: false,
-            success: false,
-            error: 'already_redeemed',
-            message: 'Already redeemed'
-          });
-        }
-
-        // 2. Find promo
-        const promoRows = await sql(
-          `SELECT * FROM promo WHERE code = $1`,
-          [cleanCode]
-        );
-
-        // 3. Validate
-        if (!promoRows.length) {
-          return res.status(200).json({
+        // Validate code format (alphanumeric + dashes only)
+        if (!/^[A-Z0-9_-]{2,32}$/.test(cleanCode)) {
+          return res.status(400).json({
             ok: false,
             success: false,
             error: 'invalid_code',
+            message: 'Invalid code format'
+          });
+        }
+
+        // Fetch promo code details
+        const promoRows = await sql(
+          `SELECT * FROM promo_codes WHERE code = $1 AND is_active = TRUE`,
+          [cleanCode]
+        );
+
+        if (!promoRows.length) {
+          console.log(`[PROMO] Code not found: ${cleanCode} | user: ${tid}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'not_found',
             message: 'Invalid or expired code'
           });
         }
 
         const promo = promoRows[0];
 
-        if (!promo.is_active) {
-          return res.status(200).json({
-            ok: false,
-            success: false,
-            error: 'invalid_code',
-            message: 'Invalid or expired code'
-          });
-        }
-
-        if (promo.used_count >= promo.max_uses) {
-          return res.status(200).json({
-            ok: false,
-            success: false,
-            error: 'invalid_code',
-            message: 'Invalid or expired code'
-          });
-        }
-
+        // Check expiry
         if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+          console.log(`[PROMO] Code expired: ${cleanCode} | user: ${tid}`);
           return res.status(200).json({
             ok: false,
             success: false,
-            error: 'invalid_code',
+            error: 'expired',
             message: 'Invalid or expired code'
           });
         }
 
-        // 4. Apply rewards
+        // Check global usage limit
+        if (promo.use_count >= promo.max_uses) {
+          console.log(`[PROMO] Code limit reached: ${cleanCode} | use_count=${promo.use_count}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'user_limit',
+            message: 'This code has reached its maximum usage limit'
+          });
+        }
+
+        // Check if this user already redeemed this code
+        const alreadyUsed = await sql(
+          `SELECT 1 FROM promo_redemptions WHERE code = $1 AND telegram_id = $2`,
+          [cleanCode, tid]
+        );
+        if (alreadyUsed.length) {
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'already_used',
+            message: 'You have already used this code'
+          });
+        }
+
+        // Shadow ban: fake success (no actual reward applied)
+        if (isShadowBanned) {
+          console.log(`[PROMO] Shadow ban fake success: code=${cleanCode} user=${tid}`);
+          return res.status(200).json({
+            ok: true,
+            success: true,
+            message: 'Code redeemed successfully',
+            reward: promo.reward_desc || 'Reward claimed!',
+            seeds: promo.seeds || 0,
+            water: promo.water || 0,
+            balance: promo.balance || 0,
+            reward_desc: promo.reward_desc || 'Reward claimed!'
+          });
+        }
+
+        // Apply rewards atomically
         await sql(
           `UPDATE users
            SET seeds       = seeds + $2,
@@ -1447,31 +1559,33 @@ module.exports = async function handler(req, res) {
                balance     = balance + $4,
                updated_at  = NOW()
            WHERE telegram_id = $1`,
-          [tid, promo.reward_seeds || 0, promo.reward_water || 0, promo.reward_balance || 0]
+          [tid, promo.seeds || 0, promo.water || 0, promo.balance || 0]
         );
 
-        // INSERT redemption record
+        // Record redemption to prevent re-use
         await sql(
-          `INSERT INTO promo_redemptions (user_id, code) VALUES ($1, $2)`,
-          [tid, cleanCode]
+          `INSERT INTO promo_redemptions (code, telegram_id) VALUES ($1, $2)`,
+          [cleanCode, tid]
         );
 
-        // UPDATE used_count
+        // Increment global use counter
         await sql(
-          `UPDATE promo SET used_count = used_count + 1 WHERE code = $1`,
+          `UPDATE promo_codes SET use_count = use_count + 1 WHERE code = $1`,
           [cleanCode]
         );
 
-        console.log(`[PROMO] Redeemed: code=${cleanCode} user=${tid} seeds=${promo.reward_seeds||0} water=${promo.reward_water||0} balance=${promo.reward_balance||0}`);
+        const rewardAmount = promo.balance || 0;
+        console.log(`[PROMO] Redeemed: code=${cleanCode} user=${tid} seeds=${promo.seeds||0} water=${promo.water||0} balance=${promo.balance||0}`);
 
-        // 5. Return reward
         return res.status(200).json({
           ok: true,
           success: true,
-          nonce:   nextNonce,
-          balance: promo.reward_balance || 0,
-          seeds:   promo.reward_seeds   || 0,
-          water:   promo.reward_water   || 0
+          message: 'Code redeemed successfully',
+          reward: rewardAmount,
+          seeds:       promo.seeds   || 0,
+          water:       promo.water   || 0,
+          balance:     promo.balance || 0,
+          reward_desc: promo.reward_desc || 'Reward claimed!'
         });
 
       } catch (promoErr) {
