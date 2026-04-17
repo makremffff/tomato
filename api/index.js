@@ -96,6 +96,8 @@ async function bootstrap() {
     await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_fingerprint ON sessions(fingerprint)`);
 
     // ── جدول Nonce (منع إعادة الإرسال) ──
+    // حذف الجدول القديم وإعادة إنشائه بالـ schema الجديد
+    await sql(`DROP TABLE IF EXISTS nonces CASCADE`);
     await sql(`
       CREATE TABLE IF NOT EXISTS nonces (
         nonce         TEXT          PRIMARY KEY,
@@ -107,8 +109,6 @@ async function bootstrap() {
     `);
     await sql(`CREATE INDEX IF NOT EXISTS idx_nonces_expires  ON nonces(expires_at)`);
     await sql(`CREATE INDEX IF NOT EXISTS idx_nonces_telegram ON nonces(telegram_id, is_used)`);
-    try { await sql(`ALTER TABLE nonces ADD COLUMN IF NOT EXISTS is_used BOOLEAN NOT NULL DEFAULT FALSE`); } catch (_) {}
-    try { await sql(`ALTER TABLE nonces ALTER COLUMN used_at DROP NOT NULL`); } catch (_) {}
 
     // ── جدول Rate Limiting ──
     await sql(`
