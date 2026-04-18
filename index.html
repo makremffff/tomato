@@ -3116,29 +3116,44 @@ const tg = (function() {
   }
 })();
 
-// --- Platform Check: Telegram App only (block browser access) ---
+// --- Platform Check: Real Telegram App Only ---
 (function checkMobilePlatform() {
   const wall = document.getElementById('mobile-wall');
   if (!wall) return;
 
-  const allowed = ['android', 'ios', 'android_x'];
+  // ══════════════════════════════════════════════════════
+  //  الطريقة الوحيدة الموثوقة للتمييز بين تلغرام الحقيقي
+  //  والمتصفح العادي (حتى لو نسخ الرابط الكامل مع الـ hash):
+  //
+  //  window.TelegramWebviewProxy  — يُحقن فقط من WebView
+  //                                 داخل تطبيق تلغرام الرسمي
+  //  window.TelegramGameProxy     — نسخة أقدم، نفس المبدأ
+  //
+  //  الـ SDK (telegram-web-app.js) يقرأ الـ URL hash في أي
+  //  متصفح، لذا tg.initData وtg.initDataUnsafe لا تكفي.
+  //  أما TelegramWebviewProxy فهو كائن يُحقنه تطبيق تلغرام
+  //  في الـ WebView مباشرة — لا يمكن تزويره من متصفح عادي.
+  // ══════════════════════════════════════════════════════
+
+  const hasNativeProxy =
+    typeof window.TelegramWebviewProxy !== 'undefined' ||
+    typeof window.TelegramGameProxy    !== 'undefined';
+
+  const allowed  = ['android', 'ios', 'android_x'];
   const platform = tg?.platform || '';
 
-  // ✅ Real Telegram check:
-  // 1. window.Telegram.WebApp must exist (SDK injected by Telegram app)
-  // 2. initDataUnsafe.user must exist (real user data — not URL-spoofable)
-  // 3. platform must be mobile (android / ios)
-  const hasRealWebApp   = !!(window.Telegram && window.Telegram.WebApp);
-  const hasRealUser     = !!(tg?.initDataUnsafe?.user?.id);
-  const isMobilePlatform = allowed.includes(platform);
+  // يجب توافر الشرطين معاً:
+  //  ① Native proxy موجود (تأكيد إن الكود شغّال داخل WebView تلغرام)
+  //  ② platform هو موبايل (android/ios) وليس web/desktop
+  const isRealTelegramApp = hasNativeProxy && allowed.includes(platform);
 
-  const isRealTelegram = hasRealWebApp && hasRealUser && isMobilePlatform;
-
-  if (!isRealTelegram) {
+  if (!isRealTelegramApp) {
     wall.style.display = 'flex';
     document.body.style.overflow = 'hidden';
-    document.getElementById('navbar')?.style && (document.getElementById('navbar').style.display = 'none');
-    document.getElementById('loading-page')?.style && (document.getElementById('loading-page').style.display = 'none');
+    document.getElementById('navbar')?.style &&
+      (document.getElementById('navbar').style.display = 'none');
+    document.getElementById('loading-page')?.style &&
+      (document.getElementById('loading-page').style.display = 'none');
   }
 })();
 
