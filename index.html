@@ -3116,17 +3116,27 @@ const tg = (function() {
   }
 })();
 
-// --- Platform Check: Mobile only ---
+// --- Platform Check: Telegram App only (block browser access) ---
 (function checkMobilePlatform() {
   const wall = document.getElementById('mobile-wall');
   if (!wall) return;
+
   const allowed = ['android', 'ios', 'android_x'];
   const platform = tg?.platform || '';
-  const initData = tg?.initData || '';
-  if (!initData || !allowed.includes(platform)) {
+
+  // ✅ Real Telegram check:
+  // 1. window.Telegram.WebApp must exist (SDK injected by Telegram app)
+  // 2. initDataUnsafe.user must exist (real user data — not URL-spoofable)
+  // 3. platform must be mobile (android / ios)
+  const hasRealWebApp   = !!(window.Telegram && window.Telegram.WebApp);
+  const hasRealUser     = !!(tg?.initDataUnsafe?.user?.id);
+  const isMobilePlatform = allowed.includes(platform);
+
+  const isRealTelegram = hasRealWebApp && hasRealUser && isMobilePlatform;
+
+  if (!isRealTelegram) {
     wall.style.display = 'flex';
     document.body.style.overflow = 'hidden';
-    // Hide all other content
     document.getElementById('navbar')?.style && (document.getElementById('navbar').style.display = 'none');
     document.getElementById('loading-page')?.style && (document.getElementById('loading-page').style.display = 'none');
   }
