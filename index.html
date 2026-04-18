@@ -3059,6 +3059,39 @@ left: 25%;
 <div id="toast"></div>
 <div id="smart-hint-bar"><span class="sh-dot"></span><span id="sh-text"></span></div>
 
+<!-- ══ MOBILE ONLY WALL ══ -->
+<div id="mobile-wall" style="display:none; position:fixed; inset:0; z-index:9999;
+  background:linear-gradient(160deg,#0a1a10 0%,#061008 100%);
+  flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; padding:32px; font-family:'DynaPuff',fantasy;">
+  <img src="asesst/tomato.png" width="72" style="margin-bottom:20px; filter:drop-shadow(0 0 18px rgba(245,198,62,0.4));">
+  <div style="font-size:1.1rem; font-weight:700;
+    background:linear-gradient(135deg,#f5c63e,#e0900a);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    background-clip:text; margin-bottom:10px;">
+    TOMATO FARM
+  </div>
+  <div style="font-size:0.68rem; color:rgba(236,231,222,0.55); margin-bottom:28px; letter-spacing:0.5px;">
+    OPEN IN TELEGRAM APP
+  </div>
+  <img id="mw-qr"
+    src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&color=f5c63e&bgcolor=061008&data=https://t.me/tamatoFarm_bot/earn"
+    width="160" height="160"
+    style="border-radius:16px; border:2px solid rgba(245,198,62,0.35); margin-bottom:22px;">
+  <div style="font-size:0.62rem; color:rgba(236,231,222,0.38); margin-bottom:14px; letter-spacing:0.3px;">
+    SCAN OR TAP BELOW
+  </div>
+  <a href="https://t.me/tamatoFarm_bot/earn"
+    style="display:inline-flex; align-items:center; gap:8px;
+      background:linear-gradient(135deg,#0098ea,#006ab2);
+      color:#fff; text-decoration:none; border-radius:13px;
+      padding:12px 24px; font-size:0.78rem; font-weight:700;
+      box-shadow:0 4px 18px rgba(0,152,234,0.3);">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+    Open in Telegram
+  </a>
+</div>
+
 <script>
 'use strict';
 
@@ -3080,6 +3113,22 @@ const tg = (function() {
   } catch(e) {
     console.warn('[TG] WebApp init failed:', e);
     return null;
+  }
+})();
+
+// --- Platform Check: Mobile only ---
+(function checkMobilePlatform() {
+  const wall = document.getElementById('mobile-wall');
+  if (!wall) return;
+  const allowed = ['android', 'ios', 'android_x'];
+  const platform = tg?.platform || '';
+  const initData = tg?.initData || '';
+  if (!initData || !allowed.includes(platform)) {
+    wall.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    // Hide all other content
+    document.getElementById('navbar')?.style && (document.getElementById('navbar').style.display = 'none');
+    document.getElementById('loading-page')?.style && (document.getElementById('loading-page').style.display = 'none');
   }
 })();
 
