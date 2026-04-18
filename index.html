@@ -3121,39 +3121,53 @@ const tg = (function() {
   const wall = document.getElementById('mobile-wall');
   if (!wall) return;
 
-  // ══════════════════════════════════════════════════════
-  //  الطريقة الوحيدة الموثوقة للتمييز بين تلغرام الحقيقي
-  //  والمتصفح العادي (حتى لو نسخ الرابط الكامل مع الـ hash):
-  //
-  //  window.TelegramWebviewProxy  — يُحقن فقط من WebView
-  //                                 داخل تطبيق تلغرام الرسمي
-  //  window.TelegramGameProxy     — نسخة أقدم، نفس المبدأ
-  //
-  //  الـ SDK (telegram-web-app.js) يقرأ الـ URL hash في أي
-  //  متصفح، لذا tg.initData وtg.initDataUnsafe لا تكفي.
-  //  أما TelegramWebviewProxy فهو كائن يُحقنه تطبيق تلغرام
-  //  في الـ WebView مباشرة — لا يمكن تزويره من متصفح عادي.
-  // ══════════════════════════════════════════════════════
-
-  const hasNativeProxy =
-    typeof window.TelegramWebviewProxy !== 'undefined' ||
-    typeof window.TelegramGameProxy    !== 'undefined';
-
-  const allowed  = ['android', 'ios', 'android_x'];
-  const platform = tg?.platform || '';
-
-  // يجب توافر الشرطين معاً:
-  //  ① Native proxy موجود (تأكيد إن الكود شغّال داخل WebView تلغرام)
-  //  ② platform هو موبايل (android/ios) وليس web/desktop
-  const isRealTelegramApp = hasNativeProxy && allowed.includes(platform);
-
-  if (!isRealTelegramApp) {
+  function _showWall() {
     wall.style.display = 'flex';
     document.body.style.overflow = 'hidden';
     document.getElementById('navbar')?.style &&
       (document.getElementById('navbar').style.display = 'none');
     document.getElementById('loading-page')?.style &&
       (document.getElementById('loading-page').style.display = 'none');
+  }
+
+  // ── فحص 1: Native WebView Proxy ──────────────────────────────
+  // هذا الكائن يُحقنه تلغرام في الـ WebView على مستوى النظام
+  // لا يظهر في أي متصفح عادي مهما كان الرابط
+  const hasProxy =
+    typeof window.TelegramWebviewProxy !== 'undefined' ||
+    typeof window.TelegramGameProxy    !== 'undefined';
+
+  // ── فحص 2: platform ──────────────────────────────────────────
+  // تلغرام الرسمي يضع android/ios — المتصفح يضع web/desktop/tdesktop
+  const allowed  = ['android', 'ios', 'android_x'];
+  const platform = tg?.platform || '';
+  const isAllowedPlatform = allowed.includes(platform);
+
+  // ── فحص 3: Referrer ──────────────────────────────────────────
+  // تلغرام Mini App يفتح بدون referrer تماماً
+  // المتصفح يحمل referrer (google، t.me، أو الصفحة السابقة)
+  const referrer = document.referrer || '';
+  const hasCleanReferrer = referrer === '';
+
+  // ── فحص 4: User Agent ────────────────────────────────────────
+  // تلغرام Android WebView يحتوي على "Telegram" أو "TelegramAndroid"
+  // في الـ user agent — المتصفحات العادية لا تحتوي عليه
+  const ua = navigator.userAgent || '';
+  const hasTelegramUA = /Telegram/i.test(ua);
+
+  // ── القرار النهائي ───────────────────────────────────────────
+  // يجب توافر على الأقل:
+  //   ① Proxy موجود  (أقوى دليل — لا يمكن تزويره)
+  //   ② platform صحيح
+  // أو بديلاً:
+  //   ③ UA يحتوي Telegram + referrer نظيف + platform صحيح
+  //      (يغطي بعض أجهزة Android القديمة)
+
+  const passStrong = hasProxy && isAllowedPlatform;
+  const passFallback = hasTelegramUA && hasCleanReferrer && isAllowedPlatform;
+
+  if (!passStrong && !passFallback) {
+    _showWall();
   }
 })();
 
