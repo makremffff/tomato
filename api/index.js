@@ -18,10 +18,10 @@ const crypto     = require('crypto');
 const DATABASE_URL = process.env.DATABASE_URL;
 const BOT_TOKEN    = process.env.BOT_TOKEN; // ← مطلوب لتحقق Telegram
 
-// ── SQL executor ─────────────────────────────────────────────────
+// ── SQL executor — connection واحد يُعاد استخدامه (FIX #1) ──────
+const _db = neon(DATABASE_URL);
 async function sql(query, params = []) {
-  const db = neon(DATABASE_URL);
-  return await db(query, params);
+  return await _db(query, params);
 }
 
 // ── Constants ────────────────────────────────────────────────────
@@ -49,7 +49,10 @@ const MULTI_ACCT = {
 };
 
 // ── Bootstrap: إنشاء جميع الجداول ───────────────────────────────
+let _bootstrapped = false; // (FIX #4) — لا نُعيد تشغيل bootstrap في كل cold start
 async function bootstrap() {
+  if (_bootstrapped) return;
+  _bootstrapped = true;
   try {
     // ── جدول المستخدمين الأساسي ──
     await sql(`
@@ -406,12 +409,21 @@ async function consumeAdNonce(sessionId, clientNonce) {
   return true;
 }
 
+// ── تنظيف دوري للجداول المؤقتة — كل ساعة (FIX #3) ─────────────
+// بدلاً من الحذف في كل request، نشغّل cron داخلي خفيف
+setInterval(async () => {
+  try {
+    await sql(`DELETE FROM nonces     WHERE expires_at  < NOW()`);
+    await sql(`DELETE FROM rate_limits WHERE window_start < $1`, [Date.now() - RATE_WINDOW * 10]);
+    console.log('[CLEANUP] nonces & rate_limits cleaned');
+  } catch (e) {
+    console.warn('[CLEANUP] error:', e.message);
+  }
+}, 60 * 60 * 1000); // كل ساعة
+
 // ── تحقق من Nonce العام (للعمليات الأخرى غير الإعلانات) ──
 async function checkNonce(tid, nonce) {
   if (!nonce) return false;
-
-  // تنظيف القديم
-  await sql(`DELETE FROM nonces WHERE expires_at < NOW()`);
 
   // هل استُخدم من قبل؟
   const existing = await sql(`SELECT 1 FROM nonces WHERE nonce = $1`, [nonce]);
@@ -429,11 +441,7 @@ async function checkNonce(tid, nonce) {
 async function checkRateLimit(tid) {
   const window = Math.floor(Date.now() / RATE_WINDOW) * RATE_WINDOW;
 
-  // تنظيف النوافذ القديمة
-  await sql(
-    `DELETE FROM rate_limits WHERE window_start < $1`,
-    [window - RATE_WINDOW * 10]
-  );
+  // تنظيف Rate Limit يصير في interval مستقل (FIX #3) — لا نحذف هنا
 
   const rows = await sql(
     `INSERT INTO rate_limits (telegram_id, window_start, request_count)
@@ -606,6 +614,8 @@ module.exports = async function handler(req, res) {
     // ════════════════════════════════════════════════════════════════
     //  ATOMIC MULTI-ACCOUNT DETECTION
     //  كل شيء داخل transaction مع advisory lock لمنع race conditions
+    //  نستخدم نسخة منفصلة من neon هنا لأن BEGIN/COMMIT يحتاج connection
+    //  مستقل عن الـ _db المشترك (transaction-scoped connection)
     // ════════════════════════════════════════════════════════════════
     const db = neon(DATABASE_URL);
 
@@ -1732,7 +1742,7 @@ async function handleChannelTask(task, tid, step, isShadowBanned, ipHash, finger
 async function completeTask(task, tid, res) {
   const reward = parseFloat(task.reward) || 0;
 
-  // تحديث user_tasks + balance في عملية واحدة
+  // تحديث user_tasks
   await sql(
     `INSERT INTO user_tasks (telegram_id, task_id, completed, completed_at)
      VALUES ($1, $2, TRUE, NOW())
@@ -1741,16 +1751,19 @@ async function completeTask(task, tid, res) {
     [tid, task.id]
   );
 
+  // تحديث balance وإرجاع القيمة الجديدة في query واحدة (FIX #2) ─
+  let newBalance = 0;
   if (reward > 0) {
-    await sql(
-      `UPDATE users SET balance = balance + $2, updated_at = NOW() WHERE telegram_id = $1`,
+    const updated = await sql(
+      `UPDATE users SET balance = balance + $2, updated_at = NOW()
+       WHERE telegram_id = $1 RETURNING balance`,
       [tid, reward]
     );
+    newBalance = parseFloat(updated[0]?.balance || 0);
+  } else {
+    const cur = await sql(`SELECT balance FROM users WHERE telegram_id = $1`, [tid]);
+    newBalance = parseFloat(cur[0]?.balance || 0);
   }
-
-  // جلب الرصيد الجديد
-  const updated = await sql(`SELECT balance FROM users WHERE telegram_id = $1`, [tid]);
-  const newBalance = parseFloat(updated[0]?.balance || 0);
 
   return res.status(200).json({ ok: true, reward, balance: newBalance });
 }
