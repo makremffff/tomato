@@ -5166,8 +5166,8 @@ async function _createSession() {
     return false;
   }
   try {
-    // Clear cache on every new session attempt to ensure fresh fingerprint
-    _cachedFingerprint = null;
+    // (FIX #3) — لا نصفّر الـ cache — الـ fingerprint لا يتغير بين sessions
+    // _cachedFingerprint = null; ← محذوف
     const fpStr = await _buildFingerprint();
     const res = await fetch(API_BASE + '/api', {
       method: 'POST',
@@ -5274,32 +5274,6 @@ function _applyUser(u) {
   if (Array.isArray(u.wd_history)) withdrawHistory.push(...u.wd_history);
 }
 
-async function loadUser() {
-  if (!TG_ID) return;
-  await _createSession();
-  const result = await _dbCall('load', {
-    username:    TG_USERNAME || TG_FIRST || null,
-    referral_by: getReferralId()
-  });
-  if (!result.ok || !result.user) return;
-
-  // ── فحص الحظر فور تحميل بيانات المستخدم ──
-  if (result.user.shadow_banned === true) {
-    showSecurityWall();
-    return; // لا نتابع التحميل
-  }
-
-  _applyUser(result.user);
-  renderFarm(); updateStats(); syncWithdrawPage(); syncInvitePage();
-
-  // ── تحميل المهام الديناميكية ──
-  await loadAndRenderTasks();
-
-  console.log('[ZT] User loaded via secure session');
-}
-
-
-
 buildFarm();
 
 /* ── SMART LOADING — تخفي شاشة التحميل بعد انتهاء loadUser فعلاً ── */
@@ -5343,9 +5317,10 @@ buildFarm();
   }
 })();
 
+// loadUser — used for manual refresh only (FIX: removed duplicate that caused double load on startup)
 async function loadUser() {
   if (!TG_ID) return;
-  await _createSession();
+  if (!_sessionId) await _createSession();
   const result = await _dbCall('load', {
     username:    TG_USERNAME || TG_FIRST || null,
     referral_by: getReferralId()
@@ -5357,9 +5332,13 @@ async function loadUser() {
   await loadAndRenderTasks();
 }
 
-/* ── POLLING — get_state كل 3 ثواني ── */
+/* ── POLLING — get_state كل 8 ثواني (FIX: كان 3 ثواني) ──
+   يتوقف تلقائياً لما المستخدم مو في صفحة الفارم لتوفير الطلبات ── */
 let _pollActive = false;
 setInterval(async () => {
+  // (FIX #1) — لا نستدعي السيرفر إلا لما صفحة الفارم مفعّلة
+  const farmPage = document.getElementById('page-farm');
+  if (!farmPage || !farmPage.classList.contains('active')) return;
   if (!TG_ID || _pollActive) return;
   _pollActive = true;
   try {
@@ -5407,7 +5386,7 @@ setInterval(async () => {
   } finally {
     _pollActive = false;
   }
-}, 3000);
+}, 8000); // (FIX: كان 3000)
 
 /* ── INITIAL FARM PAGE ANIMATION ──
    Triggers the same pg-item entrance for the farm page on first load */
