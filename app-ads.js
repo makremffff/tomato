@@ -156,7 +156,8 @@ function _updateAdUINoBtn() {
     const r   = ads.remaining;
     const setText = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
     setText('ads-remaining', r);
-    setText('ads-watched',   ads.watched);
+    setText('ads-watched',       ads.watched);
+    setText('ads-watched-total', ads.watched);
     setText('earned-today',  ads.earned.toLocaleString('en-US'));
     setText('ads-daily-limit', ads.total);
     const progBar = document.getElementById('ads-progress');
@@ -177,7 +178,8 @@ export function updateAdUI() {
 
     const setText = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
     setText('ads-remaining', r);
-    setText('ads-watched',   ads.watched);
+    setText('ads-watched',       ads.watched);
+    setText('ads-watched-total', ads.watched);
     setText('earned-today',  ads.earned.toLocaleString('en-US'));
     setText('ads-daily-limit', ads.total);
 
