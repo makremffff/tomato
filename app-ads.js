@@ -132,6 +132,17 @@ function _initAdController() {
     return _adController;
 }
 
+// ── حساب الحد اليومي الكامل بالنقاط ديناميكياً ──────────────────
+function _updateDailyLimitPts() {
+    const adsgramTotal    = _AS.ads.total || _AC.ads?.daily_limit || 7;
+    const adsgramPts      = _AC.rewards?.points_per_ad || 60;
+    const taddyTotal      = _TS.total || _AC.taddy_ads?.daily_limit || 30;
+    const taddyPts        = _AC.taddy_ads?.points_per_ad || 30;
+    const maxPts          = (adsgramTotal * adsgramPts) + (taddyTotal * taddyPts);
+    const el = document.getElementById('earn-daily-limit-pts');
+    if (el) el.textContent = maxPts.toLocaleString('en-US');
+}
+
 // ══════════════════════════════════════════════════════════
 // updateAdUI — يحدث واجهة الإعلانات اليومية فقط
 // ══════════════════════════════════════════════════════════
@@ -153,13 +164,7 @@ function _updateAdUINoBtn() {
     if (r===0) { if(btn) btn.style.display='none'; if(doneEl) doneEl.style.display='flex'; }
     else       { if(btn) btn.style.display='';     if(doneEl) doneEl.style.display='none'; }
     _syncDailyTaskProgress();
-    const _earnRingFill = document.getElementById('earn-ring-fill');
-    if (_earnRingFill) {
-        const _EARN_CIRC = 263.89;
-        const _total = ads.total || 10;
-        const _pct   = _total > 0 ? r / _total : 0;
-        _earnRingFill.style.strokeDashoffset = _EARN_CIRC * (1 - _pct);
-    }
+    _updateDailyLimitPts();
 }
 
 export function updateAdUI() {
@@ -199,15 +204,8 @@ export function updateAdUI() {
     else       { if(btn && !ads._btnCooldownActive) btn.style.display=''; if(doneEl) doneEl.style.display='none'; }
 
     _syncDailyTaskProgress();
+    _updateDailyLimitPts();
 
-    // ── Sync earn ring SVG ──
-    const _earnRingFill = document.getElementById('earn-ring-fill');
-    if (_earnRingFill) {
-        const _EARN_CIRC = 263.89; // 2π×42
-        const _total = ads.total || 10;
-        const _pct   = _total > 0 ? r / _total : 0;
-        _earnRingFill.style.strokeDashoffset = _EARN_CIRC * (1 - _pct);
-    }
     // ── Sync Adsgram mini ring ──
     const _miniRing = document.getElementById('adsgram-mini-ring');
     if (_miniRing) {
@@ -754,6 +752,20 @@ window.addEventListener('DOMContentLoaded', async () => {
                 if (cfg.telegram)  Object.assign(_AC.telegram,  cfg.telegram);
                 if (cfg.ads)       Object.assign(_AC.ads,       cfg.ads);
                 if (cfg.ads?.daily_limit) _AS.serverConfig.ads_daily_limit=cfg.ads.daily_limit;
+                if (cfg.taddy_ads) {
+                    if (!_AC.taddy_ads) _AC.taddy_ads = {};
+                    Object.assign(_AC.taddy_ads, cfg.taddy_ads);
+                    if (cfg.taddy_ads.points_per_ad) {
+                        _TS.reward = cfg.taddy_ads.points_per_ad;
+                        const tBadge = document.getElementById('taddy-pts-val');
+                        if (tBadge) tBadge.textContent = cfg.taddy_ads.points_per_ad;
+                    }
+                    if (cfg.taddy_ads.daily_limit) {
+                        _TS.total = cfg.taddy_ads.daily_limit;
+                        const tTot = document.getElementById('taddy-total');
+                        if (tTot) tTot.textContent = cfg.taddy_ads.daily_limit;
+                    }
+                }
                 // ── adsgram task dynamic config ──
                 if (cfg.adsgram_task) {
                     if (cfg.adsgram_task.reward)      _AT.reward     = cfg.adsgram_task.reward;
@@ -936,6 +948,7 @@ const _TS = {
     remaining:          30,
     watched:            0,
     total:              30,
+    reward:             30,
     earned:             0,
     isWatching:         false,
     cooldownUntil:      0,
@@ -997,7 +1010,7 @@ export async function watchTaddyAd() {
 
     // فحص Taddy SDK
     if (!window.Taddy) {
-        showToast('coin','Taddy غير متاح','حاول مجدداً','red','');
+        showToast('coin','الإعلان غير متاح','حاول مجدداً','red','');
         return;
     }
 
@@ -1013,7 +1026,7 @@ export async function watchTaddyAd() {
             if (startRes?.error === 'daily_limit_reached') {
                 _TS.remaining = 0;
                 updateTaddyUI();
-                showToast('trophy','انتهت إعلانات Taddy اليوم 🏆','عُد غداً لمزيد من النقاط','green','');
+                showToast('trophy','انتهت إعلانات اليوم 🏆','عُد غداً لمزيد من النقاط','green','');
             } else if (startRes?.error === 'cooldown_active') {
                 _TS.cooldownUntil = Date.now() + (startRes.wait_ms || 30000);
                 updateTaddyUI();
@@ -1025,30 +1038,51 @@ export async function watchTaddyAd() {
 
         const taddyNonce = startRes.taddy_nonce;
 
-        // [2] عرض إعلان Taddy
-        let success = false;
+        // [2] عرض إعلان أول
+        let success1 = false;
         try {
-            success = await window.Taddy.ads().interstitial({
+            success1 = await window.Taddy.ads().interstitial({
                 onClosed:      () => {},
                 onViewThrough: () => {},
             });
         } catch (sdkErr) {
-            console.warn('[Taddy]', sdkErr);
+            console.warn('[Taddy ad1]', sdkErr);
         }
 
-        _TS.isWatching = false;
-
-        if (!success) {
+        if (!success1) {
+            _TS.isWatching = false;
             if (btn) btn.classList.remove('disabled');
             showToast('coin','لم يتم عرض الإعلان','','red','');
             return;
         }
 
-        // [3] reward_taddy_ad
+        // فاصل قصير بين الإعلانين
+        await new Promise(r => setTimeout(r, 800));
+
+        // [3] عرض إعلان ثانٍ
+        let success2 = false;
+        try {
+            success2 = await window.Taddy.ads().interstitial({
+                onClosed:      () => {},
+                onViewThrough: () => {},
+            });
+        } catch (sdkErr) {
+            console.warn('[Taddy ad2]', sdkErr);
+        }
+
+        _TS.isWatching = false;
+
+        if (!success2) {
+            if (btn) btn.classList.remove('disabled');
+            showToast('coin','لم يتم عرض الإعلان','','red','');
+            return;
+        }
+
+        // [4] reward_taddy_ad — يُخصم 1 فقط من العداد اليومي رغم مشاهدة إعلانين
         const result = await _dbCall('reward_taddy_ad', {}, taddyNonce);
 
         if (result?.ok) {
-            const pts = result.points_awarded || 30;
+            const pts = result.points_awarded || _TS.reward || 30;
             _TS.remaining  = result.remaining    ?? Math.max(0, _TS.remaining - 1);
             _TS.watched    = result.watchedToday ?? (_TS.watched + 1);
             _TS.earned    += pts;
@@ -1062,14 +1096,14 @@ export async function watchTaddyAd() {
             _AS.ads.earned = (_AS.ads.earned || 0) + pts;
             document.getElementById('earned-today') && (document.getElementById('earned-today').textContent = (_AS.ads.earned).toLocaleString('en-US'));
 
-            showToast('coin','Taddy 🎉',`+${pts.toLocaleString('en-US')} نقطة`,'gold',`+${pts}`);
-            pushNotif('gold','إعلان Taddy ✓',`+${pts.toLocaleString('en-US')} نقطة`);
+            showToast('coin','مكافأة إعلان 🎉',`+${pts.toLocaleString('en-US')} نقطة`,'gold',`+${pts}`);
+            pushNotif('gold','إعلان ✓',`+${pts.toLocaleString('en-US')} نقطة`);
         } else {
             if (btn) btn.classList.remove('disabled');
             if (result?.error === 'daily_limit_reached') {
                 _TS.remaining = 0;
                 updateTaddyUI();
-                showToast('trophy','انتهت إعلانات Taddy 🏆','عُد غداً','green','');
+                showToast('trophy','انتهت إعلانات اليوم 🏆','عُد غداً','green','');
             } else {
                 showToast('coin','تعذّر استلام المكافأة','','red','');
             }
@@ -1087,6 +1121,7 @@ export function initTaddyUI(data) {
     if (!data) return;
     _TS.watched    = data.watched_today  || 0;
     _TS.total      = data.daily_limit    || 30;
+    if (data.points_per_ad) _TS.reward = data.points_per_ad;
     _TS.remaining  = Math.max(0, _TS.total - _TS.watched);
     updateTaddyUI();
 }
