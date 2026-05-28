@@ -367,7 +367,15 @@ export function initTelegramUser() {
     if (!user) { _applyFallbackUser(); applyI18n(); return; }
 
     // ── Language detection ─────────────────────────────
-    APP_LANG = _detectLang(user.language_code || navigator.language || '');
+    // استخراج language_code من raw initData كـ fallback
+    const _rawLang = (() => {
+        try {
+            const raw = tg.initData || '';
+            const match = raw.match(/language_code["%3A]+([a-z]{2})/i);
+            return match ? match[1] : '';
+        } catch(_) { return ''; }
+    })();
+    APP_LANG = _detectLang(user.language_code || _rawLang || navigator.language || '');
     applyI18n();
 
     const userId    = user.id          ?? null;
