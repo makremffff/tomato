@@ -382,11 +382,11 @@ export async function watchAd() {
             let remSec = Math.ceil(cdMs / 1000);
             ads._btnCooldownActive = true;
             bNow.innerHTML = `<div class="btn-shimmer"></div>`
-                + `<div id="ad-btn-countdown" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;font-family:'DynaPuff',sans-serif;font-size:26px;font-weight:900;color:#fbbf24;letter-spacing:2px;text-shadow:0 0 14px rgba(251,191,36,0.6);"><img src="asesst/loading.gif" alt="" style="width:22px;height:22px;opacity:0.85;">${remSec}s</div>`;
+                + `<div id="ad-btn-countdown" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'DynaPuff',sans-serif;font-size:13px;font-weight:900;color:#fbbf24;letter-spacing:1px;text-shadow:0 0 8px rgba(251,191,36,0.5);"><img src="asesst/loading.gif" alt="" style="width:14px;height:14px;opacity:0.85;">${remSec}s</div>`;
             ads._cooldownTimer = setInterval(() => {
                 remSec--;
                 const lbl = document.getElementById('ad-btn-countdown');
-                if (lbl) lbl.innerHTML = `<img src="asesst/loading.gif" alt="" style="width:22px;height:22px;opacity:0.85;">${remSec}s`;
+                if (lbl) lbl.innerHTML = `<img src="asesst/loading.gif" alt="" style="width:14px;height:14px;opacity:0.85;">${remSec}s`;
                 if (remSec <= 0) {
                     clearInterval(ads._cooldownTimer); ads._cooldownTimer = null;
                     ads._btnCooldownActive = false;
@@ -992,11 +992,11 @@ export function updateTaddyUI() {
         let remSec = Math.ceil(coolLeft / 1000);
         // نفس تصميم عدّاد Adsgram
         btn.innerHTML = `<div class="btn-shimmer"></div>`
-            + `<div id="taddy-btn-countdown" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;font-family:'DynaPuff',sans-serif;font-size:26px;font-weight:900;color:#fbbf24;letter-spacing:2px;text-shadow:0 0 14px rgba(251,191,36,0.6);"><img src="asesst/loading.gif" alt="" style="width:22px;height:22px;opacity:0.85;">${remSec}s</div>`;
+            + `<div id="taddy-btn-countdown" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'DynaPuff',sans-serif;font-size:13px;font-weight:900;color:#fbbf24;letter-spacing:1px;text-shadow:0 0 8px rgba(251,191,36,0.5);"><img src="asesst/loading.gif" alt="" style="width:14px;height:14px;opacity:0.85;">${remSec}s</div>`;
         _TS._cooldownTimer = setInterval(() => {
             remSec--;
             const lbl = document.getElementById('taddy-btn-countdown');
-            if (lbl) lbl.innerHTML = `<img src="asesst/loading.gif" alt="" style="width:22px;height:22px;opacity:0.85;">${remSec}s`;
+            if (lbl) lbl.innerHTML = `<img src="asesst/loading.gif" alt="" style="width:14px;height:14px;opacity:0.85;">${remSec}s`;
             if (remSec <= 0) {
                 clearInterval(_TS._cooldownTimer); _TS._cooldownTimer = null;
                 _TS._btnCooldownActive = false;
