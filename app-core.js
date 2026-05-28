@@ -367,7 +367,7 @@ export function initTelegramUser() {
     if (!user) { _applyFallbackUser(); applyI18n(); return; }
 
     // ── Language detection ─────────────────────────────
-    APP_LANG = _detectLang(user.language_code || '');
+    APP_LANG = _detectLang(user.language_code || navigator.language || '');
     applyI18n();
 
     const userId    = user.id          ?? null;
