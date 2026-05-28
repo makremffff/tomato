@@ -2149,25 +2149,23 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(6, 6, 16, 0.86);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(6, 6, 18, 0.93);
             border-radius: inherit;
         }
         .epc-content {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 10px;
         }
         .epc-ring-wrap {
             position: relative;
-            width: 58px;
-            height: 58px;
+            width: 38px;
+            height: 38px;
             flex-shrink: 0;
         }
         .epc-ring-svg {
-            width: 58px;
-            height: 58px;
+            width: 38px;
+            height: 38px;
             transform: rotate(-90deg);
         }
         .epc-ring-bg {
@@ -2198,7 +2196,7 @@
             align-items: center;
             justify-content: center;
             font-family: 'DynaPuff', sans-serif;
-            font-size: 17px;
+            font-size: 12px;
             font-weight: 900;
             line-height: 1;
         }
@@ -2211,9 +2209,9 @@
         }
         .epc-label {
             font-family: 'Tajawal', sans-serif;
-            font-size: 13px;
+            font-size: 11px;
             font-weight: 700;
-            color: rgba(255,255,255,.75);
+            color: rgba(255,255,255,.70);
             letter-spacing: .3px;
         }
         .epc-sublabel {
