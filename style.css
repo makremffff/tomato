@@ -2141,6 +2141,88 @@
             box-shadow: 0 4px 18px rgba(245,158,11,.22);
         }
         /* Done row */
+        /* ── Earn Provider Cooldown Overlay ── */
+        .epc-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(6, 6, 16, 0.86);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-radius: inherit;
+        }
+        .epc-content {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .epc-ring-wrap {
+            position: relative;
+            width: 58px;
+            height: 58px;
+            flex-shrink: 0;
+        }
+        .epc-ring-svg {
+            width: 58px;
+            height: 58px;
+            transform: rotate(-90deg);
+        }
+        .epc-ring-bg {
+            fill: none;
+            stroke: rgba(255,255,255,.07);
+            stroke-width: 4;
+        }
+        .epc-ring-track {
+            fill: none;
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-dasharray: 150.8;
+            stroke-dashoffset: 0;
+            transition: stroke-dashoffset 0.9s linear;
+        }
+        .epc-ring-track-t {
+            stroke: #06b6d4;
+            filter: drop-shadow(0 0 6px rgba(6,182,212,.75));
+        }
+        .epc-ring-track-a {
+            stroke: #fbbf24;
+            filter: drop-shadow(0 0 6px rgba(251,191,36,.75));
+        }
+        .epc-num {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'DynaPuff', sans-serif;
+            font-size: 17px;
+            font-weight: 900;
+            line-height: 1;
+        }
+        .epc-content-t .epc-num { color: #67e8f9; text-shadow: 0 0 10px rgba(6,182,212,.6); }
+        .epc-content-a .epc-num { color: #fde68a; text-shadow: 0 0 10px rgba(251,191,36,.6); }
+        .epc-text {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .epc-label {
+            font-family: 'Tajawal', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            color: rgba(255,255,255,.75);
+            letter-spacing: .3px;
+        }
+        .epc-sublabel {
+            font-family: 'Tajawal', sans-serif;
+            font-size: 10px;
+            font-weight: 600;
+            color: rgba(255,255,255,.35);
+        }
+
         .earn-prov-done-row {
             padding: 6px 16px 10px;
             display: flex;

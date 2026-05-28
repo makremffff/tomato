@@ -374,30 +374,33 @@ export async function watchAd() {
         const pts       = result.points_awarded !== undefined ? result.points_awarded : fullPts;
         const isPartial = !!result.partial;
 
-        // ── عدّاد تنازلي داخل الزر — نجيبه fresh بعد الإعلان ──
+        // ── Overlay على الكارد كامل — بدل العداد داخل الزر ──
         const bNow = _btn();
         if (ads.remaining > 0 && bNow) {
             if (ads._cooldownTimer) { clearInterval(ads._cooldownTimer); ads._cooldownTimer = null; }
             bNow.classList.add('disabled');
             let remSec = Math.ceil(cdMs / 1000);
+            const totalSec = remSec;
             ads._btnCooldownActive = true;
-            bNow.innerHTML = `<div class="btn-shimmer"></div>`
-                + `<div id="ad-btn-countdown" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'DynaPuff',sans-serif;font-size:13px;font-weight:900;color:#fbbf24;letter-spacing:1px;text-shadow:0 0 8px rgba(251,191,36,0.5);"><img src="asesst/loading.gif" alt="" style="width:14px;height:14px;opacity:0.85;">${remSec}s</div>`;
+            const cdOverlay = document.getElementById('adsgram-cooldown-overlay');
+            const cdNumEl   = document.getElementById('adsgram-cooldown-num');
+            const cdRingEl  = document.getElementById('adsgram-cd-ring');
+            const CIRC = 150.8;
+            const _setRing = (s) => { if (cdRingEl) cdRingEl.style.strokeDashoffset = CIRC * (1 - s / totalSec); };
+            if (cdOverlay) cdOverlay.style.display = 'flex';
+            if (cdNumEl) cdNumEl.textContent = remSec;
+            _setRing(remSec);
             ads._cooldownTimer = setInterval(() => {
                 remSec--;
-                const lbl = document.getElementById('ad-btn-countdown');
-                if (lbl) lbl.innerHTML = `<img src="asesst/loading.gif" alt="" style="width:14px;height:14px;opacity:0.85;">${remSec}s`;
+                const s = Math.max(0, remSec);
+                if (cdNumEl) cdNumEl.textContent = s;
+                _setRing(s);
                 if (remSec <= 0) {
                     clearInterval(ads._cooldownTimer); ads._cooldownTimer = null;
                     ads._btnCooldownActive = false;
+                    if (cdOverlay) cdOverlay.style.display = 'none';
                     const bFinal = _btn();
-                    if (bFinal) {
-                        bFinal.innerHTML = `<div class="btn-shimmer"></div>`
-                            + `<div class="earn-cta-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 4l14 8-14 8V4z" fill="#fbbf24" opacity=".9"/></svg></div>`
-                            + `<div class="earn-cta-lbl" data-i18n="watch_ad">شاهد إعلاناً</div>`
-                            + `<div class="earn-cta-reward"><div class="earn-cta-rnum">+${fullPts}</div><div class="earn-cta-rsub" data-i18n="pts">نقطة</div></div>`;
-                        bFinal.classList.remove('disabled');
-                    }
+                    if (bFinal) bFinal.classList.remove('disabled');
                 }
             }, 1000);
         } else if (bNow) {
@@ -990,25 +993,27 @@ export function updateTaddyUI() {
         _TS._btnCooldownActive = true;
         btn.classList.add('disabled');
         let remSec = Math.ceil(coolLeft / 1000);
-        // نفس تصميم عدّاد Adsgram
-        btn.innerHTML = `<div class="btn-shimmer"></div>`
-            + `<div id="taddy-btn-countdown" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:5px;font-family:'DynaPuff',sans-serif;font-size:13px;font-weight:900;color:#fbbf24;letter-spacing:1px;text-shadow:0 0 8px rgba(251,191,36,0.5);"><img src="asesst/loading.gif" alt="" style="width:14px;height:14px;opacity:0.85;">${remSec}s</div>`;
+        const totalSec = remSec;
+        // ── Overlay على الكارد كامل بدل العداد داخل الزر ──
+        const cdOverlay = document.getElementById('taddy-cooldown-overlay');
+        const cdNumEl   = document.getElementById('taddy-cooldown-num');
+        const cdRingEl  = document.getElementById('taddy-cd-ring');
+        const CIRC = 150.8;
+        const _setRing = (s) => { if (cdRingEl) cdRingEl.style.strokeDashoffset = CIRC * (1 - s / totalSec); };
+        if (cdOverlay) cdOverlay.style.display = 'flex';
+        if (cdNumEl) cdNumEl.textContent = remSec;
+        _setRing(remSec);
         _TS._cooldownTimer = setInterval(() => {
             remSec--;
-            const lbl = document.getElementById('taddy-btn-countdown');
-            if (lbl) lbl.innerHTML = `<img src="asesst/loading.gif" alt="" style="width:14px;height:14px;opacity:0.85;">${remSec}s`;
+            const s = Math.max(0, remSec);
+            if (cdNumEl) cdNumEl.textContent = s;
+            _setRing(s);
             if (remSec <= 0) {
                 clearInterval(_TS._cooldownTimer); _TS._cooldownTimer = null;
                 _TS._btnCooldownActive = false;
+                if (cdOverlay) cdOverlay.style.display = 'none';
                 const bFinal = document.getElementById('taddy-watch-btn');
-                if (bFinal) {
-                    const taddyPts = _TS.reward || 30;
-                    bFinal.innerHTML = `<div class="btn-shimmer"></div>`
-                        + `<div class="earn-cta-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 4l14 8-14 8V4z" fill="#fbbf24" opacity=".9"/></svg></div>`
-                        + `<div class="earn-cta-lbl" data-i18n="watch_ad">شاهد إعلاناً</div>`
-                        + `<div class="earn-cta-reward"><div class="earn-cta-rnum">+${taddyPts}</div><div class="earn-cta-rsub" data-i18n="pts">نقطة</div></div>`;
-                    bFinal.classList.remove('disabled');
-                }
+                if (bFinal) bFinal.classList.remove('disabled');
             }
         }, 1000);
     }
@@ -1062,7 +1067,8 @@ export async function watchTaddyAd() {
 
         const taddyNonce = startRes.taddy_nonce;
 
-        // [2] عرض إعلان أول
+        // [2] عرض إعلان أول — نبدأ تتبع وقت المشاهدة هنا
+        const _tWatchStart = Date.now();
         let success1 = false;
         try {
             success1 = await window.Taddy.ads().interstitial({
@@ -1099,6 +1105,15 @@ export async function watchTaddyAd() {
         if (!success2) {
             if (btn) btn.classList.remove('disabled');
             showToast('coin','لم يتم عرض الإعلان','','red','');
+            return;
+        }
+
+        // ── فحص الحد الأدنى لوقت المشاهدة (10 ثواني) ──
+        // المستخدم يجب أن يكون قد أمضى ≥10 ثواني مع الإعلانين
+        const _tElapsed = Date.now() - _tWatchStart;
+        if (_tElapsed < 10000) {
+            if (btn) btn.classList.remove('disabled');
+            showToast('coin', 'شاهد الإعلان كاملاً', 'شاهد الإعلان لبعض الوقت للحصول على نقاط', 'red', '');
             return;
         }
 
