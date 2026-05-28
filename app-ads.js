@@ -384,12 +384,7 @@ export async function watchAd() {
             ads._btnCooldownActive = true;
             const CIRC = 87.96;
             const _html = (s) => {
-                const off = CIRC * (1 - s / totalSec);
-                return `<svg viewBox="0 0 36 36" style="width:28px;height:28px;transform:rotate(-90deg);flex-shrink:0;">`
-                    + `<circle cx="18" cy="18" r="14" fill="none" stroke="rgba(251,191,36,.15)" stroke-width="3"/>`
-                    + `<circle cx="18" cy="18" r="14" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"`
-                    + ` stroke-dasharray="${CIRC}" stroke-dashoffset="${off.toFixed(1)}" style="filter:drop-shadow(0 0 4px rgba(251,191,36,.6));"/>`
-                    + `</svg>`
+                return `<img src="asesst/loading.gif" style="width:18px;height:18px;object-fit:contain;flex-shrink:0;">`
                     + `<span style="font-family:'DynaPuff',sans-serif;font-size:12px;font-weight:900;color:#fde68a;line-height:1;">${s}</span>`;
             };
             bNow.innerHTML = _html(remSec);
@@ -1000,15 +995,9 @@ export function updateTaddyUI() {
         btn.classList.add('disabled');
         let remSec = Math.ceil(coolLeft / 1000);
         const totalSec = remSec;
-        const CIRC = 87.96; // 2π×14
         const _html = (s) => {
-            const off = CIRC * (1 - s / totalSec);
-            return `<svg viewBox="0 0 36 36" style="width:28px;height:28px;transform:rotate(-90deg);flex-shrink:0;">`
-                + `<circle cx="18" cy="18" r="14" fill="none" stroke="rgba(6,182,212,.15)" stroke-width="3"/>`
-                + `<circle cx="18" cy="18" r="14" fill="none" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"`
-                + ` stroke-dasharray="${CIRC}" stroke-dashoffset="${off.toFixed(1)}" style="filter:drop-shadow(0 0 4px rgba(6,182,212,.6));"/>`
-                + `</svg>`
-                + `<span style="font-family:'DynaPuff',sans-serif;font-size:12px;font-weight:900;color:#67e8f9;line-height:1;">${s}</span>`;
+                return `<img src="asesst/loading.gif" style="width:18px;height:18px;object-fit:contain;flex-shrink:0;">`
+                    + `<span style="font-family:'DynaPuff',sans-serif;font-size:12px;font-weight:900;color:#67e8f9;line-height:1;">${s}</span>`;
         };
         btn.innerHTML = _html(remSec);
         _TS._cooldownTimer = setInterval(() => {
