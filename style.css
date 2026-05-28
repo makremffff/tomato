@@ -2149,7 +2149,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(6, 6, 18, 0.93);
+            background: rgba(6, 6, 16, 0.86);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             border-radius: inherit;
         }
         .epc-content {
