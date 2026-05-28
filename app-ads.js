@@ -378,25 +378,27 @@ export async function watchAd() {
         const bNow = _btn();
         if (ads.remaining > 0 && bNow) {
             if (ads._cooldownTimer) { clearInterval(ads._cooldownTimer); ads._cooldownTimer = null; }
-            bNow.classList.add('disabled');
+            // لا نستخدم disabled (يخفض الشفافية لـ 35%) — نمنع الكليك فقط
+            bNow.style.pointerEvents = 'none';
+            bNow.style.cursor = 'not-allowed';
             let remSec = Math.ceil(cdMs / 1000);
             ads._btnCooldownActive = true;
-            bNow.innerHTML = `<div class="btn-shimmer"></div>`
-                + `<div id="ad-btn-countdown" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;font-family:'DynaPuff',sans-serif;font-size:26px;font-weight:900;color:#fbbf24;letter-spacing:2px;text-shadow:0 0 14px rgba(251,191,36,0.6);"><img src="asesst/loading.gif" alt="" style="width:22px;height:22px;opacity:0.85;">${remSec}s</div>`;
+            bNow.innerHTML = `<div class="earn-prov-btn-shimmer"></div>`
+                + `<div id="ad-btn-countdown" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;font-family:'DynaPuff',sans-serif;font-size:15px;font-weight:900;color:#fbbf24;letter-spacing:1px;text-shadow:0 0 10px rgba(251,191,36,0.7);"><img src="asesst/loading.gif" alt="" style="width:16px;height:16px;opacity:0.9;">${remSec}s</div>`;
             ads._cooldownTimer = setInterval(() => {
                 remSec--;
                 const lbl = document.getElementById('ad-btn-countdown');
-                if (lbl) lbl.innerHTML = `<img src="asesst/loading.gif" alt="" style="width:22px;height:22px;opacity:0.85;">${remSec}s`;
+                if (lbl) lbl.innerHTML = `<img src="asesst/loading.gif" alt="" style="width:16px;height:16px;opacity:0.9;">${remSec}s`;
                 if (remSec <= 0) {
                     clearInterval(ads._cooldownTimer); ads._cooldownTimer = null;
                     ads._btnCooldownActive = false;
                     const bFinal = _btn();
                     if (bFinal) {
-                        bFinal.innerHTML = `<div class="btn-shimmer"></div>`
-                            + `<div class="earn-cta-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 4l14 8-14 8V4z" fill="#fbbf24" opacity=".9"/></svg></div>`
-                            + `<div class="earn-cta-lbl" data-i18n="watch_ad">شاهد إعلاناً</div>`
-                            + `<div class="earn-cta-reward"><div class="earn-cta-rnum">+${fullPts}</div><div class="earn-cta-rsub" data-i18n="pts">نقطة</div></div>`;
-                        bFinal.classList.remove('disabled');
+                        bFinal.innerHTML = `<div class="earn-prov-btn-shimmer"></div>`
+                            + `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>`
+                            + `شاهد`;
+                        bFinal.style.pointerEvents = '';
+                        bFinal.style.cursor = '';
                     }
                 }
             }, 1000);
