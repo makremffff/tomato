@@ -165,8 +165,11 @@ function _updateAdUINoBtn() {
     if (quotaTotal) quotaTotal.textContent='/ '+ads.total;
     const doneEl = document.getElementById('ad-done-state');
     const btn    = document.getElementById('ad-watch-btn');
-    if (r===0) { if(btn) btn.style.display='none'; if(doneEl) doneEl.style.display='flex'; }
-    else       { if(btn) btn.style.display='';     if(doneEl) doneEl.style.display='none'; }
+    // لا تتدخل بالزر إذا العداد التنازلي شغّال
+    if (!_AS.ads._btnCooldownActive) {
+        if (r===0) { if(btn) btn.style.display='none'; if(doneEl) doneEl.style.display='flex'; }
+        else       { if(btn) btn.style.display='';     if(doneEl) doneEl.style.display='none'; }
+    }
     _syncDailyTaskProgress();
     _updateDailyLimitPts();
 }
@@ -204,8 +207,10 @@ export function updateAdUI() {
     }
 
     const doneEl = document.getElementById('ad-done-state');
-    if (r===0) { if(btn) btn.style.display='none'; if(doneEl) doneEl.style.display='flex'; }
-    else       { if(btn && !ads._btnCooldownActive) btn.style.display=''; if(doneEl) doneEl.style.display='none'; }
+    if (!ads._btnCooldownActive) {
+        if (r===0) { if(btn) btn.style.display='none'; if(doneEl) doneEl.style.display='flex'; }
+        else       { if(btn) btn.style.display=''; if(doneEl) doneEl.style.display='none'; }
+    }
 
     _syncDailyTaskProgress();
     _updateDailyLimitPts();
@@ -374,11 +379,10 @@ export async function watchAd() {
         const pts       = result.points_awarded !== undefined ? result.points_awarded : fullPts;
         const isPartial = !!result.partial;
 
-        // ── عدّاد تنازلي داخل الزر — يظهر دايماً بعد كل إعلان ──
+        // ── عدّاد تنازلي داخل الزر — نجيبه fresh بعد الإعلان ──
         const bNow = _btn();
-        if (bNow && cdMs > 0) {
+        if (ads.remaining > 0 && bNow) {
             if (ads._cooldownTimer) { clearInterval(ads._cooldownTimer); ads._cooldownTimer = null; }
-            bNow.style.display = '';
             bNow.classList.add('disabled');
             let remSec = Math.ceil(cdMs / 1000);
             ads._btnCooldownActive = true;
@@ -393,18 +397,11 @@ export async function watchAd() {
                     ads._btnCooldownActive = false;
                     const bFinal = _btn();
                     if (bFinal) {
-                        if (ads.remaining <= 0) {
-                            // انتهت الإعلانات — أخفي الزر وأظهر done state
-                            bFinal.style.display = 'none';
-                            const doneEl = document.getElementById('ad-done-state');
-                            if (doneEl) doneEl.style.display = 'flex';
-                        } else {
-                            bFinal.innerHTML = `<div class="btn-shimmer"></div>`
-                                + `<div class="earn-cta-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 4l14 8-14 8V4z" fill="#fbbf24" opacity=".9"/></svg></div>`
-                                + `<div class="earn-cta-lbl" data-i18n="watch_ad">شاهد إعلاناً</div>`
-                                + `<div class="earn-cta-reward"><div class="earn-cta-rnum">+${fullPts}</div><div class="earn-cta-rsub" data-i18n="pts">نقطة</div></div>`;
-                            bFinal.classList.remove('disabled');
-                        }
+                        bFinal.innerHTML = `<div class="btn-shimmer"></div>`
+                            + `<div class="earn-cta-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 4l14 8-14 8V4z" fill="#fbbf24" opacity=".9"/></svg></div>`
+                            + `<div class="earn-cta-lbl" data-i18n="watch_ad">شاهد إعلاناً</div>`
+                            + `<div class="earn-cta-reward"><div class="earn-cta-rnum">+${fullPts}</div><div class="earn-cta-rsub" data-i18n="pts">نقطة</div></div>`;
+                        bFinal.classList.remove('disabled');
                     }
                 }
             }, 1000);
