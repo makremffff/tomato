@@ -1132,8 +1132,9 @@ export async function watchTaddyAd() {
             animateBalance(pts);
             updateBalanceUI(_AS.balance + pts);
             _AS.balance += pts;
-            _AS.ads.earned = (_AS.ads.earned || 0) + pts;
-            document.getElementById('earned-today') && (document.getElementById('earned-today').textContent = (_AS.ads.earned).toLocaleString('en-US'));
+            _AS.ads.earned  = (_AS.ads.earned  || 0) + pts;
+            _AS.ads.watched = (result.combinedWatched ?? ((_AS.ads.watched || 0) + 1));
+            updateAdUI();
 
             showToast('coin','مكافأة إعلان 🎉',`+${pts.toLocaleString('en-US')} نقطة`,'gold',`+${pts}`);
             pushNotif('gold','إعلان ✓',`+${pts.toLocaleString('en-US')} نقطة`);
