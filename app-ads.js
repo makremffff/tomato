@@ -140,7 +140,11 @@ function _updateDailyLimitPts() {
     const taddyPts        = _AC.taddy_ads?.points_per_ad || 30;
     const maxPts          = (adsgramTotal * adsgramPts) + (taddyTotal * taddyPts);
     const el = document.getElementById('earn-daily-limit-pts');
-    if (el) el.textContent = maxPts.toLocaleString('en-US');
+    if (!el) return;
+    // نحفظ الصورة ونحدث النص فقط
+    const img = el.querySelector('img');
+    el.textContent = maxPts.toLocaleString('en-US');
+    if (img) el.prepend(img);
 }
 
 // ══════════════════════════════════════════════════════════
