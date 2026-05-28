@@ -165,11 +165,8 @@ function _updateAdUINoBtn() {
     if (quotaTotal) quotaTotal.textContent='/ '+ads.total;
     const doneEl = document.getElementById('ad-done-state');
     const btn    = document.getElementById('ad-watch-btn');
-    // لا تتدخل بالزر إذا العداد التنازلي شغّال
-    if (!_AS.ads._btnCooldownActive) {
-        if (r===0) { if(btn) btn.style.display='none'; if(doneEl) doneEl.style.display='flex'; }
-        else       { if(btn) btn.style.display='';     if(doneEl) doneEl.style.display='none'; }
-    }
+    if (r===0) { if(btn) btn.style.display='none'; if(doneEl) doneEl.style.display='flex'; }
+    else       { if(btn) btn.style.display='';     if(doneEl) doneEl.style.display='none'; }
     _syncDailyTaskProgress();
     _updateDailyLimitPts();
 }
@@ -207,10 +204,8 @@ export function updateAdUI() {
     }
 
     const doneEl = document.getElementById('ad-done-state');
-    if (!ads._btnCooldownActive) {
-        if (r===0) { if(btn) btn.style.display='none'; if(doneEl) doneEl.style.display='flex'; }
-        else       { if(btn) btn.style.display=''; if(doneEl) doneEl.style.display='none'; }
-    }
+    if (r===0) { if(btn) btn.style.display='none'; if(doneEl) doneEl.style.display='flex'; }
+    else       { if(btn && !ads._btnCooldownActive) btn.style.display=''; if(doneEl) doneEl.style.display='none'; }
 
     _syncDailyTaskProgress();
     _updateDailyLimitPts();
@@ -962,6 +957,7 @@ const _TS = {
     isWatching:         false,
     cooldownUntil:      0,
     _btnCooldownActive: false,
+    _cooldownTimer:     null,
 };
 
 // ── update Taddy UI elements ──────────────────────────────
@@ -988,14 +984,33 @@ export function updateTaddyUI() {
     }
 
     const coolLeft = _TS.cooldownUntil - Date.now();
-    if (coolLeft > 0 && !_TS._btnCooldownActive) {
+    if (coolLeft > 0 && !_TS._btnCooldownActive && btn) {
+        // أوقف أي عدّاد سابق
+        if (_TS._cooldownTimer) { clearInterval(_TS._cooldownTimer); _TS._cooldownTimer = null; }
         _TS._btnCooldownActive = true;
-        if (btn) btn.classList.add('disabled');
-        setTimeout(() => {
-            _TS._btnCooldownActive = false;
-            if (btn) btn.classList.remove('disabled');
-            updateTaddyUI();
-        }, coolLeft);
+        btn.classList.add('disabled');
+        let remSec = Math.ceil(coolLeft / 1000);
+        // نفس تصميم عدّاد Adsgram
+        btn.innerHTML = `<div class="btn-shimmer"></div>`
+            + `<div id="taddy-btn-countdown" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;font-family:'DynaPuff',sans-serif;font-size:26px;font-weight:900;color:#fbbf24;letter-spacing:2px;text-shadow:0 0 14px rgba(251,191,36,0.6);"><img src="asesst/loading.gif" alt="" style="width:22px;height:22px;opacity:0.85;">${remSec}s</div>`;
+        _TS._cooldownTimer = setInterval(() => {
+            remSec--;
+            const lbl = document.getElementById('taddy-btn-countdown');
+            if (lbl) lbl.innerHTML = `<img src="asesst/loading.gif" alt="" style="width:22px;height:22px;opacity:0.85;">${remSec}s`;
+            if (remSec <= 0) {
+                clearInterval(_TS._cooldownTimer); _TS._cooldownTimer = null;
+                _TS._btnCooldownActive = false;
+                const bFinal = document.getElementById('taddy-watch-btn');
+                if (bFinal) {
+                    const taddyPts = _TS.reward || 30;
+                    bFinal.innerHTML = `<div class="btn-shimmer"></div>`
+                        + `<div class="earn-cta-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 4l14 8-14 8V4z" fill="#fbbf24" opacity=".9"/></svg></div>`
+                        + `<div class="earn-cta-lbl" data-i18n="watch_ad">شاهد إعلاناً</div>`
+                        + `<div class="earn-cta-reward"><div class="earn-cta-rnum">+${taddyPts}</div><div class="earn-cta-rsub" data-i18n="pts">نقطة</div></div>`;
+                    bFinal.classList.remove('disabled');
+                }
+            }
+        }, 1000);
     }
 
     if (r <= 0) {
