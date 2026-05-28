@@ -374,7 +374,7 @@ export async function watchAd() {
         const pts       = result.points_awarded !== undefined ? result.points_awarded : fullPts;
         const isPartial = !!result.partial;
 
-        // ── Overlay على الكارد كامل — بدل العداد داخل الزر ──
+        // ── عداد تنازلي نظيف داخل الزر (ring SVG بدون gif) ──
         const bNow = _btn();
         if (ads.remaining > 0 && bNow) {
             if (ads._cooldownTimer) { clearInterval(ads._cooldownTimer); ads._cooldownTimer = null; }
@@ -382,25 +382,32 @@ export async function watchAd() {
             let remSec = Math.ceil(cdMs / 1000);
             const totalSec = remSec;
             ads._btnCooldownActive = true;
-            const cdOverlay = document.getElementById('adsgram-cooldown-overlay');
-            const cdNumEl   = document.getElementById('adsgram-cooldown-num');
-            const cdRingEl  = document.getElementById('adsgram-cd-ring');
-            const CIRC = 150.8;
-            const _setRing = (s) => { if (cdRingEl) cdRingEl.style.strokeDashoffset = CIRC * (1 - s / totalSec); };
-            if (cdOverlay) cdOverlay.style.display = 'flex';
-            if (cdNumEl) cdNumEl.textContent = remSec;
-            _setRing(remSec);
+            const CIRC = 87.96;
+            const _html = (s) => {
+                const off = CIRC * (1 - s / totalSec);
+                return `<svg viewBox="0 0 36 36" style="width:28px;height:28px;transform:rotate(-90deg);flex-shrink:0;">`
+                    + `<circle cx="18" cy="18" r="14" fill="none" stroke="rgba(251,191,36,.15)" stroke-width="3"/>`
+                    + `<circle cx="18" cy="18" r="14" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"`
+                    + ` stroke-dasharray="${CIRC}" stroke-dashoffset="${off.toFixed(1)}" style="filter:drop-shadow(0 0 4px rgba(251,191,36,.6));"/>`
+                    + `</svg>`
+                    + `<span style="font-family:'DynaPuff',sans-serif;font-size:12px;font-weight:900;color:#fde68a;line-height:1;">${s}</span>`;
+            };
+            bNow.innerHTML = _html(remSec);
             ads._cooldownTimer = setInterval(() => {
                 remSec--;
                 const s = Math.max(0, remSec);
-                if (cdNumEl) cdNumEl.textContent = s;
-                _setRing(s);
+                const bCur = _btn();
+                if (bCur) bCur.innerHTML = _html(s);
                 if (remSec <= 0) {
                     clearInterval(ads._cooldownTimer); ads._cooldownTimer = null;
                     ads._btnCooldownActive = false;
-                    if (cdOverlay) cdOverlay.style.display = 'none';
                     const bFinal = _btn();
-                    if (bFinal) bFinal.classList.remove('disabled');
+                    if (bFinal) {
+                        bFinal.innerHTML = `<div class="earn-prov-btn-shimmer"></div>`
+                            + `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>`
+                            + `شاهد`;
+                        bFinal.classList.remove('disabled');
+                    }
                 }
             }, 1000);
         } else if (bNow) {
@@ -988,32 +995,36 @@ export function updateTaddyUI() {
 
     const coolLeft = _TS.cooldownUntil - Date.now();
     if (coolLeft > 0 && !_TS._btnCooldownActive && btn) {
-        // أوقف أي عدّاد سابق
         if (_TS._cooldownTimer) { clearInterval(_TS._cooldownTimer); _TS._cooldownTimer = null; }
         _TS._btnCooldownActive = true;
         btn.classList.add('disabled');
         let remSec = Math.ceil(coolLeft / 1000);
         const totalSec = remSec;
-        // ── Overlay على الكارد كامل بدل العداد داخل الزر ──
-        const cdOverlay = document.getElementById('taddy-cooldown-overlay');
-        const cdNumEl   = document.getElementById('taddy-cooldown-num');
-        const cdRingEl  = document.getElementById('taddy-cd-ring');
-        const CIRC = 150.8;
-        const _setRing = (s) => { if (cdRingEl) cdRingEl.style.strokeDashoffset = CIRC * (1 - s / totalSec); };
-        if (cdOverlay) cdOverlay.style.display = 'flex';
-        if (cdNumEl) cdNumEl.textContent = remSec;
-        _setRing(remSec);
+        const CIRC = 87.96; // 2π×14
+        const _html = (s) => {
+            const off = CIRC * (1 - s / totalSec);
+            return `<svg viewBox="0 0 36 36" style="width:28px;height:28px;transform:rotate(-90deg);flex-shrink:0;">`
+                + `<circle cx="18" cy="18" r="14" fill="none" stroke="rgba(6,182,212,.15)" stroke-width="3"/>`
+                + `<circle cx="18" cy="18" r="14" fill="none" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"`
+                + ` stroke-dasharray="${CIRC}" stroke-dashoffset="${off.toFixed(1)}" style="filter:drop-shadow(0 0 4px rgba(6,182,212,.6));"/>`
+                + `</svg>`
+                + `<span style="font-family:'DynaPuff',sans-serif;font-size:12px;font-weight:900;color:#67e8f9;line-height:1;">${s}</span>`;
+        };
+        btn.innerHTML = _html(remSec);
         _TS._cooldownTimer = setInterval(() => {
             remSec--;
             const s = Math.max(0, remSec);
-            if (cdNumEl) cdNumEl.textContent = s;
-            _setRing(s);
+            btn.innerHTML = _html(s);
             if (remSec <= 0) {
                 clearInterval(_TS._cooldownTimer); _TS._cooldownTimer = null;
                 _TS._btnCooldownActive = false;
-                if (cdOverlay) cdOverlay.style.display = 'none';
                 const bFinal = document.getElementById('taddy-watch-btn');
-                if (bFinal) bFinal.classList.remove('disabled');
+                if (bFinal) {
+                    bFinal.innerHTML = `<div class="earn-prov-btn-shimmer"></div>`
+                        + `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>`
+                        + `شاهد`;
+                    bFinal.classList.remove('disabled');
+                }
             }
         }, 1000);
     }
