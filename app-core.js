@@ -359,33 +359,53 @@ export const BOT_USERNAME = 'SPINN_TON_Bot';
 export const APP_NAME     = 'earn';
 export let REFERRAL_LINK  = 'https://t.me/' + BOT_USERNAME + '/' + APP_NAME + '?startapp=ref_0000000000';
 
+// ── Arabic country codes (ISO 639-1 + regional variants) ──
+const ARABIC_LANG_CODES = new Set([
+    'ar','ar-sa','ar-eg','ar-dz','ar-ma','ar-ly','ar-tn','ar-sd',
+    'ar-iq','ar-sy','ar-jo','ar-lb','ar-ye','ar-om','ar-kw','ar-bh',
+    'ar-qa','ar-ae','ar-mr','ar-so','ar-ps','ar-001'
+]);
+
+// ── Russian / CIS country codes ──
+const RUSSIAN_LANG_CODES = new Set([
+    'ru','ru-ru','be','kk','uk','ky','uz','tg','az','hy','ka'
+]);
+
+function _detectLang(languageCode) {
+    // 1. Respect user's saved choice
+    const saved = localStorage.getItem('app_lang');
+    if (saved && ['ar','en','ru'].includes(saved)) return saved;
+
+    // 2. Auto-detect from Telegram language_code
+    if (languageCode) {
+        const lc = languageCode.toLowerCase();
+        if (ARABIC_LANG_CODES.has(lc) || lc.startsWith('ar')) return 'ar';
+        if (RUSSIAN_LANG_CODES.has(lc) || lc.startsWith('ru')) return 'ru';
+        return 'en';
+    }
+
+    // 3. Fallback: browser navigator.language
+    const nav = (navigator.language || '').toLowerCase();
+    if (nav.startsWith('ar')) return 'ar';
+    if (nav.startsWith('ru')) return 'ru';
+    return 'ar'; // default
+}
+
 export function initTelegramUser() {
     const tg = window?.Telegram?.WebApp;
-    if (!tg) { _applyFallbackUser(); applyI18n(); return; }
+    if (!tg) { _applyFallbackUser(); return; }
     tg.ready(); tg.expand();
     const user = tg?.initDataUnsafe?.user;
-    if (!user) { _applyFallbackUser(); applyI18n(); return; }
+    if (!user) { _applyFallbackUser(); return; }
 
-    // ── Language detection ─────────────────────────────
-    // استخراج language_code من raw initData كـ fallback
-    const _rawLang = (() => {
-        try {
-            const raw = tg.initData || '';
-            const match = raw.match(/language_code["%3A]+([a-z]{2})/i);
-            return match ? match[1] : '';
-        } catch(_) { return ''; }
-    })();
-    APP_LANG = _detectLang(user.language_code || _rawLang || navigator.language || '');
-    applyI18n();
-
-    const userId    = user.id          ?? null;
-    const firstName = user.first_name  ?? '';
-    const lastName  = user.last_name   ?? '';
+    const userId       = user.id            ?? null;
+    const firstName    = user.first_name    ?? '';
+    const lastName     = user.last_name     ?? '';
+    const languageCode = user.language_code ?? '';
     const username  = user.username    ?? '';
     const photoUrl  = user.photo_url   ?? '';
 
-    const _fallbackName = APP_LANG === 'ru' ? '@пользователь' : (APP_LANG === 'en' ? '@user' : '@مستخدم');
-    let displayName = _fallbackName;
+    let displayName = '@مستخدم';
     if (username)               displayName = '@' + username;
     else if (firstName||lastName) displayName = [firstName,lastName].filter(Boolean).join(' ');
 
@@ -394,6 +414,12 @@ export function initTelegramUser() {
     }
     _applyUserToUI(displayName, photoUrl, userId);
     _updateReferralLinkUI();
+
+    // Auto-detect language (respects saved preference)
+    const detectedLang = _detectLang(languageCode);
+    if (typeof window.setLang === 'function') {
+        window.setLang(detectedLang);
+    }
 }
 
 function _applyUserToUI(name, photoUrl, userId) {
@@ -417,6 +443,10 @@ function _applyFallbackUser() {
     if (photoEl) photoEl.src = _fallbackAvatar('user', null);
     REFERRAL_LINK = 'https://t.me/' + BOT_USERNAME + '/' + APP_NAME + '?startapp=ref_0000000000';
     _updateReferralLinkUI();
+
+    // Auto-detect from browser language (no Telegram user available)
+    const detectedLang = _detectLang('');
+    if (typeof window.setLang === 'function') window.setLang(detectedLang);
 }
 
 function _fallbackAvatar(name, userId) {
@@ -432,129 +462,3 @@ export function _updateReferralLinkUI() {
 }
 
 window.showSecurityWall = showSecurityWall;
-
-// ══════════════════════════════════════════════════════════
-// i18n — نظام الترجمة (AR / EN / RU)
-// ══════════════════════════════════════════════════════════
-
-export let APP_LANG = 'ar'; // default
-
-const _TRANSLATIONS = {
-    // ── Home ────────────────────────────────────────────
-    user_greeting:        { ar: 'مرحباً بعودتك',        en: 'Welcome Back',               ru: 'Добро пожаловать' },
-    balance_label:        { ar: 'الرصيد الكلي',          en: 'Total Balance',              ru: 'Общий баланс' },
-    pts:                  { ar: 'نقطة',                  en: 'pts',                        ru: 'очков' },
-    friends_label:        { ar: 'صديق مدعو',             en: 'Friends Invited',            ru: 'Приглашённых друзей' },
-    tasks_done_label:     { ar: 'مهمة منجزة',            en: 'Tasks Done',                 ru: 'Выполнено заданий' },
-
-    // ── Earn ────────────────────────────────────────────
-    earn_title:           { ar: 'ال<em>ربح</em>',        en: '<em>Earn</em>',              ru: '<em>Заработок</em>' },
-    earn_more:            { ar: 'اكسب أكثر',             en: 'Earn More',                  ru: 'Зарабатывай больше' },
-    today:                { ar: 'اليوم',                 en: 'today',                      ru: 'сегодня' },
-    watch:                { ar: 'شاهد',                  en: 'Watch',                      ru: 'Смотреть' },
-    taddy_done:           { ar: 'أنهيت إعلانات اليوم ✓', en: 'All ads watched today ✓',    ru: 'Все рекламы просмотрены ✓' },
-    all_done_title:       { ar: 'أحسنت! انتهيت من كل الإعلانات', en: 'Great! All ads watched',  ru: 'Отлично! Все рекламы просмотрены' },
-    all_done_sub:         { ar: 'عد غداً للحصول على إعلانات جديدة', en: 'Come back tomorrow for new ads', ru: 'Возвращайтесь завтра' },
-    earned_today:         { ar: 'مكتسب اليوم',           en: 'Earned Today',               ru: 'Заработано сегодня' },
-    ads_watched:          { ar: 'إعلان شوهد',            en: 'Ads Watched',                ru: 'Просмотрено реклам' },
-    daily_limit:          { ar: 'الحد اليومي',           en: 'Daily Limit',                ru: 'Дневной лимит' },
-
-    // ── Earn — cards ────────────────────────────────────
-    invite_btn_title:     { ar: 'دعوة الأصدقاء',         en: 'Invite Friends',             ru: 'Пригласить друзей' },
-    invite_btn_sub:       { ar: 'ادعُ واربح معاً',        en: 'Invite & Earn Together',     ru: 'Приглашай и зарабатывай' },
-    gift_title:           { ar: 'مكافأة يومية',          en: 'Daily Reward',               ru: 'Ежедневная награда' },
-    gift_sub:             { ar: 'استلم هديتك الآن',       en: 'Claim Your Gift Now',        ru: 'Получи подарок сейчас' },
-    daily:                { ar: 'يومي',                  en: 'Daily',                      ru: 'Ежедневно' },
-    coming_soon:          { ar: 'قريباً',                 en: 'Coming Soon',                ru: 'Скоро' },
-    achievements:         { ar: 'الإنجازات',              en: 'Achievements',               ru: 'Достижения' },
-    achievements_sub:     { ar: 'اكسب شارات خاصة',       en: 'Earn Special Badges',        ru: 'Получай значки' },
-    soon:                 { ar: 'قريباً',                 en: 'Soon',                       ru: 'Скоро' },
-    contests:             { ar: 'المسابقات',              en: 'Contests',                   ru: 'Конкурсы' },
-    contests_sub:         { ar: 'تنافس على جوائز كبرى',  en: 'Compete for Big Prizes',     ru: 'Соревнуйся за призы' },
-
-    // ── Tasks ────────────────────────────────────────────
-    tasks_hero:           { ar: 'أكمل المهام واجمع مكافآتك اليومية', en: 'Complete tasks & collect your daily rewards', ru: 'Выполняй задания и получай ежедневные награды' },
-    our_channel:          { ar: 'قناتنا الرسمية',         en: 'Our Official Channel',       ru: 'Наш официальный канал' },
-    exclusive:            { ar: 'حصري',                  en: 'Exclusive',                  ru: 'Эксклюзив' },
-    daily_tasks_label:    { ar: 'المهام اليومية',         en: 'Daily Tasks',                ru: 'Ежедневные задания' },
-    watch_10_ads:         { ar: 'شاهد 10 إعلانات اليوم', en: 'Watch 10 Ads Today',         ru: 'Посмотри 10 реклам сегодня' },
-    watch_25_ads:         { ar: 'شاهد 25 إعلاناً',       en: 'Watch 25 Ads',               ru: 'Посмотри 25 реклам' },
-
-    // ── Invite ───────────────────────────────────────────
-    invite_page_title:    { ar: 'دعوة الأصدقاء',         en: 'Invite Friends',             ru: 'Пригласить друзей' },
-    invite_hero_title:    { ar: 'ادعُ أصدقاءك واربح',    en: 'Invite Friends & Earn',      ru: 'Приглашай и зарабатывай' },
-    invite_hero_sub:      { ar: 'شارك رابطك الخاص واحصل على مكافآت فورية<br>لكل صديق ينضم عبرك',
-                            en: 'Share your link & get instant rewards<br>for every friend who joins',
-                            ru: 'Поделись ссылкой и получай мгновенные награды<br>за каждого приглашённого' },
-    your_ref_link:        { ar: 'رابط الإحالة الخاص بك', en: 'Your Referral Link',         ru: 'Ваша реферальная ссылка' },
-    total_referrals:      { ar: 'إجمالي الاحلات النشطه', en: 'Total Active Referrals',     ru: 'Всего активных рефералов' },
-    earned_from_refs:     { ar: 'مكتسب من احلات +25% من ربحهم', en: 'Earned from refs +25% of their earnings', ru: 'Заработано с рефералов +25%' },
-
-    // ── Withdraw ─────────────────────────────────────────
-    balance_available:    { ar: 'رصيدك المتاح للسحب',    en: 'Available Balance',          ru: 'Доступный баланс' },
-    withdraw_methods_title:{ ar: 'طرق السحب',             en: 'Withdrawal Methods',         ru: 'Способы вывода' },
-    ton_wallet:           { ar: 'محفظة TON',              en: 'TON Wallet',                 ru: 'TON Кошелёк' },
-    min_label:            { ar: 'الحد الأدنى',            en: 'Minimum',                    ru: 'Минимум' },
-    available_badge:      { ar: 'متاح',                  en: 'Available',                  ru: 'Доступно' },
-    paypal_name:          { ar: 'باي بال',               en: 'PayPal',                     ru: 'PayPal' },
-    fawry_name:           { ar: 'فوري باي',              en: 'Fawry Pay',                  ru: 'Fawry Pay' },
-    withdraw_history_title:{ ar: 'سجل السحوبات',          en: 'Withdrawal History',         ru: 'История выводов' },
-    no_transactions:      { ar: 'لا توجد سحوبات سابقة',  en: 'No Previous Withdrawals',    ru: 'Нет предыдущих выводов' },
-
-    // ── Nav ──────────────────────────────────────────────
-    nav_home:             { ar: 'الرئيسية',              en: 'Home',                       ru: 'Главная' },
-    nav_tasks:            { ar: 'المهام',                en: 'Tasks',                      ru: 'Задания' },
-    nav_earn:             { ar: 'الربح',                 en: 'Earn',                       ru: 'Заработать' },
-    nav_withdraw:         { ar: 'السحب',                 en: 'Withdraw',                   ru: 'Вывод' },
-
-    // ── Gift overlay ──────────────────────────────────────
-    gift_preparing:       { ar: 'جاري تحضير هديتك...',  en: 'Preparing your gift...',     ru: 'Подготовка подарка...' },
-    gift_claim_btn:       { ar: 'استلم هديتك',           en: 'Claim Gift',                 ru: 'Получить' },
-};
-
-// ── Helper: get translated string ──────────────────────────
-export function _T(key) {
-    const map = _TRANSLATIONS[key];
-    if (!map) return key;
-    return map[APP_LANG] ?? map['ar'] ?? key;
-}
-// expose globally for JS-generated HTML
-window._T = _T;
-
-// ── Detect language from Telegram user ────────────────────
-function _detectLang(langCode) {
-    if (!langCode) return 'ar';
-    const code = langCode.toLowerCase().split('-')[0]; // 'ar-SA' → 'ar'
-    if (code === 'ar') return 'ar';
-    if (code === 'ru') return 'ru';
-    return 'en';
-}
-
-// ── Apply translations to all [data-i18n] elements ─────────
-export function applyI18n() {
-    const lang = APP_LANG;
-    const isRTL = (lang === 'ar');
-
-    // Update <html> dir and lang
-    document.documentElement.lang = lang;
-    document.documentElement.dir  = isRTL ? 'rtl' : 'ltr';
-
-    // Apply body font for non-Arabic
-    if (!isRTL) {
-        document.body.style.fontFamily = "'Readex Pro', sans-serif";
-    }
-
-    // Translate all marked elements
-    document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        const map = _TRANSLATIONS[key];
-        if (!map) return;
-        const text = map[lang] ?? map['ar'] ?? '';
-        // earn_title and invite_hero_sub use innerHTML (contain HTML tags)
-        if (key === 'earn_title' || key === 'invite_hero_sub') {
-            el.innerHTML = text;
-        } else {
-            el.textContent = text;
-        }
-    });
-}
