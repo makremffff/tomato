@@ -402,7 +402,7 @@ export async function watchAd() {
                     if (bFinal) {
                         bFinal.innerHTML = `<div class="earn-prov-btn-shimmer"></div>`
                             + `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>`
-                            + `${window._T?.('watch')||'شاهد'}`;
+                            + `شاهد`;
                         bFinal.classList.remove('disabled');
                     }
                 }
@@ -1013,7 +1013,7 @@ export function updateTaddyUI() {
                 if (bFinal) {
                     bFinal.innerHTML = `<div class="earn-prov-btn-shimmer"></div>`
                         + `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>`
-                        + `${window._T?.('watch')||'شاهد'}`;
+                        + `شاهد`;
                     bFinal.classList.remove('disabled');
                 }
             }
@@ -1134,8 +1134,6 @@ export async function watchTaddyAd() {
             animateBalance(pts);
             updateBalanceUI(_AS.balance + pts);
             _AS.balance += pts;
-            _AS.ads.earned  = (_AS.ads.earned  || 0) + pts; // earned-today شامل كل المصادر
-            // ❌ لا نلمس _AS.ads.watched — هذا عداد Adsgram فقط (7 إعلانات)
 
             showToast('coin','مكافأة إعلان 🎉',`+${pts.toLocaleString('en-US')} نقطة`,'gold',`+${pts}`);
             pushNotif('gold','إعلان ✓',`+${pts.toLocaleString('en-US')} نقطة`);
