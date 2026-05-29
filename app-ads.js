@@ -914,6 +914,11 @@ window.addEventListener('DOMContentLoaded', async () => {
                 if (s.ad_cooldown_ms>0) ads.cooldownUntil=Date.now()+s.ad_cooldown_ms;
                 updateAdUI();
             }
+            if (s.taddy_watched_today!==undefined&&!_TS.isWatching) {
+                _TS.watched   = s.taddy_watched_today;
+                _TS.remaining = s.taddy_remaining ?? Math.max(0, _TS.total - _TS.watched);
+                updateTaddyUI();
+            }
             if (s.points!==undefined&&s.points!==_lastPts) {
                 animateBalance(_lastPts,s.points,800);
                 _lastPts=s.points; _AS.balance=s.points;
