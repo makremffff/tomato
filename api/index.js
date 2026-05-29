@@ -28,8 +28,19 @@ module.exports = async function handler(req, res) {
     return handleAdsgramCallback(req, res);
   }
 
-  res.setHeader('Access-Control-Allow-Origin', req.headers['origin'] || '*');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  // ── [V-02 FIX] CORS Origin Whitelist — لا wildcard مع credentials ──
+  const _ALLOWED_ORIGINS = new Set([
+    'https://t.me',
+    'https://web.telegram.org',
+    process.env.APP_ORIGIN || 'https://spin-snowy.vercel.app',
+  ].filter(Boolean));
+  const _reqOrigin = req.headers['origin'] || '';
+  if (_ALLOWED_ORIGINS.has(_reqOrigin) || _reqOrigin.endsWith('.telegram.org')) {
+    res.setHeader('Access-Control-Allow-Origin', _reqOrigin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'null');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers',
     'Content-Type, X-Init-Data, X-Fingerprint, X-Nonce, X-Admin-Secret, X-Session-Id, X-Session-ID'
@@ -68,7 +79,15 @@ module.exports = async function handler(req, res) {
 
   try {
     if (type === 'admin') {
-      if (adminKey !== ADMIN_SECRET) return res.status(403).json({ ok: false, error: 'forbidden' });
+      // [V-10 FIX] Rate limit صارم للـ admin — 3 محاولات/دقيقة فقط
+      if (!rateLimit(`admin_ip_${ipHash}`, 3)) {
+        await writeAudit(null, null, 'admin', 'rate_limited', ipHash, fpHash, {});
+        return res.status(429).json({ ok: false, error: 'rate_limited' });
+      }
+      if (adminKey !== ADMIN_SECRET) {
+        await writeAudit(null, null, 'admin', 'wrong_secret', ipHash, fpHash, { attempt_ip: ipHash });
+        return res.status(403).json({ ok: false, error: 'forbidden' });
+      }
       return res.status(200).json(await handleAdmin(body?.action, body));
     }
 
@@ -138,12 +157,13 @@ module.exports = async function handler(req, res) {
     return res.status(200).json(result);
 
   } catch (e) {
-    console.error(`[${type}] Error:`, e.message, e.stack?.split('\n')[1]);
+    const errorId = require('crypto').randomBytes(6).toString('hex');
+    console.error(`[${type}] Error [${errorId}]:`, e.message, e.stack?.split('\n')[1]);
     return res.status(500).json({
       ok: false,
       error: 'internal_server_error',
-      detail: e.message,
-      type,
+      ref: errorId,
+      // detail: e.message — [V-04 FIX] محذوف: يكشف تفاصيل DB والمسارات
     });
   }
 };
