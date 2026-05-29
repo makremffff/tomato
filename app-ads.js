@@ -155,9 +155,10 @@ function _updateAdUINoBtn() {
     const ads = _AS.ads;
     const r   = ads.remaining;
     const setText = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    const _combinedWatched1 = (ads.watched||0) + (_TS.watched||0);
     setText('ads-remaining', r);
     setText('ads-watched',       ads.watched);
-    setText('ads-watched-total', ads.watched);
+    setText('ads-watched-total', _combinedWatched1);
     setText('earned-today',  ads.earned.toLocaleString('en-US'));
     setText('ads-daily-limit', ads.total);
     const progBar = document.getElementById('ads-progress');
@@ -177,9 +178,10 @@ export function updateAdUI() {
     const r   = ads.remaining;
 
     const setText = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    const _combinedWatched2 = (ads.watched||0) + (_TS.watched||0);
     setText('ads-remaining', r);
     setText('ads-watched',       ads.watched);
-    setText('ads-watched-total', ads.watched);
+    setText('ads-watched-total', _combinedWatched2);
     setText('earned-today',  ads.earned.toLocaleString('en-US'));
     setText('ads-daily-limit', ads.total);
 
@@ -1136,6 +1138,7 @@ export async function watchTaddyAd() {
             _TS.cooldownUntil = Date.now() + cdMs;
 
             updateTaddyUI();
+            updateAdUI();
             animateBalance(pts);
             updateBalanceUI(_AS.balance + pts);
             _AS.balance += pts;
