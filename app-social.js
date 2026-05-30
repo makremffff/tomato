@@ -154,11 +154,13 @@ function _scOpenSheet(taskId) {
     <div class="sheet-section">
       <div class="sheet-sec-lbl">نص ترويجي جاهز (اختياري)</div>
       <div class="promo-box">
-        <div class="promo-text" id="sc-promo-${task.id}">${_esc(task.promo_text)}</div>
-        <button class="btn-copy" id="sc-copybtn-${task.id}" onclick="socialCopyPromo(${task.id})">
-          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-          نسخ النص
-        </button>
+        <div class="promo-box-top">
+          <div class="promo-text" id="sc-promo-${task.id}">${_esc(task.promo_text)}</div>
+          <button class="btn-copy" id="sc-copybtn-${task.id}" onclick="socialCopyPromo(${task.id})">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            نسخ
+          </button>
+        </div>
       </div>
     </div>` : '';
 
