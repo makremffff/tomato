@@ -338,10 +338,25 @@ function _socialRefreshCard(taskId) {
 }
 
 /* ─── Toast ─── */
-let _scToastTimer;
+// FIX: showToast في app-ui.js يتطلب (icon, title, desc, color, badge)
+// _socialToast تُحلل الرسالة وتُرسل المعاملات الصحيحة
 function _socialToast(msg) {
-  // reuse app toast if available, else use own
-  if (typeof window.showToast === 'function') { window.showToast(msg); return; }
+  if (typeof window.showToast === 'function') {
+    // استنتج نوع الرسالة من البادئة
+    if (msg.startsWith('✅')) {
+      const title = msg.replace('✅', '').trim();
+      window.showToast('trophy', title, '', 'green', '✓');
+    } else if (msg.startsWith('⚠️') || msg.startsWith('❌')) {
+      const title = msg.replace(/^[⚠️❌]+\s*/, '').trim();
+      window.showToast('error', title, '', 'red', '!');
+    } else {
+      // رسائل info مثل 📤 📋
+      const title = msg.replace(/^[\p{Emoji}\s]+/u, '').trim() || msg;
+      window.showToast('coin', title, '', 'blue', '•');
+    }
+    return;
+  }
+  // fallback بسيط لو showToast مش موجود
   let el = document.getElementById('sc-toast');
   if (!el) {
     el = document.createElement('div');
@@ -352,8 +367,8 @@ function _socialToast(msg) {
   el.textContent = msg;
   el.style.opacity = '1';
   el.style.transform = 'translateX(-50%) translateY(0)';
-  clearTimeout(_scToastTimer);
-  _scToastTimer = setTimeout(() => {
+  clearTimeout(window._scToastTimer);
+  window._scToastTimer = setTimeout(() => {
     el.style.opacity = '0';
     el.style.transform = 'translateX(-50%) translateY(14px)';
   }, 2800);
