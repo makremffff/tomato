@@ -1,5 +1,13 @@
 'use strict';
 
+const {
+  handleSocialGetTasks,
+  handleSocialSubmitProof,
+  handleSocialAdminGetProofs,
+  handleSocialAdminReview,
+  handleSocialAdminTasks,
+} = require('../lib/services-social');
+
 const { CFG, ADMIN_SECRET } = require('../lib/config');
 const { rateLimitMap, ensureBootstrap } = require('../lib/db');
 const { hashIp, hashFp, getIp, rateLimit } = require('../lib/utils');
@@ -72,10 +80,21 @@ module.exports = async function handler(req, res) {
   if (!rateLimit(`ip_${ipHash}_${type}`, isWrite ? CFG.RATE_WRITE_MAX : CFG.RATE_MAX)) {
     return res.status(429).json({ ok: false, error: 'rate_limited' });
   }
+  // حماية إضافية لـ create_session — 5 محاولات فقط في الدقيقة لكل IP
+  if (type === 'create_session' && !rateLimit(`ip_${ipHash}_session_strict`, CFG.RATE_SESSION_MAX)) {
+    return res.status(429).json({ ok: false, error: 'rate_limited' });
+  }
 
   try {
     if (type === 'admin') {
       if (adminKey !== ADMIN_SECRET) return res.status(403).json({ ok: false, error: 'forbidden' });
+      // Social admin sub-routes
+      if (body?.action?.startsWith?.('social_')) {
+        const act = body.action;
+        if (act === 'social_proofs')       return res.status(200).json(await handleSocialAdminGetProofs(body));
+        if (act === 'social_review')       return res.status(200).json(await handleSocialAdminReview(body));
+        if (act === 'social_tasks')        return res.status(200).json(await handleSocialAdminTasks(body));
+      }
       return res.status(200).json(await handleAdmin(body?.action, body));
     }
 
@@ -83,7 +102,24 @@ module.exports = async function handler(req, res) {
       if (!sessionId) return res.status(401).json({ ok: false, error: 'session_required' });
       const session = await validateSession(sessionId, ipHash, fpHash);
       if (!session) return res.status(401).json({ ok: false, error: 'session_invalid_or_expired' });
-      const action = body?.data?.action || 'general';
+      const ALLOWED_NONCE_ACTIONS = new Set([
+        'claim_gift', 'claim_daily_mission', 'verify_tg_task',
+        'verify_channel_task', 'submit_withdraw', 'claim_adsgram_task',
+      ]);
+      const action = body?.data?.action || '';
+      if (!action || !ALLOWED_NONCE_ACTIONS.has(action)) {
+        return res.status(400).json({ ok: false, error: 'invalid_nonce_action' });
+      }
+      // منع nonce farming — تحقق أنه ما في nonce غير مستخدم لنفس الـ action
+      const existingNonce = await (require('../lib/db').sql)(
+        `SELECT id FROM nonces WHERE session_id=$1 AND user_id=$2 AND action=$3
+         AND used=FALSE AND expires_at > NOW() LIMIT 1`,
+        [sessionId, session.user_id, action]
+      );
+      if (existingNonce.length) {
+        // أعد نفس الـ nonce بدل إنشاء واحد جديد
+        return res.status(429).json({ ok: false, error: 'nonce_already_pending' });
+      }
       const nonce = await issueNonce(sessionId, session.user_id, ipHash, fpHash, action);
       return res.status(200).json({ ok: true, nonce });
     }
@@ -137,6 +173,9 @@ module.exports = async function handler(req, res) {
       case 'check_channel_membership': result = await handleCheckChannelMembership(userId); break;
       case 'get_referrals':       result = await handleGetReferrals(userId); break;
       case 'track_ad_event':      result = await handleTrackAdEvent(userId, sessionId, body, ipHash, fpHash); break;
+      // ── Social Tasks ──
+      case 'social_get_tasks':    result = await handleSocialGetTasks(userId); break;
+      case 'social_submit_proof': result = await handleSocialSubmitProof(userId, body); break;
       default:
         await writeAudit(userId, sessionId, type, 'unknown_action', ipHash, fpHash, { type });
         result = { ok: false, error: 'unknown_action' };
