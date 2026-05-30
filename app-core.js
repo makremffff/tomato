@@ -283,6 +283,7 @@ export async function _createSession() {
             if (result.error === 'account_review') return false;
             if (result.ok && result._session_token) {
                 _sessionId = result._session_token;
+                window._APP_SESSION = _sessionId; // يخلي app-social.js يوصله
                 if (result.user) {
                     const u = result.user;
                     if (u.points       !== undefined) APP_STATE.balance       = parseInt(u.points)           || 0;
@@ -359,38 +360,6 @@ export const BOT_USERNAME = 'SPINN_TON_Bot';
 export const APP_NAME     = 'earn';
 export let REFERRAL_LINK  = 'https://t.me/' + BOT_USERNAME + '/' + APP_NAME + '?startapp=ref_0000000000';
 
-// ── Arabic country codes (ISO 639-1 + regional variants) ──
-const ARABIC_LANG_CODES = new Set([
-    'ar','ar-sa','ar-eg','ar-dz','ar-ma','ar-ly','ar-tn','ar-sd',
-    'ar-iq','ar-sy','ar-jo','ar-lb','ar-ye','ar-om','ar-kw','ar-bh',
-    'ar-qa','ar-ae','ar-mr','ar-so','ar-ps','ar-001'
-]);
-
-// ── Russian / CIS country codes ──
-const RUSSIAN_LANG_CODES = new Set([
-    'ru','ru-ru','be','kk','uk','ky','uz','tg','az','hy','ka'
-]);
-
-function _detectLang(languageCode) {
-    // 1. Respect user's saved choice
-    const saved = localStorage.getItem('app_lang');
-    if (saved && ['ar','en','ru'].includes(saved)) return saved;
-
-    // 2. Auto-detect from Telegram language_code
-    if (languageCode) {
-        const lc = languageCode.toLowerCase();
-        if (ARABIC_LANG_CODES.has(lc) || lc.startsWith('ar')) return 'ar';
-        if (RUSSIAN_LANG_CODES.has(lc) || lc.startsWith('ru')) return 'ru';
-        return 'en';
-    }
-
-    // 3. Fallback: browser navigator.language
-    const nav = (navigator.language || '').toLowerCase();
-    if (nav.startsWith('ar')) return 'ar';
-    if (nav.startsWith('ru')) return 'ru';
-    return 'ar'; // default
-}
-
 export function initTelegramUser() {
     const tg = window?.Telegram?.WebApp;
     if (!tg) { _applyFallbackUser(); return; }
@@ -398,10 +367,9 @@ export function initTelegramUser() {
     const user = tg?.initDataUnsafe?.user;
     if (!user) { _applyFallbackUser(); return; }
 
-    const userId       = user.id            ?? null;
-    const firstName    = user.first_name    ?? '';
-    const lastName     = user.last_name     ?? '';
-    const languageCode = user.language_code ?? '';
+    const userId    = user.id          ?? null;
+    const firstName = user.first_name  ?? '';
+    const lastName  = user.last_name   ?? '';
     const username  = user.username    ?? '';
     const photoUrl  = user.photo_url   ?? '';
 
@@ -414,12 +382,6 @@ export function initTelegramUser() {
     }
     _applyUserToUI(displayName, photoUrl, userId);
     _updateReferralLinkUI();
-
-    // Auto-detect language (respects saved preference)
-    const detectedLang = _detectLang(languageCode);
-    if (typeof window.setLang === 'function') {
-        window.setLang(detectedLang);
-    }
 }
 
 function _applyUserToUI(name, photoUrl, userId) {
@@ -443,10 +405,6 @@ function _applyFallbackUser() {
     if (photoEl) photoEl.src = _fallbackAvatar('user', null);
     REFERRAL_LINK = 'https://t.me/' + BOT_USERNAME + '/' + APP_NAME + '?startapp=ref_0000000000';
     _updateReferralLinkUI();
-
-    // Auto-detect from browser language (no Telegram user available)
-    const detectedLang = _detectLang('');
-    if (typeof window.setLang === 'function') window.setLang(detectedLang);
 }
 
 function _fallbackAvatar(name, userId) {
