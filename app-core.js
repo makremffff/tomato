@@ -274,10 +274,15 @@ export async function _createSession() {
             const fpStr  = await _buildFingerprint();
             const headers = { 'Content-Type':'application/json', 'X-Fingerprint': fpStr };
             if (initData) headers['X-Init-Data'] = initData;
+            // timeout 8s — لو السيرفر ما رد يُكمل البوت بدل ما يعلق
+            const _sessionAc = new AbortController();
+            const _sessionTimeout = setTimeout(() => _sessionAc.abort(), 8000);
             const res    = await fetch(API_BASE, {
                 method: 'POST', headers, credentials: 'include',
+                signal: _sessionAc.signal,
                 body: JSON.stringify({ type:'create_session', data:{ initData, fp: JSON.parse(fpStr) } }),
             });
+            clearTimeout(_sessionTimeout);
             const result = await res.json();
             if (result.is_banned) { showSecurityWall(); return false; }
             if (result.error === 'account_review') return false;
@@ -327,10 +332,15 @@ export async function _dbCall(action, data = {}, externalNonce = null) {
         const nonce = externalNonce || (!SKIP_NONCE.has(action) ? await _getServerNonce(action) : null);
         if (nonce) headers['X-Nonce'] = nonce;
 
+        // timeout 10s لكل API call — يمنع تعليق شاشة التحميل
+        const _ac  = new AbortController();
+        const _tid = setTimeout(() => _ac.abort(), 10000);
         const res  = await fetch(API_BASE, {
             method: 'POST', headers, credentials: 'include',
+            signal: _ac.signal,
             body: JSON.stringify({ type: action, data }),
         });
+        clearTimeout(_tid);
 
         if (res.status === 401) {
             _sessionId = null;
