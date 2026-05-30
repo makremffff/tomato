@@ -3319,10 +3319,11 @@
   font-size:12px; font-weight:500; color:rgba(255,255,255,.5);
   line-height:1.7; margin-bottom:13px;
 }
-.sc-platforms-row { display:flex; justify-content:center; gap:8px; margin-bottom:14px; }
+.sc-platforms-row { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-bottom:14px; max-width:300px; margin-left:auto; margin-right:auto; }
 .sc-platform-chip {
-  display:flex; align-items:center; gap:5px;
-  padding:5px 11px; border-radius:20px; font-size:11px; font-weight:700; border:1px solid;
+  display:flex; align-items:center; justify-content:center; gap:5px;
+  padding:5px 0; border-radius:20px; font-size:11px; font-weight:700; border:1px solid;
+  width:88px;
 }
 .sc-p-fb { background:rgba(24,119,242,.12); border-color:rgba(24,119,242,.25); color:#4d9ef7; }
 .sc-p-tw { background:rgba(0,0,0,.25);      border-color:rgba(255,255,255,.15); color:rgba(255,255,255,.7); }
