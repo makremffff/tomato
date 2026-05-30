@@ -9,7 +9,8 @@
 const SOCIAL = {
   tasks: [],
   loading: false,
-  cardState: {}, // { taskId: 'idle' | 'upload' | 'pending' }
+  cardState: {},    // { taskId: 'idle' | 'upload' | 'pending' | 'approved' | 'rejected' }
+  pendingFiles: {}, // FIX-1: per-task file storage — كان متغير واحد مشترك يسبب تضارب الصور
 };
 
 /* ─── API base (نفس نمط المشروع) ─── */
@@ -48,6 +49,12 @@ async function socialLoadTasks() {
   try {
     const res = await _socialFetch({ type: 'social_get_tasks' });
     SOCIAL.tasks = res.tasks || [];
+    // FIX-2: مزامنة حالة الكروت مع السيرفر — كان يُتجاهل user_status فتظهر المهام المنجزة من جديد
+    for (const t of SOCIAL.tasks) {
+      if (t.user_status && t.user_status !== 'idle' && !SOCIAL.cardState[t.id]) {
+        SOCIAL.cardState[t.id] = t.user_status; // 'pending' | 'approved' | 'rejected'
+      }
+    }
     _socialRenderCards();
   } catch (e) {
     wrap.innerHTML = `<div class="sc-empty">تعذّر تحميل المهام — حاول مجدداً</div>`;
@@ -86,9 +93,11 @@ function _socialCardHTML(task, idx) {
     </div>
   </div>
   <div class="sc-card-body">
-    ${state === 'idle'    ? _socialStepIdle(task)    : ''}
-    ${state === 'upload'  ? _socialStepUpload(task)  : ''}
-    ${state === 'pending' ? _socialStepPending(task) : ''}
+    ${state === 'idle'     ? _socialStepIdle(task)     : ''}
+    ${state === 'upload'   ? _socialStepUpload(task)   : ''}
+    ${state === 'pending'  ? _socialStepPending(task)  : ''}
+    ${state === 'approved' ? _socialStepApproved(task) : ''}
+    ${state === 'rejected' ? _socialStepRejected(task) : ''}
   </div>
 </div>`;
 }
@@ -117,7 +126,7 @@ function _socialStepIdle(task) {
   return `
     ${noteHTML}
     ${promoHTML}
-    <button class="sc-btn sc-btn-main" onclick="socialStartTask(${task.id}, '${_esc(task.task_url || '')}', ${task.proof_required === true || task.proof_required === 'true'})">
+    <button class="sc-btn sc-btn-main" onclick="socialStartTask(${task.id}, '${_esc(task.task_url || '')}', ${!!task.proof_required})">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
       ${btnLabel}
     </button>`;
@@ -161,6 +170,33 @@ function _socialStepPending(task) {
     </div>`;
 }
 
+// FIX-5: إضافة حالتَي approved و rejected — كانتا مدعومتَين في السيرفر لكن لا تُعرضان في الواجهة
+function _socialStepApproved(task) {
+  return `
+    <div class="sc-pending-wrap">
+      <div class="sc-pending-ico">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div class="sc-pending-title" style="color:#22c55e">تمت الموافقة ✓</div>
+      <div class="sc-pending-sub">تم إضافة <span class="sc-pending-pts">${Number(task.reward).toLocaleString('ar')} نقطة</span> إلى رصيدك</div>
+    </div>`;
+}
+
+function _socialStepRejected(task) {
+  return `
+    <div class="sc-pending-wrap">
+      <div class="sc-pending-ico">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div class="sc-pending-title" style="color:#ef4444">تم رفض الإثبات</div>
+      <div class="sc-pending-sub">لم يتم قبول الصورة المرسلة<br>
+        <button class="sc-btn sc-btn-ghost" style="margin-top:10px" onclick="socialRetryTask(${task.id}, '${_esc(task.task_url || '')}', ${!!task.proof_required})">
+          إعادة المحاولة
+        </button>
+      </div>
+    </div>`;
+}
+
 /* ─── Icon helper ─── */
 function _socialIcon(name) {
   const icons = {
@@ -198,6 +234,14 @@ function socialCancelUpload(taskId) {
   _socialRefreshCard(taskId);
 }
 
+// FIX-5: إعادة المحاولة بعد الرفض — يُعيد ضبط الحالة المحلية فقط (السيرفر يسمح بإعادة الإرسال)
+function socialRetryTask(taskId, url, proofRequired) {
+  delete SOCIAL.pendingFiles[taskId];
+  SOCIAL.cardState[taskId] = 'idle';
+  _socialRefreshCard(taskId);
+  socialStartTask(taskId, url, proofRequired);
+}
+
 function socialHandleFile(e, taskId) {
   const file = e.target.files[0];
   if (!file) return;
@@ -214,8 +258,8 @@ function socialHandleFile(e, taskId) {
     if (zone) zone.classList.add('has');
     if (txt)  txt.textContent = '✓ ' + file.name;
     if (btn)  btn.disabled = false;
-    // store file for upload
-    SOCIAL._pendingFile = { taskId, file, dataUrl: r.target.result };
+    // FIX-1: حفظ الصورة لكل مهمة منفصلة — كان متغير واحد يُستبدل فتُرسل صورة مهمة أخرى
+    SOCIAL.pendingFiles[taskId] = { file, dataUrl: r.target.result };
   };
   reader.readAsDataURL(file);
 }
@@ -226,7 +270,8 @@ async function socialSubmitProof(taskId) {
   _socialToast('📤 جارٍ إرسال الصورة...');
 
   try {
-    const fileData = SOCIAL._pendingFile?.dataUrl || '';
+    // FIX-1: قراءة الصورة الخاصة بهذه المهمة تحديداً
+    const fileData = SOCIAL.pendingFiles[taskId]?.dataUrl || '';
     const res = await _socialFetch({
       type: 'social_submit_proof',
       task_id: taskId,
@@ -234,6 +279,7 @@ async function socialSubmitProof(taskId) {
     });
     if (res.ok) {
       SOCIAL.cardState[taskId] = 'pending';
+      delete SOCIAL.pendingFiles[taskId]; // FIX-1: تنظيف الصورة بعد الإرسال الناجح
       _socialRefreshCard(taskId);
       _socialToast('✅ تم الإرسال — بانتظار موافقة المشرف');
     } else {
@@ -246,7 +292,14 @@ async function socialSubmitProof(taskId) {
   }
 }
 
+// FIX-4: لا تُرسل المهمة كمنجزة إذا لم يكن هناك رابط يُفتح فعلياً
 async function socialSubmitNoProof(taskId) {
+  const task = SOCIAL.tasks.find(t => t.id === taskId);
+  if (!task?.task_url) {
+    // لا رابط = لا إجراء حقيقي — لا نعدّها منجزة
+    _socialToast('⚠️ لا يوجد رابط لهذه المهمة');
+    return;
+  }
   try {
     const res = await _socialFetch({ type: 'social_submit_proof', task_id: taskId, proof_image: '' });
     if (res.ok) {
@@ -308,6 +361,7 @@ function initSocialPage() {
 // expose to global
 window.socialStartTask    = socialStartTask;
 window.socialCancelUpload = socialCancelUpload;
+window.socialRetryTask    = socialRetryTask;
 window.socialHandleFile   = socialHandleFile;
 window.socialSubmitProof  = socialSubmitProof;
 window.socialCopyPromo    = socialCopyPromo;
