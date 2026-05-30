@@ -291,7 +291,7 @@ async function socialSubmitProof(taskId) {
       _socialToast(msg);
     } else {
       if (btn) { btn.disabled = false; btn.innerHTML = 'إرسال للمراجعة'; }
-      _socialToast('⚠️ ' + (res.error || 'خطأ في الإرسال'));
+      _socialToast('⚠️ ' + (typeof res.error === 'string' ? res.error : 'خطأ في الإرسال'));
     }
   } catch {
     if (btn) { btn.disabled = false; btn.innerHTML = 'إرسال للمراجعة'; }
@@ -338,25 +338,25 @@ function _socialRefreshCard(taskId) {
 }
 
 /* ─── Toast ─── */
-// FIX: showToast في app-ui.js يتطلب (icon, title, desc, color, badge)
-// _socialToast تُحلل الرسالة وتُرسل المعاملات الصحيحة
 function _socialToast(msg) {
   if (typeof window.showToast === 'function') {
-    // استنتج نوع الرسالة من البادئة
+    // showToast(icon, title, desc, color, badge)
+    // الألوان المدعومة في CSS: 'green' | 'gold' | 'purple'
     if (msg.startsWith('✅')) {
-      const title = msg.replace('✅', '').trim();
+      const title = msg.slice(1).trim(); // احذف ✅ فقط (حرف واحد unicode)
       window.showToast('trophy', title, '', 'green', '✓');
-    } else if (msg.startsWith('⚠️') || msg.startsWith('❌')) {
-      const title = msg.replace(/^[⚠️❌]+\s*/, '').trim();
-      window.showToast('error', title, '', 'red', '!');
+    } else if (msg.startsWith('⚠️')) {
+      const title = msg.slice(2).trim(); // ⚠️ = codepoint واحد + variation selector
+      window.showToast('error', title, '', 'gold', '!');
     } else {
-      // رسائل info مثل 📤 📋
-      const title = msg.replace(/^[\p{Emoji}\s]+/u, '').trim() || msg;
-      window.showToast('coin', title, '', 'blue', '•');
+      // رسائل info: خذ النص بعد أول مسافة أو العنوان كاملاً
+      const spaceIdx = msg.indexOf(' ');
+      const title = spaceIdx > -1 ? msg.slice(spaceIdx).trim() : msg;
+      window.showToast('coin', title || msg, '', 'gold', '•');
     }
     return;
   }
-  // fallback بسيط لو showToast مش موجود
+  // fallback لو showToast مش موجود بعد
   let el = document.getElementById('sc-toast');
   if (!el) {
     el = document.createElement('div');
