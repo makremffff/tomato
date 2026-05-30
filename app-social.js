@@ -48,6 +48,12 @@ async function socialLoadTasks() {
   try {
     const res = await _socialFetch({ type: 'social_get_tasks' });
     SOCIAL.tasks = res.tasks || [];
+    // استرجاع الحالة من السيرفر وحطها في cardState
+    for (const t of SOCIAL.tasks) {
+      if (t.user_status && t.user_status !== 'idle') {
+        SOCIAL.cardState[t.id] = t.user_status; // 'pending' | 'approved' | 'rejected'
+      }
+    }
     _socialRenderCards();
   } catch (e) {
     wrap.innerHTML = `<div class="sc-empty">تعذّر تحميل المهام — حاول مجدداً</div>`;
@@ -86,9 +92,11 @@ function _socialCardHTML(task, idx) {
     </div>
   </div>
   <div class="sc-card-body">
-    ${state === 'idle'    ? _socialStepIdle(task)    : ''}
-    ${state === 'upload'  ? _socialStepUpload(task)  : ''}
-    ${state === 'pending' ? _socialStepPending(task) : ''}
+    ${state === 'idle'     ? _socialStepIdle(task)     : ''}
+    ${state === 'upload'   ? _socialStepUpload(task)   : ''}
+    ${state === 'pending'  ? _socialStepPending(task)  : ''}
+    ${state === 'approved' ? _socialStepApproved(task) : ''}
+    ${state === 'rejected' ? _socialStepRejected(task) : ''}
   </div>
 </div>`;
 }
@@ -160,6 +168,29 @@ function _socialStepPending(task) {
       <div class="sc-pending-sub">تم إرسال صورتك إلى المشرف<br>سيُضاف <span class="sc-pending-pts">${Number(task.reward).toLocaleString('ar')} نقطة</span> فور الموافقة</div>
     </div>`;
 }
+
+function _socialStepApproved(task) {
+  return `
+    <div class="sc-pending-wrap">
+      <div class="sc-pending-ico">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div class="sc-pending-title" style="color:#34d399">تمت الموافقة ✅</div>
+      <div class="sc-pending-sub">تم إضافة <span class="sc-pending-pts">${Number(task.reward).toLocaleString('ar')} نقطة</span> إلى رصيدك</div>
+    </div>`;
+}
+
+function _socialStepRejected(task) {
+  return `
+    <div class="sc-pending-wrap">
+      <div class="sc-pending-ico">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div class="sc-pending-title" style="color:#f87171">تم الرفض</div>
+      <div class="sc-pending-sub">لم يتم قبول الإثبات — تأكد من تنفيذ المهمة بشكل صحيح</div>
+    </div>`;
+}
+
 
 /* ─── Icon helper ─── */
 function _socialIcon(name) {
