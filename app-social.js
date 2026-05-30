@@ -238,13 +238,40 @@ function _scOpenSheet(taskId) {
         </button>
       </div>`;
   } else {
-    /* idle / default */
-    const btnLabel = task.proof_required ? 'ابدأ المهمة' : 'إنجاز المهمة';
+    /* idle — فتح مباشر بـ upload area */
+    if (task.task_url) {
+      if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(task.task_url);
+      else window.open(task.task_url, '_blank');
+    }
     actionHTML = `
       <div class="sheet-section">
-        <button class="btn-submit" onclick="socialStartTask(${task.id},'${_esc(task.task_url||'')}',${!!task.proof_required})">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
-          ${btnLabel}
+        <div class="sheet-sec-lbl">إرسال صورة الإثبات</div>
+        <div class="upload-area" id="sc-uploadArea-${task.id}">
+          <input type="file" accept="image/*" id="sc-file-${task.id}" onchange="socialHandleFile(event,${task.id})">
+          <img class="preview-img" id="sc-prev-img-${task.id}" alt="preview">
+          <div class="upload-placeholder" id="sc-uploadPH-${task.id}">
+            <div class="upload-svg-wrap">
+              <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" width="60" height="60">
+                <circle cx="30" cy="30" r="29" stroke="rgba(59,130,246,0.18)" stroke-width="1.2" stroke-dasharray="4 3"/>
+                <circle cx="30" cy="30" r="22" fill="rgba(59,130,246,0.10)"/>
+                <path d="M30 38V24" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/>
+                <path d="M24 30l6-7 6 7" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M22 42h16" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+                <circle cx="18" cy="18" r="2" fill="rgba(59,130,246,0.25)"/>
+                <circle cx="42" cy="18" r="2" fill="rgba(59,130,246,0.25)"/>
+                <circle cx="18" cy="42" r="2" fill="rgba(59,130,246,0.25)"/>
+                <circle cx="42" cy="42" r="2" fill="rgba(59,130,246,0.25)"/>
+              </svg>
+            </div>
+            <div class="upload-lbl">ارفع لقطة الإثبات</div>
+            <div class="upload-sub">PNG أو JPG — اضغط للاختيار</div>
+          </div>
+        </div>
+      </div>
+      <div class="sheet-section">
+        <button class="btn-submit" id="sc-submitbtn-${task.id}" disabled onclick="socialSubmitProof(${task.id})">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          إرسال المهمة
         </button>
       </div>`;
   }
