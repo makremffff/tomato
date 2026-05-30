@@ -9,6 +9,7 @@
 const SOCIAL = {
   tasks: [],
   loading: false,
+  loadError: false, // FIX: track load failure so initSocialPage retries on re-open
   cardState: {},    // { taskId: 'idle' | 'upload' | 'pending' | 'approved' | 'rejected' }
   pendingFiles: {}, // FIX-1: per-task file storage — كان متغير واحد مشترك يسبب تضارب الصور
 };
@@ -49,6 +50,7 @@ async function socialLoadTasks() {
   try {
     const res = await _socialFetch({ type: 'social_get_tasks' });
     SOCIAL.tasks = res.tasks || [];
+    SOCIAL.loadError = false; // FIX: clear error on success
     // FIX-2: مزامنة حالة الكروت مع السيرفر — كان يُتجاهل user_status فتظهر المهام المنجزة من جديد
     for (const t of SOCIAL.tasks) {
       if (t.user_status && t.user_status !== 'idle' && !SOCIAL.cardState[t.id]) {
@@ -57,6 +59,7 @@ async function socialLoadTasks() {
     }
     _socialRenderCards();
   } catch (e) {
+    SOCIAL.loadError = true; // FIX: mark error so next page open retries
     wrap.innerHTML = `<div class="sc-empty">تعذّر تحميل المهام — حاول مجدداً</div>`;
   }
 }
@@ -278,10 +281,14 @@ async function socialSubmitProof(taskId) {
       proof_image: fileData,
     });
     if (res.ok) {
-      SOCIAL.cardState[taskId] = 'pending';
+      // FIX: مهام بدون proof تُعتمد فوراً — اعرض 'approved' بدل 'pending'
+      SOCIAL.cardState[taskId] = res.status === 'approved' ? 'approved' : 'pending';
       delete SOCIAL.pendingFiles[taskId]; // FIX-1: تنظيف الصورة بعد الإرسال الناجح
       _socialRefreshCard(taskId);
-      _socialToast('✅ تم الإرسال — بانتظار موافقة المشرف');
+      const msg = res.status === 'approved'
+        ? '✅ تم إنجاز المهمة وإضافة النقاط'
+        : '✅ تم الإرسال — بانتظار موافقة المشرف';
+      _socialToast(msg);
     } else {
       if (btn) { btn.disabled = false; btn.innerHTML = 'إرسال للمراجعة'; }
       _socialToast('⚠️ ' + (res.error || 'خطأ في الإرسال'));
@@ -303,9 +310,13 @@ async function socialSubmitNoProof(taskId) {
   try {
     const res = await _socialFetch({ type: 'social_submit_proof', task_id: taskId, proof_image: '' });
     if (res.ok) {
-      SOCIAL.cardState[taskId] = 'pending';
+      // FIX: السيرفر يُعيد 'approved' مباشرة للمهام بدون proof
+      SOCIAL.cardState[taskId] = res.status === 'approved' ? 'approved' : 'pending';
       _socialRefreshCard(taskId);
-      _socialToast('✅ تم تسجيل إنجاز المهمة');
+      const msg = res.status === 'approved'
+        ? '✅ تم إنجاز المهمة وإضافة النقاط'
+        : '✅ تم تسجيل إنجاز المهمة';
+      _socialToast(msg);
     }
   } catch { _socialToast('⚠️ تعذّر التسجيل'); }
 }
@@ -355,7 +366,8 @@ function _esc(s) {
 
 /* ─── Init when social page is shown ─── */
 function initSocialPage() {
-  if (!SOCIAL.tasks.length) socialLoadTasks();
+  // FIX: retry if previous load failed (e.g. session not ready yet) or tasks never loaded
+  if (!SOCIAL.tasks.length || SOCIAL.loadError) socialLoadTasks();
 }
 
 // expose to global

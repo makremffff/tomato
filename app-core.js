@@ -283,7 +283,7 @@ export async function _createSession() {
             if (result.error === 'account_review') return false;
             if (result.ok && result._session_token) {
                 _sessionId = result._session_token;
-                window._APP_SESSION = _sessionId; // يخلي app-social.js يوصله
+                window._APP_SESSION = _sessionId; // bridge for non-module scripts (app-social.js)
                 if (result.user) {
                     const u = result.user;
                     if (u.points       !== undefined) APP_STATE.balance       = parseInt(u.points)           || 0;
