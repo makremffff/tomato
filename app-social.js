@@ -119,8 +119,8 @@ function _scStartBtn(taskId, pts) {
     </div>`;
   }
   if (state === 'rejected') {
-    return `<div class="c-start" style="background:linear-gradient(135deg,rgba(239,68,68,.18),rgba(239,68,68,.08));border-color:rgba(239,68,68,.3)">
-      <span class="start-pts" style="color:#f87171;font-size:11px">مرفوض</span>
+    return `<div class="c-start" style="background:linear-gradient(135deg,rgba(239,68,68,.18),rgba(239,68,68,.08));border-color:rgba(239,68,68,.3);cursor:pointer">
+      <span class="start-pts" style="color:#f87171;font-size:11px">مرفوض ↩</span>
     </div>`;
   }
   // idle / upload
@@ -197,7 +197,7 @@ function _scOpenSheet(taskId) {
             <div class="review-banner-sub" style="color:rgba(248,113,113,.5)">لم يتم قبول الصورة المرسلة</div>
           </div>
         </div>
-        <button class="btn-submit" id="sc-retry-${task.id}" style="margin-top:10px" onclick="_scRetryTask(${task.id})">
+        <button class="btn-submit" id="sc-retry-btn-${task.id}" style="margin-top:10px" onclick="scRetryTask(${task.id})">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
           إعادة المحاولة
         </button>
@@ -317,15 +317,16 @@ function socialCancelUpload(taskId) {
   _scRefreshSheet(taskId);
 }
 
-/* ─── إعادة المحاولة بعد الرفض ─────────────────────────────────────── */
-async function _scRetryTask(taskId) {
+/* ─── إعادة المحاولة بعد الرفض — بنيت من صفر ─────────────────── */
+async function scRetryTask(taskId) {
+  taskId = Number(taskId);
   const task = SOCIAL.tasks.find(t => t.id === taskId);
-  if (!task) { _socialToast('⚠️ لم يتم العثور على المهمة'); return; }
+  if (!task) { _socialToast('⚠️ المهمة غير موجودة'); return; }
 
-  // 1. امسح أي ملف معلّق من المحاولة السابقة
+  // امسح أي ملف معلّق
   delete SOCIAL.pendingFiles[taskId];
 
-  // 2. افتح الرابط
+  // افتح الرابط
   if (task.task_url) {
     try {
       if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(task.task_url);
@@ -333,22 +334,20 @@ async function _scRetryTask(taskId) {
     } catch (_) {}
   }
 
-  // 3أ. مهمة تتطلب إثباتاً → state=upload ثم أعد فتح الشيت عبر _scOpenSheet مباشرة
   if (task.proof_required) {
+    // مهمة تتطلب إثباتاً → state=upload وأعد فتح الشيت
     SOCIAL.cardState[taskId] = 'upload';
     _scRefreshCard(taskId);
-    _scOpenSheet(taskId);
+    // أغلق الشيت ثم أعد فتحه بالحالة الجديدة
+    _scCloseSheet();
+    setTimeout(() => _scOpenSheet(taskId), 80);
     _socialToast('📋 ارفع صورة إثبات جديدة');
     return;
   }
 
-  // 3ب. مهمة بدون إثبات → أرسل للـ API مباشرة
-  // أعد رسم الشيت بـ state مؤقت للـ loading
-  const retryBtn = document.getElementById(`sc-retry-${taskId}`);
-  if (retryBtn) {
-    retryBtn.disabled = true;
-    retryBtn.innerHTML = '<div style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-left:6px"></div> جارٍ...';
-  }
+  // مهمة بدون إثبات → أرسل مباشرة للـ API
+  const btn = document.getElementById('sc-retry-btn-' + taskId);
+  if (btn) { btn.disabled = true; btn.textContent = 'جارٍ...'; }
 
   try {
     const res = await _socialFetch({ type: 'social_submit_proof', task_id: taskId, proof_image: '' });
@@ -356,16 +355,17 @@ async function _scRetryTask(taskId) {
       SOCIAL.cardState[taskId] = res.status === 'approved' ? 'approved' : 'pending';
       _scRefreshCard(taskId);
       _scCloseSheet();
-      _socialToast(res.status === 'approved' ? '✅ تم إنجاز المهمة وإضافة النقاط' : '✅ تم تسجيل الإنجاز');
+      _socialToast(res.status === 'approved' ? '✅ تم وإضافة النقاط' : '✅ تم الإرسال — بانتظار المراجعة');
     } else {
-      if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = 'إعادة المحاولة'; }
-      _socialToast('⚠️ ' + (typeof res.error === 'string' ? res.error : 'خطأ في الإرسال'));
+      if (btn) { btn.disabled = false; btn.textContent = 'إعادة المحاولة'; }
+      _socialToast('⚠️ ' + (res.error || 'خطأ'));
     }
   } catch {
-    if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = 'إعادة المحاولة'; }
-    _socialToast('⚠️ تعذّر الإرسال — تحقق من الاتصال');
+    if (btn) { btn.disabled = false; btn.textContent = 'إعادة المحاولة'; }
+    _socialToast('⚠️ تعذّر الإرسال');
   }
 }
+
 
 function socialHandleFile(e, taskId) {
   const file = e.target.files[0];
@@ -503,7 +503,7 @@ function initSocialPage() {
 /* ─── Expose globals ─── */
 window.socialStartTask    = socialStartTask;
 window.socialCancelUpload = socialCancelUpload;
-window.socialRetryTask    = _scRetryTask;
+window.scRetryTask        = scRetryTask;
 window.socialHandleFile   = socialHandleFile;
 window.socialSubmitProof  = socialSubmitProof;
 window.socialCopyPromo    = socialCopyPromo;
