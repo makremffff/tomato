@@ -321,9 +321,22 @@ function _scRetryTask(taskId) {
   const task = SOCIAL.tasks.find(t => t.id === taskId);
   if (!task) return;
   delete SOCIAL.pendingFiles[taskId];
-  SOCIAL.cardState[taskId] = 'idle';
-  _scRefreshSheet(taskId);
-  socialStartTask(taskId, task.task_url || '', !!task.proof_required);
+  // فتح الرابط إن وجد
+  if (task.task_url) {
+    if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(task.task_url);
+    else window.open(task.task_url, '_blank');
+  }
+  if (task.proof_required) {
+    // إعادة البدء بحالة upload مباشرة
+    SOCIAL.cardState[taskId] = 'upload';
+    _scRefreshCard(taskId);
+    _scRefreshSheet(taskId);
+    _socialToast('📋 أكمل المهمة ثم أرسل لقطة الإثبات');
+  } else {
+    // بدون إثبات — أعد الإرسال
+    SOCIAL.cardState[taskId] = 'idle';
+    socialSubmitNoProof(taskId);
+  }
 }
 
 function socialHandleFile(e, taskId) {
