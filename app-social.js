@@ -321,21 +321,39 @@ function _scRetryTask(taskId) {
   const task = SOCIAL.tasks.find(t => t.id === taskId);
   if (!task) return;
   delete SOCIAL.pendingFiles[taskId];
-  // فتح الرابط إن وجد
-  if (task.task_url) {
-    if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(task.task_url);
-    else window.open(task.task_url, '_blank');
-  }
+
   if (task.proof_required) {
-    // إعادة البدء بحالة upload مباشرة
+    // فتح الرابط أولاً
+    if (task.task_url) {
+      if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(task.task_url);
+      else window.open(task.task_url, '_blank');
+    }
+    // تحويل الحالة لـ upload مباشرة
     SOCIAL.cardState[taskId] = 'upload';
     _scRefreshCard(taskId);
     _scRefreshSheet(taskId);
     _socialToast('📋 أكمل المهمة ثم أرسل لقطة الإثبات');
   } else {
-    // بدون إثبات — أعد الإرسال
-    SOCIAL.cardState[taskId] = 'idle';
-    socialSubmitNoProof(taskId);
+    // مهمة بدون إثبات — أعد الإرسال للـ API مع حالة loading
+    const btn = document.querySelector(`#sheet-content .btn-submit`);
+    if (btn) { btn.disabled = true; btn.innerHTML = '<div style="display:inline-block;width:15px;height:15px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite"></div> جارٍ إعادة المحاولة...'; }
+    _socialToast('🔄 جارٍ إعادة المحاولة...');
+    _socialFetch({ type: 'social_submit_proof', task_id: taskId, proof_image: '' })
+      .then(res => {
+        if (res.ok) {
+          SOCIAL.cardState[taskId] = res.status === 'approved' ? 'approved' : 'pending';
+          _scRefreshCard(taskId);
+          _scCloseSheet();
+          _socialToast(res.status === 'approved' ? '✅ تم إنجاز المهمة وإضافة النقاط' : '✅ تم تسجيل الإنجاز');
+        } else {
+          if (btn) { btn.disabled = false; btn.innerHTML = 'إعادة المحاولة'; }
+          _socialToast('⚠️ ' + (typeof res.error === 'string' ? res.error : 'خطأ في الإرسال'));
+        }
+      })
+      .catch(() => {
+        if (btn) { btn.disabled = false; btn.innerHTML = 'إعادة المحاولة'; }
+        _socialToast('⚠️ تعذّر الإرسال');
+      });
   }
 }
 
