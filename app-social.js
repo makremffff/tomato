@@ -317,22 +317,15 @@ function socialCancelUpload(taskId) {
   _scRefreshSheet(taskId);
 }
 
-/* ─── إعادة المحاولة بعد الرفض ───────────────────────────────────────
- * منطق نظيف من الصفر:
- * 1. احذف أي ملف معلّق
- * 2. افتح الرابط في المتصفح
- * 3أ. proof_required  → اضبط state=upload وأعد رسم الشيت فقط (بدون API)
- * 3ب. بدون proof      → أرسل للـ API مباشرة مع loading على الزر
- * ------------------------------------------------------------------ */
+/* ─── إعادة المحاولة بعد الرفض ─────────────────────────────────────── */
 async function _scRetryTask(taskId) {
-  // 1. امسح أي ملف معلّق من المحاولة السابقة
-  delete SOCIAL.pendingFiles[taskId];
-
-  // 2. جلب بيانات المهمة
   const task = SOCIAL.tasks.find(t => t.id === taskId);
   if (!task) { _socialToast('⚠️ لم يتم العثور على المهمة'); return; }
 
-  // 3. افتح الرابط دائماً
+  // 1. امسح أي ملف معلّق من المحاولة السابقة
+  delete SOCIAL.pendingFiles[taskId];
+
+  // 2. افتح الرابط
   if (task.task_url) {
     try {
       if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(task.task_url);
@@ -340,89 +333,36 @@ async function _scRetryTask(taskId) {
     } catch (_) {}
   }
 
-  // 3أ. مهمة تتطلب إثباتاً → انتقل لـ upload state فقط (المستخدم سيرفع صورة جديدة)
+  // 3أ. مهمة تتطلب إثباتاً → state=upload ثم أعد فتح الشيت عبر _scOpenSheet مباشرة
   if (task.proof_required) {
     SOCIAL.cardState[taskId] = 'upload';
-    // أعد رسم الكارد
-    const card = document.getElementById(`sc-card-${taskId}`);
-    if (card) card.outerHTML = _scCardHTML(task, SOCIAL.tasks.indexOf(task));
-    // أعد بناء الشيت بالحالة الجديدة بدلاً من استدعاء _scRefreshSheet
-    // (لتجنب دورة الاستدعاء المتكررة)
-    const sc = document.getElementById('sheet-content');
-    if (sc) {
-      const pcls = _SC_PCLS[task.icon] || 'default';
-      const icon = _SC_ICONS[task.icon] || _SC_ICONS.default;
-      const noteHTML = `<div class="sheet-section"><div class="sheet-sec-lbl">تعليمات المهمة</div><div class="note-box">${_esc(task.note || task.description || '')}</div></div>`;
-      const promoHTML = task.promo_text ? `<div class="sheet-section"><div class="sheet-sec-lbl">نص ترويجي جاهز (اختياري)</div><div class="promo-box"><div class="promo-box-top"><div class="promo-text" id="sc-promo-${task.id}">${_esc(task.promo_text)}</div><button class="btn-copy" id="sc-copybtn-${task.id}" onclick="socialCopyPromo(${task.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>نسخ</button></div></div></div>` : '';
-      sc.innerHTML = `
-        <div class="sheet-head">
-          <div class="sheet-icon p-${pcls}" style="width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${icon}</div>
-          <div class="sheet-meta">
-            <div class="sheet-title">${_esc(task.title)}</div>
-            <div class="sheet-plat">${_SC_PLATNAME[task.icon] || task.icon}</div>
-          </div>
-          <div class="sheet-pts-badge">
-            <span class="sheet-pts-num">${Number(task.reward).toLocaleString('ar')}<img src="asesst/coins.png" alt="" style="width:18px;height:18px;object-fit:contain;filter:drop-shadow(0 1px 4px rgba(245,158,11,.5))"></span>
-            <span class="sheet-pts-lbl">نقطة</span>
-          </div>
-        </div>
-        ${noteHTML}${promoHTML}
-        <div class="sheet-section">
-          <div class="sheet-sec-lbl">إرسال صورة الإثبات</div>
-          <div class="upload-area" id="sc-uploadArea-${task.id}">
-            <input type="file" accept="image/*" id="sc-file-${task.id}" onchange="socialHandleFile(event,${task.id})">
-            <img class="preview-img" id="sc-prev-img-${task.id}" alt="preview">
-            <div class="upload-placeholder" id="sc-uploadPH-${task.id}">
-              <div class="upload-svg-wrap">
-                <svg viewBox="0 0 60 60" fill="none" width="60" height="60">
-                  <circle cx="30" cy="30" r="29" stroke="rgba(59,130,246,0.18)" stroke-width="1.2" stroke-dasharray="4 3"/>
-                  <circle cx="30" cy="30" r="22" fill="rgba(59,130,246,0.10)"/>
-                  <path d="M30 38V24" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/>
-                  <path d="M24 30l6-7 6 7" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M22 42h16" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-                </svg>
-              </div>
-              <div class="upload-lbl">ارفع لقطة الإثبات الجديدة</div>
-              <div class="upload-sub">PNG أو JPG — اضغط للاختيار</div>
-            </div>
-          </div>
-        </div>
-        <div class="sheet-section">
-          <button class="btn-submit" id="sc-submitbtn-${task.id}" disabled onclick="socialSubmitProof(${task.id})">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
-            إرسال للمراجعة
-          </button>
-          <button class="btn-submit" style="margin-top:8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);box-shadow:none;color:rgba(255,255,255,.45)" onclick="socialCancelUpload(${task.id})">
-            إلغاء
-          </button>
-        </div>`;
-    }
+    _scRefreshCard(taskId);
+    _scOpenSheet(taskId);
     _socialToast('📋 ارفع صورة إثبات جديدة');
     return;
   }
 
-  // 3ب. مهمة بدون إثبات → أرسل للـ API مباشرة مع loading واضح على الزر
+  // 3ب. مهمة بدون إثبات → أرسل للـ API مباشرة
+  // أعد رسم الشيت بـ state مؤقت للـ loading
   const retryBtn = document.getElementById(`sc-retry-${taskId}`);
   if (retryBtn) {
     retryBtn.disabled = true;
     retryBtn.innerHTML = '<div style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-left:6px"></div> جارٍ...';
   }
-  _socialToast('🔄 جارٍ إعادة المحاولة...');
 
   try {
     const res = await _socialFetch({ type: 'social_submit_proof', task_id: taskId, proof_image: '' });
     if (res.ok) {
       SOCIAL.cardState[taskId] = res.status === 'approved' ? 'approved' : 'pending';
-      const card2 = document.getElementById(`sc-card-${taskId}`);
-      if (card2) card2.outerHTML = _scCardHTML(task, SOCIAL.tasks.indexOf(task));
+      _scRefreshCard(taskId);
       _scCloseSheet();
       _socialToast(res.status === 'approved' ? '✅ تم إنجاز المهمة وإضافة النقاط' : '✅ تم تسجيل الإنجاز');
     } else {
-      if (retryBtn) { retryBtn.disabled = false; retryBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> إعادة المحاولة'; }
+      if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = 'إعادة المحاولة'; }
       _socialToast('⚠️ ' + (typeof res.error === 'string' ? res.error : 'خطأ في الإرسال'));
     }
   } catch {
-    if (retryBtn) { retryBtn.disabled = false; retryBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> إعادة المحاولة'; }
+    if (retryBtn) { retryBtn.disabled = false; retryBtn.textContent = 'إعادة المحاولة'; }
     _socialToast('⚠️ تعذّر الإرسال — تحقق من الاتصال');
   }
 }
