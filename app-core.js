@@ -50,7 +50,7 @@ export const _SERVER_CONFIG   = APP_STATE.serverConfig;
 
 // ── APP_CONFIG ──────────────────────────────────────────
 export const APP_CONFIG = {
-    withdraw:   { first_min: 1200, normal_min: 1200, normal_level: 1, min_active_referrals: 3 },
+    withdraw:   { first_min: 3000, normal_min: 20000, normal_level: 5 },
     rewards:    { referral: 100, telegram_task: 200,
                   daily_ads_10: 200, daily_ads_25: 300, daily_referrals_3: 1000,
                   points_per_ad: 50 },
@@ -90,17 +90,6 @@ export function _applyConfigToUI() {
     // ── قيم جوائز الإعلانات الديناميكية ──
     const adsgramPts = APP_CONFIG.rewards?.points_per_ad || 60;
     document.querySelectorAll('.earn-cta-rnum').forEach(el => { el.textContent = adsgramPts; });
-    if (APP_CONFIG.taddy_ads?.points_per_ad) {
-        const taddyPts = APP_CONFIG.taddy_ads.points_per_ad;
-        const taddyBadge = document.getElementById('taddy-pts-val');
-        if (taddyBadge) taddyBadge.textContent = taddyPts;
-    }
-    if (APP_CONFIG.taddy_ads) {
-        if (APP_CONFIG.taddy_ads.daily_limit) {
-            const tEl = document.getElementById('taddy-total');
-            if (tEl) tEl.textContent = APP_CONFIG.taddy_ads.daily_limit;
-        }
-    }
 }
 
 // ══════════════════════════════════════════════════════════

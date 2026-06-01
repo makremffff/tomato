@@ -297,7 +297,8 @@ async function _loadInvitePage() {
 function _refreshWithdrawUI() {
     const heroEl = document.getElementById('withdraw-balance-hero');
     if (heroEl) heroEl.textContent = _AS.balance.toLocaleString('en-US');
-    const min = _AC.withdraw?.normal_min || 1200;
+    const fw  = _AS.first_withdraw_done;
+    const min = fw ? (_AC.withdraw.normal_min||20000) : (_AC.withdraw.first_min||3000);
     const el  = document.getElementById('withdraw-ton-min-display');
     if (el) el.textContent = min.toLocaleString('en-US');
 }
@@ -511,9 +512,9 @@ export function openTonWithdraw() {
     const overlay   = document.getElementById('ton-withdraw-overlay');
     const ptsEl     = document.getElementById('ton-sheet-pts');
     const equivEl   = document.getElementById('ton-sheet-equiv');
+    const levelWarn = document.getElementById('ton-level-warn');
     const ptsWarn   = document.getElementById('ton-pts-warn');
-    const refWarn   = document.getElementById('ton-ref-warn');
-    const dailyWarn = document.getElementById('ton-daily-warn');
+    const curLvlEl  = document.getElementById('ton-current-level');
     const submitBtn = document.getElementById('ton-submit-btn');
     const input     = document.getElementById('ton-address-input');
     const errEl     = document.getElementById('ton-error-msg');
@@ -523,27 +524,24 @@ export function openTonWithdraw() {
     ptsEl.textContent  = _AS.balance.toLocaleString('en-US');
     equivEl.textContent= '≈ '+(_AS.balance/ptsPerTon).toFixed(3)+' TON';
 
-    const minPts = _AC.withdraw?.normal_min || 1200;
-    const hasPts = _AS.balance >= minPts;
-    const activeRefs = _AS.active_referrals_count || 0;
-    const hasRefs = activeRefs >= (_AC.withdraw?.min_active_referrals || 3);
+    const fw      = _AS.first_withdraw_done;
+    const minPts  = fw ? (_AC.withdraw.normal_min||20000) : (_AC.withdraw.first_min||3000);
+    const minLvl  = fw ? (_AC.withdraw.normal_level||5)  : 0;
+    const hasLvl  = fw ? _AS.level>=minLvl : true;
+    const hasPts  = _AS.balance>=minPts;
 
-    if (ptsWarn) ptsWarn.style.display='none';
-    if (refWarn) refWarn.style.display='none';
-    if (dailyWarn) dailyWarn.style.display='none';
-
+    levelWarn.style.display='none'; ptsWarn.style.display='none';
     const chip=document.getElementById('ton-min-chip-val');
-    if (chip) { chip.textContent=minPts.toLocaleString('en-US')+' نقطة'; chip.style.color='var(--green)'; }
+    if (chip) { chip.textContent=minPts.toLocaleString('en-US')+' نقطة'; chip.style.color=fw?'var(--gold)':'var(--green)'; }
+    const firstOffer=document.getElementById('first-withdraw-offer');
+    if (firstOffer) firstOffer.style.display=fw?'none':'flex';
     const minPtsEl=document.getElementById('ton-min-pts');
     if (minPtsEl) minPtsEl.textContent=minPts.toLocaleString('en-US');
     const warnMin=document.getElementById('ton-pts-warn-min');
     if (warnMin) warnMin.textContent=minPts.toLocaleString('en-US');
-    // hide old first-withdraw offer
-    const firstOffer=document.getElementById('first-withdraw-offer');
-    if (firstOffer) firstOffer.style.display='none';
 
-    if (!hasPts) { if(ptsWarn) ptsWarn.style.display=''; submitBtn.disabled=true; }
-    else if (!hasRefs) { if(refWarn) refWarn.style.display=''; submitBtn.disabled=true; }
+    if (!hasLvl) { levelWarn.style.display=''; if(curLvlEl) curLvlEl.textContent=_AS.level; submitBtn.disabled=true; }
+    else if (!hasPts) { ptsWarn.style.display=''; submitBtn.disabled=true; }
     else submitBtn.disabled=false;
 
     overlay.classList.add('visible');
@@ -579,9 +577,8 @@ export async function submitTonWithdraw() {
     submitBtn.disabled=false; submitBtn.textContent='إرسال طلب السحب';
 
     if (!result.ok) {
-        errEl.textContent = result.error==='insufficient_balance'?`تحتاج ${(result.required||1200).toLocaleString('en-US')} نقطة للسحب`
-            : result.error==='not_enough_active_referrals'?`تحتاج ${result.required||3} إحالات نشطة (لديك ${result.have||0})`
-            : result.error==='daily_limit_reached'?'لقد سحبت اليوم، حاول غداً'
+        errEl.textContent = result.error==='insufficient_balance'?'رصيدك غير كافٍ'
+            : result.error==='level_too_low'?`يتطلب المستوى ${result.required_level||5} للسحب`
             : 'حدث خطأ، حاول مجدداً';
         errEl.style.display='block'; return;
     }

@@ -759,7 +759,6 @@ window.addEventListener('DOMContentLoaded', async () => {
             _AS.balance             = pts;
             _AS.level               = parseInt(load.level)||1;
             _AS.first_withdraw_done = !!load.first_withdraw_done;
-            _AS.active_referrals_count = parseInt(load.active_referrals_count) || 0;
             _AS.tasks.tgVerified    = !!load.tg_verified;
             if (load.usdt_balance !== undefined) _AS.usdt_balance = parseFloat(load.usdt_balance)||0;
 
@@ -771,6 +770,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 if (cfg.telegram)  Object.assign(_AC.telegram,  cfg.telegram);
                 if (cfg.ads)       Object.assign(_AC.ads,       cfg.ads);
                 if (cfg.ads?.daily_limit) _AS.serverConfig.ads_daily_limit=cfg.ads.daily_limit;
+                // ── adsgram task dynamic config ──
                 if (cfg.adsgram_task) {
                     if (cfg.adsgram_task.reward)      _AT.reward     = cfg.adsgram_task.reward;
                     if (cfg.adsgram_task.cooldown_ms) _AT.cooldownMs = cfg.adsgram_task.cooldown_ms;
