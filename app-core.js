@@ -50,7 +50,7 @@ export const _SERVER_CONFIG   = APP_STATE.serverConfig;
 
 // ── APP_CONFIG ──────────────────────────────────────────
 export const APP_CONFIG = {
-    withdraw:   { first_min: 3000, normal_min: 20000, normal_level: 5 },
+    withdraw:   { first_min: 1200, normal_min: 1200, normal_level: 1, min_active_referrals: 3 },
     rewards:    { referral: 100, telegram_task: 200,
                   daily_ads_10: 200, daily_ads_25: 300, daily_referrals_3: 1000,
                   points_per_ad: 50 },
