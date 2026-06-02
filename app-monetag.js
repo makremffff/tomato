@@ -202,8 +202,11 @@ window.watchMonetag = async function () {
     _mtgUpdateUI();
 
     try {
+        // إعلان 1
         await window._monetagShowAd(_getUserId());
-        // Promise حُلّ = المستخدم شاهد الإعلان كاملاً
+        // إعلان 2 — مباشرة بعد الأول
+        await window._monetagShowAd(_getUserId());
+        // كلا الإعلانين اكتملا → منح الجائزة مرة واحدة فقط
         await _mtgGrantReward();
     } catch (err) {
         console.warn('[Monetag] Ad failed or skipped:', err);
