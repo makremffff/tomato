@@ -124,21 +124,35 @@ async function _mtgGrantReward() {
     if (_MT.isClaiming) return;
     _MT.isClaiming = true;
     try {
-        let granted = MTG_REWARD_PTS;
-        try {
-            const res = await fetchApi({
-                type: 'claim_monetag_reward',
-                data: { provider: 'monetag', ad_type: 'rewarded_interstitial' }
-            });
-            if (res?.points) granted = res.points;
-        } catch (_) {}
+        const res = await _dbCall('monetag_reward', {});
 
-        _MT.watched++;
-        _MT.remaining   = Math.max(0, MTG_DAILY_LIMIT - _MT.watched);
+        if (!res.ok) {
+            if (res.error === 'daily_limit_reached') {
+                _MT.remaining = 0;
+                _mtgUpdateUI();
+                showToast('وصلت للحد اليومي ✓', 'info');
+            } else if (res.error === 'cooldown_active') {
+                _MT.cooldownUntil = Date.now() + (res.wait_ms || MTG_COOLDOWN_MS);
+                _mtgUpdateUI();
+                showToast('انتظر قليلاً', 'warning');
+            } else {
+                showToast('خطأ — حاول مرة أخرى', 'warning');
+            }
+            return;
+        }
+
+        const granted = res.points_awarded ?? MTG_REWARD_PTS;
+        _MT.watched     = res.watched_today   ?? (_MT.watched + 1);
+        _MT.remaining   = res.remaining       ?? Math.max(0, MTG_DAILY_LIMIT - _MT.watched);
         _MT.earnedToday += granted;
 
-        APP_STATE.balance = (APP_STATE.balance || 0) + granted;
-        animateBalance(granted);
+        if (res.points !== undefined) {
+            animateBalance(APP_STATE.balance, res.points, 1200);
+            APP_STATE.balance = res.points;
+        } else {
+            APP_STATE.balance = (APP_STATE.balance || 0) + granted;
+            animateBalance(granted);
+        }
         updateBalanceUI();
 
         showToast(`+${granted} نقطة من Monetag 🎉`, 'success');
