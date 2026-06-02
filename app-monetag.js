@@ -171,9 +171,9 @@ window.watchMonetag = async function () {
 
     try {
         // إعلان 1 — بنفس طريقة المشروع المرجعي
-        await window[MTG_SHOW_FN]({ ymid: _getUserId() });
+        await window[MTG_SHOW_FN]();
         // إعلان 2 — يبدأ فوراً بعد انتهاء الأول
-        await window[MTG_SHOW_FN]({ ymid: _getUserId() });
+        await window[MTG_SHOW_FN]();
         // كلاهما اكتمل → جائزة واحدة
         await _mtgGrantReward();
     } catch (err) {
