@@ -1323,17 +1323,15 @@ function _mgStartBtnCooldown() {
     }, 1000);
 }
 
-// ── Preload — يحمّل إعلانين مسبقاً ─────────────────────
+// ── Preload — يحمّل إعلان واحد مسبقاً (Monetag لا يدعم queue) ──
 function _mgPreload() {
     const showFn = _mgGetShowFn();
-    if (!showFn) return;
-    // حمّل حتى إعلانين
-    const needed = 2 - _MG._preloadCount;
-    for (let i = 0; i < needed; i++) {
-        showFn({ type: 'preload' }).then(() => {
-            _MG._preloadCount++;
-        }).catch(() => {});
-    }
+    if (!showFn || _MG._preloadCount > 0 || _MG._inFlight) return;
+    showFn({ type: 'preload' }).then(() => {
+        _MG._preloadCount = 1;
+    }).catch(() => {
+        _MG._preloadCount = 0;
+    });
 }
 
 function _mgGetShowFn() {
@@ -1363,12 +1361,11 @@ export async function watchMonetag() {
         const ymid = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 'u');
 
         if (_MG._preloadCount > 0) {
-            // إعلان جاهز — عرضه مباشرة
-            _MG._preloadCount--;
+            // إعلان محمّل مسبقاً — عرضه فوراً
+            _MG._preloadCount = 0;
             await showFn({ ymid });
         } else {
-            // لا يوجد preload — حمّل وعرض
-            await showFn({ type: 'preload', ymid }).catch(() => {});
+            // مافي preload — عرض مباشر (Monetag يحمّل داخلياً)
             await showFn({ ymid });
         }
 
@@ -1376,7 +1373,7 @@ export async function watchMonetag() {
         await _mgOnComplete();
 
     } catch (err) {
-        showToast('coin', 'Monetag', 'لم تكتمل المشاهدة', 'red', '');
+        // المستخدم أغلق أو فشل
         _MG._inFlight = false;
         const b = _mgBtn();
         if (b) { b.disabled = false; b.classList.remove('disabled'); b.innerHTML = _mgBtnReady(); }
@@ -1384,8 +1381,8 @@ export async function watchMonetag() {
     }
 
     _MG._inFlight = false;
-    // ابدأ preload للإعلانات القادمة
-    setTimeout(_mgPreload, 500);
+    // حمّل الإعلان التالي في الخلفية فوراً
+    setTimeout(_mgPreload, 800);
 }
 
 async function _mgOnComplete() {
