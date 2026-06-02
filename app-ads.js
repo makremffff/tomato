@@ -859,6 +859,14 @@ window.addEventListener('DOMContentLoaded', async () => {
             } else {
                 _atShow('atask-start-btn');
             }
+
+            // ── Monetag init ──────────────────────────────────────
+            if (load.monetag) {
+                initMonetag(load.monetag);
+            } else {
+                initMonetag(null);
+            }
+
             // tgVerified UI
             if (_AS.tasks.tgVerified) {
                 document.getElementById('tg-join-btn')?.style.setProperty('display','none');
@@ -1194,3 +1202,216 @@ export function initAdsgramTaskUI(adsgramTaskData) {
 // ── expose ────────────────────────────────────────────────
 window.startAdsgramTask    = startAdsgramTask;
 window.initAdsgramTaskUI   = initAdsgramTaskUI;
+
+
+// ══════════════════════════════════════════════════════════════════
+// MONETAG — Rewarded Interstitial (أعلى CPM)
+// حد يومي: 250 | جائزة: 20 نقطة لكل مشاهدة
+// ══════════════════════════════════════════════════════════════════
+
+const _MG = {
+    watched:      0,
+    dailyLimit:   250,
+    reward:       20,
+    cooldownMs:   20 * 1000,   // 20 ثانية بين كل إعلان
+    cooldownUntil: 0,
+    _cooldownTimer: null,
+    _preloaded:   false,
+    _inFlight:    false,
+};
+
+// ── Update Monetag UI ────────────────────────────────────
+function _mgUpdateUI() {
+    const remaining  = Math.max(0, _MG.dailyLimit - _MG.watched);
+    const isDone     = _MG.watched >= _MG.dailyLimit;
+    const inCooldown = !isDone && _MG.cooldownUntil > Date.now();
+
+    const rowEl   = document.getElementById('monetag-prov-row');
+    const btn     = document.getElementById('monetag-watch-btn');
+    const doneEl  = document.getElementById('monetag-done-state');
+    const coolEl  = document.getElementById('monetag-cooldown-msg');
+    const remEl   = document.getElementById('monetag-remaining');
+    const watchEl = document.getElementById('monetag-watched');
+    const limEl   = document.getElementById('monetag-daily-limit');
+
+    if (remEl)   remEl.textContent = remaining;
+    if (watchEl) watchEl.textContent = _MG.watched;
+    if (limEl)   limEl.textContent = _MG.dailyLimit;
+
+    // SVG ring progress
+    const ringEl = document.getElementById('monetag-mini-ring');
+    if (ringEl) {
+        const circumference = 2 * Math.PI * 15;
+        const pct = _MG.dailyLimit > 0 ? _MG.watched / _MG.dailyLimit : 0;
+        ringEl.style.strokeDasharray  = circumference;
+        ringEl.style.strokeDashoffset = circumference * (1 - pct);
+    }
+
+    if (isDone) {
+        if (rowEl)  rowEl.style.display   = 'none';
+        if (doneEl) doneEl.style.display  = 'flex';
+        if (coolEl) coolEl.style.display  = 'none';
+        return;
+    }
+    if (rowEl)  rowEl.style.display  = '';
+    if (doneEl) doneEl.style.display = 'none';
+
+    if (inCooldown) {
+        if (btn)    { btn.disabled = true; btn.style.opacity = '0.45'; }
+        if (coolEl) coolEl.style.display = 'flex';
+        _mgStartCooldownTimer();
+    } else {
+        if (btn)    { btn.disabled = false; btn.style.opacity = ''; }
+        if (coolEl) coolEl.style.display = 'none';
+    }
+}
+
+function _mgStartCooldownTimer() {
+    if (_MG._cooldownTimer) return;
+    _MG._cooldownTimer = setInterval(() => {
+        const left = _MG.cooldownUntil - Date.now();
+        if (left <= 0) {
+            clearInterval(_MG._cooldownTimer);
+            _MG._cooldownTimer = null;
+            const coolEl = document.getElementById('monetag-cooldown-msg');
+            if (coolEl) coolEl.style.display = 'none';
+            _mgUpdateUI();
+            return;
+        }
+        const timerEl = document.getElementById('monetag-cooldown-timer');
+        if (timerEl) timerEl.textContent = `انتظر ${Math.ceil(left / 1000)} ثانية`;
+    }, 500);
+}
+
+// ── Preload Monetag ad (call on page open) ───────────────
+function _mgPreload() {
+    const showFn = _mgGetShowFn();
+    if (!showFn || _MG._preloaded) return;
+    showFn({ type: 'preload' }).then(() => {
+        _MG._preloaded = true;
+    }).catch(() => {});
+}
+
+function _mgGetShowFn() {
+    // SDK يُحمَّل ديناميكياً — ابحث عن الدالة باسمها بعد zone ID
+    const tag = document.getElementById('monetag-sdk-tag');
+    if (!tag) return null;
+    const sdkName = tag.getAttribute('data-sdk');
+    if (!sdkName) return null;
+    return typeof window[sdkName] === 'function' ? window[sdkName] : null;
+}
+
+// ── Main watch function ──────────────────────────────────
+export async function watchMonetag() {
+    if (_MG._inFlight) return;
+    if (_MG.watched >= _MG.dailyLimit) {
+        _mgUpdateUI();
+        return;
+    }
+    if (_MG.cooldownUntil > Date.now()) {
+        const left = Math.ceil((_MG.cooldownUntil - Date.now()) / 1000);
+        showToast('coin', 'انتظر قليلاً', `${left} ثانية`, 'red', '');
+        return;
+    }
+
+    const showFn = _mgGetShowFn();
+    if (!showFn) {
+        showToast('coin', 'Monetag', 'جارٍ تحميل SDK...', 'red', '');
+        return;
+    }
+
+    _MG._inFlight = true;
+    const btn = document.getElementById('monetag-watch-btn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>'; }
+
+    try {
+        // Preload then show (أفضل أداء)
+        const doShow = async () => {
+            const startTime = Date.now();
+            await showFn({ ymid: String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 'u') });
+
+            // أُكمل المشاهدة — نُرسل للسيرفر
+            const elapsed = Date.now() - startTime;
+            _mgOnComplete(elapsed);
+        };
+
+        if (_MG._preloaded) {
+            _MG._preloaded = false;
+            await doShow();
+        } else {
+            await showFn({ type: 'preload' }).then(doShow).catch(doShow);
+        }
+    } catch (err) {
+        // المستخدم أغلق الإعلان أو فشل
+        showToast('coin', 'Monetag', 'لم تكتمل المشاهدة', 'red', '');
+    } finally {
+        _MG._inFlight = false;
+        if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg> شاهد'; }
+        _mgPreload(); // أعد التحميل للإعلان التالي
+    }
+}
+
+async function _mgOnComplete(elapsedMs) {
+    try {
+        const result = await _dbCall('monetag_reward', { elapsed_ms: elapsedMs });
+        if (!result?.ok) {
+            const msg = result?.error === 'daily_limit_reached'
+                ? 'وصلت الحد اليومي لـ Monetag'
+                : result?.error === 'cooldown_active'
+                    ? `انتظر ${Math.ceil((result.wait_ms||20000)/1000)} ثانية`
+                    : 'حدث خطأ، حاول مرة أخرى';
+            showToast('coin', 'Monetag', msg, 'red', '');
+            if (result?.error === 'daily_limit_reached') {
+                _MG.watched = _MG.dailyLimit;
+            }
+            if (result?.error === 'cooldown_active' && result.wait_ms) {
+                _MG.cooldownUntil = Date.now() + result.wait_ms;
+            }
+        } else {
+            _MG.watched = result.watched_today ?? (_MG.watched + 1);
+            _MG.cooldownUntil = Date.now() + (result.cooldown_ms || _MG.cooldownMs);
+
+            const pts = result.points_awarded ?? _MG.reward;
+            if (result.points !== undefined) {
+                animateBalance(_AS.balance, result.points, 1000);
+                _AS.balance = result.points;
+            }
+            showToast('coin', 'Monetag ✓', `+${pts} نقطة`, 'green', `+${pts}`);
+            if (typeof Telegram !== 'undefined') {
+                try { Telegram.WebApp.HapticFeedback.notificationOccurred('success'); } catch(_){}
+            }
+        }
+    } catch (e) {
+        showToast('coin', 'Monetag', 'خطأ في الاتصال', 'red', '');
+    }
+    _mgUpdateUI();
+}
+
+// ── Init from server load data ───────────────────────────
+export function initMonetag(data) {
+    // data = { watched_today, daily_limit, reward, cooldown_ms, zone_id }
+    if (!data) { _mgUpdateUI(); _mgPreload(); return; }
+
+    if (data.watched_today  !== undefined) _MG.watched    = parseInt(data.watched_today) || 0;
+    if (data.daily_limit    !== undefined) _MG.dailyLimit = parseInt(data.daily_limit)   || 250;
+    if (data.reward         !== undefined) _MG.reward     = parseInt(data.reward)        || 20;
+    if (data.cooldown_ms    !== undefined) _MG.cooldownMs = parseInt(data.cooldown_ms)   || 20000;
+    if (data.cooldown_until !== undefined) _MG.cooldownUntil = data.cooldown_until;
+
+    // Inject the SDK src dynamically with the real zone ID
+    if (data.zone_id) {
+        const tag = document.getElementById('monetag-sdk-tag');
+        if (tag && !tag.src) {
+            tag.src = `https://opstrategy.pro/sdk.js`;
+            tag.setAttribute('data-zone', data.zone_id);
+            tag.setAttribute('data-sdk', `show_${data.zone_id}`);
+        }
+    }
+
+    _mgUpdateUI();
+    // Preload after short delay
+    setTimeout(_mgPreload, 2000);
+}
+
+window.watchMonetag  = watchMonetag;
+window.initMonetag   = initMonetag;

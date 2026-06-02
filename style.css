@@ -2140,6 +2140,14 @@
             background: rgba(251,191,36,.20);
             box-shadow: 0 4px 18px rgba(245,158,11,.22);
         }
+        /* Monetag button variant */
+        #monetag-watch-btn:hover {
+            background: rgba(139,92,246,.35) !important;
+            box-shadow: 0 4px 18px rgba(124,58,237,.28) !important;
+        }
+        #monetag-watch-btn:active { transform: scale(.95); }
+        #monetag-watch-btn:disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
+        #monetag-cooldown-msg { display:none; gap:5px; justify-content:center; align-items:center; }
         /* Done row */
         /* ── Earn Provider Cooldown Overlay ── */
         .epc-overlay {

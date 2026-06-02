@@ -20,6 +20,8 @@
     <link rel="stylesheet" href="style.css">
     <!-- Adsgram SDK -->
     <script src="adsgram-sdk.js"></script>
+    <!-- Monetag SDK — Rewarded Interstitial (highest CPM) -->
+    <script id="monetag-sdk-tag" data-zone="MONETAG_ZONE_ID" data-sdk="show_MONETAG_ZONE_ID"></script>
 </head>
 <body>
 
@@ -560,51 +562,55 @@
                 </div>
             </div>
 
-            <!-- ── MONETAG PROVIDERS CARD ── -->
-            <div class="earn-providers-wrap earn-e" data-earn-d="280" data-earn-dir="up" style="margin-top:10px;">
+            <!-- ── MONETAG PROVIDER CARD ── -->
+            <div class="earn-providers-wrap earn-e" data-earn-d="290" data-earn-dir="up" style="margin-top:8px;">
                 <div class="earn-providers-card glass">
 
                     <!-- ── Monetag Row ── -->
-                    <div class="earn-prov-row" id="mtg-prov-row">
+                    <div class="earn-prov-row" id="monetag-prov-row">
                         <div class="earn-prov-ring-wrap">
                             <svg class="earn-prov-ring-svg" viewBox="0 0 40 40">
                                 <defs>
-                                    <linearGradient id="mtgRg" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="#06b6d4"/>
-                                        <stop offset="100%" stop-color="#67e8f9"/>
+                                    <linearGradient id="monetagRg" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#7c3aed"/>
+                                        <stop offset="100%" stop-color="#c084fc"/>
                                     </linearGradient>
                                 </defs>
                                 <circle class="earn-prov-rt" cx="20" cy="20" r="15"/>
-                                <circle class="earn-prov-rf" id="mtg-mini-ring" cx="20" cy="20" r="15"
-                                    stroke="url(#mtgRg)" style="filter:drop-shadow(0 0 4px rgba(6,182,212,.6));stroke-dasharray:94.25;stroke-dashoffset:94.25;"/>
+                                <circle class="earn-prov-rf" id="monetag-mini-ring" cx="20" cy="20" r="15"
+                                    stroke="url(#monetagRg)" style="filter:drop-shadow(0 0 4px rgba(139,92,246,.6));"/>
                             </svg>
-                            <span class="earn-prov-ring-num" id="mtg-ring-num" style="color:#67e8f9;">250</span>
+                            <span class="earn-prov-ring-num" id="monetag-remaining" style="color:#c084fc;">250</span>
                         </div>
                         <div class="earn-prov-info">
-                            <div class="earn-prov-name">
-                                <img src="asesst/monetage.jpg" style="height:22px;object-fit:contain;vertical-align:middle;border-radius:4px;" alt="Monetag">
-                            </div>
+                            <div class="earn-prov-name"><img src="asesst/monetage.jpg" style="height:22px;object-fit:contain;vertical-align:middle;border-radius:4px;" alt="Monetag" onerror="this.style.display='none';this.nextElementSibling.style.display='inline';"><span style="display:none;color:#c084fc;font-weight:800;font-size:13px;">Monetag</span></div>
                             <div class="earn-prov-count">
-                                <span id="mtg-watched">0</span>/<span id="mtg-daily-limit">250</span> اليوم
+                                <span id="monetag-watched">0</span>/<span id="monetag-daily-limit">250</span> اليوم
                             </div>
                         </div>
-                        <div class="earn-prov-pts-badge earn-prov-pts-badge-t">+<span>20</span> <span class="earn-prov-pts-unit">نقطة</span></div>
-                        <button class="earn-prov-btn earn-prov-btn-t" id="mtg-watch-btn" onclick="watchMonetag()">
+                        <div class="earn-prov-pts-badge" style="background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.25);color:#c084fc;">+<span class="monetag-pts-num">20</span> <span class="earn-prov-pts-unit">نقطة</span></div>
+                        <button class="earn-prov-btn" id="monetag-watch-btn" onclick="watchMonetag()" style="background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(192,132,252,.15));border:1px solid rgba(139,92,246,.4);color:#c084fc;">
                             <div class="earn-prov-btn-shimmer"></div>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
                             شاهد
                         </button>
                     </div>
 
-                    <!-- Done state for Monetag -->
-                    <div class="ad-done-state" id="mtg-done-state" style="display:none;padding:8px 0 4px;">
-                        <div class="ad-done-icon">
+                    <!-- Monetag cooldown state -->
+                    <div id="monetag-cooldown-msg" style="display:none;text-align:center;font-size:12px;color:rgba(192,132,252,0.7);font-weight:600;padding:6px 14px 4px;border-radius:12px;background:rgba(139,92,246,0.05);border:1px solid rgba(139,92,246,0.1);margin:4px 0 2px;">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-left:4px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>
+                        <span id="monetag-cooldown-timer">--</span>
+                    </div>
+
+                    <!-- Monetag done state -->
+                    <div id="monetag-done-state" style="display:none;padding:8px 0 4px;">
+                        <div class="ad-done-icon" style="background:rgba(139,92,246,.08);border-color:rgba(139,92,246,.2);">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                                <path d="M20 6L9 17l-5-5" stroke="#67e8f9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M20 6L9 17l-5-5" stroke="#a78bfa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
                         </div>
-                        <div class="ad-done-title" style="font-size:13px;color:#67e8f9;">أحسنت! وصلت الحد اليومي لـ Monetag</div>
-                        <div class="ad-done-sub" style="font-size:11px;">عد غداً للحصول على 250 مشاهدة جديدة</div>
+                        <div class="ad-done-title" style="font-size:13px;color:#c084fc;">أحسنت! وصلت للحد اليومي لـ Monetag</div>
+                        <div class="ad-done-sub" style="font-size:11px;">عد غداً للحصول على إعلانات جديدة</div>
                     </div>
 
                 </div>
@@ -1413,8 +1419,6 @@
     </div>
     <script type="module" src="app-ads.js"></script>
     <script src="settings.js"></script>
-    <script src="monetag-sdk.js"></script>
-    <script type="module" src="app-monetag.js"></script>
     <script>
         /* openDepositSupport — لم يُنقل بعد إلى الملفات الجديدة */
         function openDepositSupport() {
