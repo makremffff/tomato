@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════════════════
 // app-monetag.js — Monetag Rewarded Interstitial Controller
-// النظام: ضغطة وحدة ← show_10245709() ← show_10245709() ← جائزة + عداد +1
+// النظام: ضغطة وحدة ← إعلان 1 ← إعلان 2 (تلقائي) ← جائزة + عداد +1
+// SDK: monetag-sdk.js | الدالة: window._monetagShowAd()
 // ══════════════════════════════════════════════════════════
 
 import { APP_STATE, fetchApi } from './app-core.js';
@@ -32,24 +33,21 @@ async function _mtgLoadState() {
     } catch (_) {}
 }
 
-// ─── UI — يستخدم IDs الموجودة في index.html ─────────────
+// ─── UI ──────────────────────────────────────────────────
 function _mtgUpdateUI() {
     const remaining = Math.max(0, MTG_DAILY_LIMIT - _MT.prizes);
-
     const el = id => document.getElementById(id);
 
     if (el('monetag-watched'))     el('monetag-watched').textContent     = _MT.prizes;
     if (el('monetag-remaining'))   el('monetag-remaining').textContent   = remaining;
     if (el('monetag-daily-limit')) el('monetag-daily-limit').textContent = MTG_DAILY_LIMIT;
 
-    // Ring SVG
     const ring = el('monetag-mini-ring');
     if (ring) {
         const circ = 2 * Math.PI * 15;
         ring.style.strokeDashoffset = circ * (1 - Math.min(_MT.prizes / MTG_DAILY_LIMIT, 1));
     }
 
-    // زر المشاهدة
     const btn = el('monetag-watch-btn');
     if (!btn) return;
 
@@ -103,7 +101,10 @@ async function _mtgGrantReward() {
                 _MT.prizes      = res.watched_today  ?? (_MT.prizes + 1);
                 _MT.earnedToday += granted;
             } else {
-                showToast(res?.error === 'daily_limit_reached' ? 'وصلت للحد اليومي ✓' : 'خطأ في منح النقاط', 'warning');
+                showToast(
+                    res?.error === 'daily_limit_reached' ? 'وصلت للحد اليومي ✓' : 'خطأ في منح النقاط',
+                    'warning'
+                );
                 return;
             }
         } catch (_) {
@@ -127,8 +128,10 @@ window.watchMonetag = async function () {
     if (_MT.prizes >= MTG_DAILY_LIMIT) { showToast('وصلت للحد اليومي ✓', 'info'); return; }
     if (Date.now() < _MT.cooldownUntil) return;
 
-    if (typeof window.show_10245709 !== 'function') {
+    // تأكد الـ SDK محمل
+    if (typeof window._monetagShowAd !== 'function') {
         showToast('جاري تحميل الإعلان...', 'info');
+        if (typeof window._monetagInit === 'function') window._monetagInit();
         setTimeout(() => window.watchMonetag?.(), 2000);
         return;
     }
@@ -137,9 +140,9 @@ window.watchMonetag = async function () {
     _mtgUpdateUI();
 
     try {
-        await window.show_10245709(); // إعلان 1
-        await window.show_10245709(); // إعلان 2 — تلقائي
-        await _mtgGrantReward();      // جائزة بعد الاثنين
+        await window._monetagShowAd(); // إعلان 1
+        await window._monetagShowAd(); // إعلان 2 — تلقائي بدون تدخل المستخدم
+        await _mtgGrantReward();       // جائزة بعد الاثنين
     } catch (err) {
         console.warn('[Monetag] failed:', err?.message);
         showToast(
@@ -158,6 +161,7 @@ window.watchMonetag = async function () {
 async function _mtgInit() {
     await _mtgLoadState();
     _mtgUpdateUI();
+    if (typeof window._monetagInit === 'function') window._monetagInit();
     console.log('[Monetag] ready | prizes today:', _MT.prizes);
 }
 

@@ -79,8 +79,6 @@
                 if (err) return reject(err);
                 const showFn = window[MONETAG_SHOW_FN];
                 if (typeof showFn !== 'function') return reject(new Error('show fn missing'));
-                // نبدأ preload الإعلان التالي بينما هذا الإعلان يعرض
-                showFn({ type: 'preload', ymid: String(userId || '') }).catch(() => {});
                 showFn({ ymid: String(userId || '') })
                     .then(resolve)
                     .catch(reject);
