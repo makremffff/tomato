@@ -315,6 +315,7 @@ export async function watchAd() {
         }
         _adElapsedMs = adResult.elapsed_ms; // نحفظ elapsed الحقيقي
         successCount++;
+        _adController = null; // reset حتى الإعلان التالي يحمّل instance جديد
 
         if (i<AD_PRELOAD-1) {
             let rem=2;
