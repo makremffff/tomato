@@ -1,7 +1,6 @@
 // ══════════════════════════════════════════════════════════
 // app-monetag.js — Monetag Rewarded Interstitial Controller
-// النظام: ضغطة وحدة ← إعلان 1 ← إعلان 2 (تلقائي) ← جائزة + عداد +1
-// SDK: monetag-sdk.js | الدالة: window._monetagShowAd()
+// النظام: show_10245709() مرتين ← جائزة + عداد +1
 // ══════════════════════════════════════════════════════════
 
 import { APP_STATE, fetchApi } from './app-core.js';
@@ -128,10 +127,8 @@ window.watchMonetag = async function () {
     if (_MT.prizes >= MTG_DAILY_LIMIT) { showToast('وصلت للحد اليومي ✓', 'info'); return; }
     if (Date.now() < _MT.cooldownUntil) return;
 
-    // تأكد الـ SDK محمل
-    if (typeof window._monetagShowAd !== 'function') {
+    if (typeof show_10245709 !== 'function') {
         showToast('جاري تحميل الإعلان...', 'info');
-        if (typeof window._monetagInit === 'function') window._monetagInit();
         setTimeout(() => window.watchMonetag?.(), 2000);
         return;
     }
@@ -140,9 +137,9 @@ window.watchMonetag = async function () {
     _mtgUpdateUI();
 
     try {
-        await window._monetagShowAd(); // إعلان 1
-        await window._monetagShowAd(); // إعلان 2 — تلقائي بدون تدخل المستخدم
-        await _mtgGrantReward();       // جائزة بعد الاثنين
+        await show_10245709(); // إعلان 1
+        await show_10245709(); // إعلان 2 — تلقائي
+        await _mtgGrantReward();
     } catch (err) {
         console.warn('[Monetag] failed:', err?.message);
         showToast(
@@ -161,7 +158,6 @@ window.watchMonetag = async function () {
 async function _mtgInit() {
     await _mtgLoadState();
     _mtgUpdateUI();
-    if (typeof window._monetagInit === 'function') window._monetagInit();
     console.log('[Monetag] ready | prizes today:', _MT.prizes);
 }
 
