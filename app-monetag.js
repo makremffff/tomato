@@ -1,7 +1,8 @@
 // ══════════════════════════════════════════════════════════
 // app-monetag.js — Monetag Rewarded Interstitial Controller
-// النظام: ضغطة وحدة = إعلانَين متتاليَين → جائزة واحدة + عداد +1
-// الحد اليومي: 250 جائزة | المكافأة: 20 نقطة لكل جائزة
+// النظام: ضغطة وحدة ← إعلان 1 تلقائي ← إعلان 2 تلقائي ← جائزة + عداد +1
+// SDK: libtl.com | دالة: show_10245709
+// الحد اليومي: 250 جائزة | المكافأة: 20 نقطة
 // ══════════════════════════════════════════════════════════
 
 import {
@@ -14,29 +15,20 @@ import {
 } from './app-ui.js';
 
 // ─── إعدادات ────────────────────────────────────────────
-const MTG_DAILY_LIMIT   = 250;
-const MTG_REWARD_PTS    = 20;
-const MTG_COOLDOWN_MS   = 5_000;
-const MTG_ADS_PER_PRIZE = 2;
+const MTG_DAILY_LIMIT = 250;
+const MTG_REWARD_PTS  = 20;
+const MTG_COOLDOWN_MS = 5_000;
+const MTG_SDK_FN      = 'show_10245709'; // دالة الـ SDK من libtl.com
 
 // ─── حالة داخلية ────────────────────────────────────────
 const _MT = {
-    prizes:        0,
+    prizes:        0,   // عدد الجوائز اليوم (= العداد)
     earnedToday:   0,
     isWatching:    false,
     isClaiming:    false,
     cooldownUntil: 0,
     _coolTimer:    null,
-    userId:        null,
 };
-
-// ─── userId ──────────────────────────────────────────────
-function _getUserId() {
-    if (_MT.userId) return _MT.userId;
-    const uid = window?.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-    _MT.userId = uid ? String(uid) : 'anon';
-    return _MT.userId;
-}
 
 // ─── تحميل حالة السيرفر ─────────────────────────────────
 async function _mtgLoadState() {
@@ -105,25 +97,24 @@ function _mtgStartCooldown() {
     _MT._coolTimer = setInterval(() => {
         if (Date.now() >= _MT.cooldownUntil) {
             clearInterval(_MT._coolTimer);
-            _mtgUpdateUI();
-        } else {
-            _mtgUpdateUI();
         }
+        _mtgUpdateUI();
     }, 500);
 }
 
-// ─── عرض إعلان واحد — Promise ────────────────────────────
-function _showAd() {
+// ─── عرض إعلان واحد عبر libtl SDK ──────────────────────
+function _showOneAd() {
     return new Promise((resolve, reject) => {
-        if (typeof window._monetagShowAd !== 'function') {
+        const fn = window[MTG_SDK_FN];
+        if (typeof fn !== 'function') {
             reject(new Error('sdk_not_ready'));
             return;
         }
-        window._monetagShowAd(_getUserId()).then(resolve).catch(reject);
+        fn().then(resolve).catch(reject);
     });
 }
 
-// ─── منح الجائزة ────────────────────────────────────────
+// ─── منح الجائزة من السيرفر ─────────────────────────────
 async function _mtgGrantReward() {
     _MT.isClaiming = true;
     try {
@@ -134,8 +125,8 @@ async function _mtgGrantReward() {
                 data: { provider: 'monetag', ad_type: 'rewarded_interstitial' },
             });
             if (res?.ok) {
-                granted        = res.points_awarded ?? MTG_REWARD_PTS;
-                _MT.prizes     = res.watched_today  ?? (_MT.prizes + 1);
+                granted         = res.points_awarded ?? MTG_REWARD_PTS;
+                _MT.prizes      = res.watched_today  ?? (_MT.prizes + 1);
                 _MT.earnedToday += granted;
             } else {
                 const msg = res?.error === 'daily_limit_reached'
@@ -145,6 +136,7 @@ async function _mtgGrantReward() {
                 return;
             }
         } catch (_) {
+            // fallback محلي
             _MT.prizes++;
             _MT.earnedToday += granted;
         }
@@ -162,12 +154,15 @@ async function _mtgGrantReward() {
 // ─── الدالة الرئيسية ─────────────────────────────────────
 window.watchMonetag = async function () {
     if (_MT.isWatching || _MT.isClaiming) return;
-    if (_MT.prizes >= MTG_DAILY_LIMIT) { showToast('وصلت للحد اليومي ✓', 'info'); return; }
+    if (_MT.prizes >= MTG_DAILY_LIMIT) {
+        showToast('وصلت للحد اليومي ✓', 'info');
+        return;
+    }
     if (Date.now() < _MT.cooldownUntil) return;
 
-    if (typeof window._monetagShowAd !== 'function') {
+    // تحقق أن الـ SDK محمل
+    if (typeof window[MTG_SDK_FN] !== 'function') {
         showToast('جاري تحميل الإعلان...', 'info');
-        if (typeof window._monetagInit === 'function') window._monetagInit();
         setTimeout(() => window.watchMonetag?.(), 2000);
         return;
     }
@@ -176,18 +171,21 @@ window.watchMonetag = async function () {
     _mtgUpdateUI();
 
     try {
-        // ── الإعلان الأول ──
-        await _showAd();
+        // إعلان 1
+        await _showOneAd();
 
-        // ── الإعلان الثاني يتحمل مباشرة بدون تدخل المستخدم ──
-        await _showAd();
+        // إعلان 2 — تلقائي بدون تدخل المستخدم
+        await _showOneAd();
 
-        // ── الجائزة بعد الاثنين ──
+        // بعد الاثنين ← جائزة
         await _mtgGrantReward();
 
     } catch (err) {
-        console.warn('[Monetag] Ad failed:', err?.message);
-        showToast('الإعلان لم يكتمل — لم تُمنح نقاط', 'warning');
+        console.warn('[Monetag] Ad sequence failed:', err?.message);
+        const msg = String(err).includes('cancel')
+            ? 'أكمل الإعلان للحصول على النقاط'
+            : 'الإعلان لم يكتمل — حاول مرة أخرى';
+        showToast(msg, 'warning');
     } finally {
         _MT.isWatching = false;
         _mtgUpdateUI();
@@ -198,7 +196,6 @@ window.watchMonetag = async function () {
 async function _mtgInit() {
     await _mtgLoadState();
     _mtgUpdateUI();
-    if (typeof window._monetagInit === 'function') window._monetagInit();
     console.log('[Monetag] ready | prizes today:', _MT.prizes);
 }
 
