@@ -1,17 +1,15 @@
 // ══════════════════════════════════════════════════════════
 // app-monetag.js — Monetag Rewarded Interstitial Controller
-// النظام: show_10245709() مرتين ← جائزة + عداد +1
+// النظام: ضغطة وحدة ← show_10245709() مرتين ← جائزة + عداد +1
 // ══════════════════════════════════════════════════════════
 
 import { APP_STATE, fetchApi } from './app-core.js';
 import { showToast, animateBalance, updateBalanceUI } from './app-ui.js';
 
-// ─── إعدادات ────────────────────────────────────────────
 const MTG_DAILY_LIMIT = 250;
 const MTG_REWARD_PTS  = 20;
 const MTG_COOLDOWN_MS = 5_000;
 
-// ─── حالة ───────────────────────────────────────────────
 const _MT = {
     prizes:        0,
     earnedToday:   0,
@@ -21,7 +19,6 @@ const _MT = {
     _coolTimer:    null,
 };
 
-// ─── تحميل حالة السيرفر ─────────────────────────────────
 async function _mtgLoadState() {
     try {
         const res = await fetchApi({ type: 'get_monetag_state', data: {} });
@@ -32,7 +29,6 @@ async function _mtgLoadState() {
     } catch (_) {}
 }
 
-// ─── UI ──────────────────────────────────────────────────
 function _mtgUpdateUI() {
     const remaining = Math.max(0, MTG_DAILY_LIMIT - _MT.prizes);
     const el = id => document.getElementById(id);
@@ -74,7 +70,6 @@ function _mtgUpdateUI() {
     if (el('monetag-prov-row'))   el('monetag-prov-row').style.display   = done ? 'none' : '';
 }
 
-// ─── Cooldown ────────────────────────────────────────────
 function _mtgStartCooldown() {
     _MT.cooldownUntil = Date.now() + MTG_COOLDOWN_MS;
     clearInterval(_MT._coolTimer);
@@ -85,7 +80,6 @@ function _mtgStartCooldown() {
     }, 500);
 }
 
-// ─── منح الجائزة ────────────────────────────────────────
 async function _mtgGrantReward() {
     _MT.isClaiming = true;
     try {
@@ -100,10 +94,8 @@ async function _mtgGrantReward() {
                 _MT.prizes      = res.watched_today  ?? (_MT.prizes + 1);
                 _MT.earnedToday += granted;
             } else {
-                showToast(
-                    res?.error === 'daily_limit_reached' ? 'وصلت للحد اليومي ✓' : 'خطأ في منح النقاط',
-                    'warning'
-                );
+                const msg = res?.error === 'daily_limit_reached' ? 'وصلت للحد اليومي ✓' : 'خطأ في منح النقاط';
+                showToast('warning', 'Monetag', msg, 'orange', '!');
                 return;
             }
         } catch (_) {
@@ -114,21 +106,23 @@ async function _mtgGrantReward() {
         APP_STATE.balance = (APP_STATE.balance || 0) + granted;
         animateBalance(granted);
         updateBalanceUI();
-        showToast(`+${granted} نقطة من Monetag 🎉`, 'success');
+        showToast('trophy', 'Monetag 🎉', `+${granted} نقطة`, 'green', `+${granted}`);
         _mtgStartCooldown();
     } finally {
         _MT.isClaiming = false;
     }
 }
 
-// ─── الدالة الرئيسية ─────────────────────────────────────
 window.watchMonetag = async function () {
     if (_MT.isWatching || _MT.isClaiming) return;
-    if (_MT.prizes >= MTG_DAILY_LIMIT) { showToast('وصلت للحد اليومي ✓', 'info'); return; }
+    if (_MT.prizes >= MTG_DAILY_LIMIT) {
+        showToast('info', 'Monetag', 'وصلت للحد اليومي ✓', 'blue', '✓');
+        return;
+    }
     if (Date.now() < _MT.cooldownUntil) return;
 
     if (typeof show_10245709 !== 'function') {
-        showToast('جاري تحميل الإعلان...', 'info');
+        showToast('info', 'Monetag', 'جاري تحميل الإعلان...', 'blue', '...');
         setTimeout(() => window.watchMonetag?.(), 2000);
         return;
     }
@@ -142,19 +136,16 @@ window.watchMonetag = async function () {
         await _mtgGrantReward();
     } catch (err) {
         console.warn('[Monetag] failed:', err?.message);
-        showToast(
-            String(err).toLowerCase().includes('cancel')
-                ? 'أكمل الإعلان للحصول على النقاط'
-                : 'الإعلان لم يكتمل — حاول مرة أخرى',
-            'warning'
-        );
+        const msg = String(err).toLowerCase().includes('cancel')
+            ? 'أكمل الإعلان للحصول على النقاط'
+            : 'الإعلان لم يكتمل — حاول مرة أخرى';
+        showToast('warning', 'Monetag', msg, 'orange', '!');
     } finally {
         _MT.isWatching = false;
         _mtgUpdateUI();
     }
 };
 
-// ─── تهيئة ───────────────────────────────────────────────
 async function _mtgInit() {
     await _mtgLoadState();
     _mtgUpdateUI();
