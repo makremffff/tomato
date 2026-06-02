@@ -1293,12 +1293,8 @@ function _mgPreload() {
 }
 
 function _mgGetShowFn() {
-    // SDK يُحمَّل ديناميكياً — ابحث عن الدالة باسمها بعد zone ID
-    const tag = document.getElementById('monetag-sdk-tag');
-    if (!tag) return null;
-    const sdkName = tag.getAttribute('data-sdk');
-    if (!sdkName) return null;
-    return typeof window[sdkName] === 'function' ? window[sdkName] : null;
+    const fnName = 'show_10245709';
+    return typeof window[fnName] === 'function' ? window[fnName] : null;
 }
 
 // ── Main watch function ──────────────────────────────────
@@ -1397,16 +1393,6 @@ export function initMonetag(data) {
     if (data.reward         !== undefined) _MG.reward     = parseInt(data.reward)        || 20;
     if (data.cooldown_ms    !== undefined) _MG.cooldownMs = parseInt(data.cooldown_ms)   || 20000;
     if (data.cooldown_until !== undefined) _MG.cooldownUntil = data.cooldown_until;
-
-    // Inject the SDK src dynamically with the real zone ID
-    if (data.zone_id) {
-        const tag = document.getElementById('monetag-sdk-tag');
-        if (tag && !tag.src) {
-            tag.src = `https://opstrategy.pro/sdk.js`;
-            tag.setAttribute('data-zone', data.zone_id);
-            tag.setAttribute('data-sdk', `show_${data.zone_id}`);
-        }
-    }
 
     _mgUpdateUI();
     // Preload after short delay
