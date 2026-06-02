@@ -184,10 +184,16 @@ window.watchMonetag = async function () {
     _mtgUpdateUI();
 
     try {
-        // إعلان 1 — بنفس طريقة المشروع المرجعي
+        // إعلان 1
+        console.log('[Monetag] بدأ إعلان 1');
         await window[MTG_SHOW_FN]();
-        // إعلان 2 — يبدأ فوراً بعد انتهاء الأول
+        console.log('[Monetag] انتهى إعلان 1 — انتظار 5 ثواني');
+        showToast('إعلان 1 ✓ — إعلان 2 يبدأ بعد ثواني...', 'info');
+        await new Promise(r => setTimeout(r, 5000));
+        // إعلان 2
+        console.log('[Monetag] بدأ إعلان 2');
         await window[MTG_SHOW_FN]();
+        console.log('[Monetag] انتهى إعلان 2 — جائزة');
         // كلاهما اكتمل → جائزة واحدة
         await _mtgGrantReward();
     } catch (err) {
