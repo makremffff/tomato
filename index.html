@@ -1786,6 +1786,12 @@
                 renderPodium(lb.slice(0, 3));
                 renderList(lb.slice(3));
 
+                // ── sync home: تذاكر + ترتيب ──────────────────────────
+                const rankEl    = document.getElementById('hm-user-rank');
+                const ticketsEl = document.getElementById('uc-tickets-val');
+                if (rankEl)    rankEl.textContent    = data.my_rank ? '#' + data.my_rank : '#--';
+                if (ticketsEl) ticketsEl.textContent = (data.my_tickets || 0).toLocaleString('ar');
+
             } catch(e) {
                 console.warn('[Competition]', e);
             }
