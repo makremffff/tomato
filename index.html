@@ -1158,20 +1158,6 @@
                 </div>
             </div>
 
-            <!-- MY RANK BAR -->
-            <div id="cp-my-rank-bar" style="display:none;background:linear-gradient(135deg,#191300,#111);border:1px solid rgba(232,184,75,.18);border-radius:16px;padding:12px 16px;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;">
-                <div>
-                    <div style="font-size:12px;color:#555;font-weight:600;">مرتبتك</div>
-                    <div id="cp-my-rank-num" style="font-family:'DynaPuff',cursive;font-size:18px;color:#E8B84B;">#--</div>
-                </div>
-                <div style="text-align:left;">
-                    <div style="font-size:12px;color:#555;font-weight:600;">تذاكرك</div>
-                    <div style="font-family:'DynaPuff',cursive;font-size:13px;color:#E8B84B;display:flex;align-items:center;gap:5px;">
-                        <img src="a.jpg" alt="t" style="width:16px;height:11px;object-fit:cover;border-radius:2px;"/>
-                        <span id="cp-my-tickets">0</span>
-                    </div>
-                </div>
-            </div>
 
             <!-- ════ SECTION LABEL: المتصدرون ════ -->
             <div class="cp-sec-lbl">
@@ -1653,7 +1639,7 @@
         const CROWN2 = `<svg width="38" height="30" viewBox="0 0 38 30" fill="none"><path d="M3 26L7.5 10L14.5 19.5L19 5L23.5 19.5L30.5 10L35 26Z" fill="#0F1318" stroke="#9EAAB8" stroke-width="1.3" stroke-linejoin="round"/><circle cx="7.5" cy="10" r="2.8" fill="#9EAAB8"/><circle cx="19" cy="5" r="2.8" fill="#D4DCE4"/><circle cx="30.5" cy="10" r="2.8" fill="#9EAAB8"/><rect x="3" y="24.5" width="32" height="5" rx="2.5" fill="#9EAAB8"/><rect x="3" y="24.5" width="32" height="2.2" rx="2" fill="#D4DCE4" opacity=".3"/></svg>`;
         const CROWN3 = `<svg width="38" height="30" viewBox="0 0 38 30" fill="none"><path d="M3 26L7.5 10L14.5 19.5L19 5L23.5 19.5L30.5 10L35 26Z" fill="#120A04" stroke="#B87333" stroke-width="1.3" stroke-linejoin="round"/><circle cx="7.5" cy="10" r="2.8" fill="#B87333"/><circle cx="19" cy="5" r="2.8" fill="#D4975A"/><circle cx="30.5" cy="10" r="2.8" fill="#B87333"/><rect x="3" y="24.5" width="32" height="5" rx="2.5" fill="#B87333"/><rect x="3" y="24.5" width="32" height="2.2" rx="2" fill="#D4975A" opacity=".3"/></svg>`;
         const CROWNS  = [CROWN1, CROWN2, CROWN3];
-        const PRIZES  = ['5$', '2$', '3$'];
+        const PRIZES  = ['5$', '3$', '2$'];
         const AV_COLORS = [
             { cls:'av-purple', c:'#7c6fff', cg:'rgba(124,111,255,0.15)' },
             { cls:'av-teal',   c:'#2dd4bf', cg:'rgba(45,212,191,0.12)'  },
@@ -1775,9 +1761,10 @@
             _cpCountdownTimer = setInterval(tick, 1000);
         }
 
-        let _cpLoaded = false;
+        let _cpInitialized = false;
+        let _cpRefreshTimer = null;
+
         async function loadCompetition() {
-            if (_cpLoaded) return;
             try {
                 const _sid = window._APP_SESSION || '';
                 const res = await fetch('/api/competition?action=leaderboard', {
@@ -1785,23 +1772,20 @@
                 });
                 const data = await res.json();
                 if (!data.ok) return;
-                _cpLoaded = true;
-                if (data.end_date) startCpCountdown(new Date(data.end_date));
-                if (data.prize_text) {
-                    const pt = document.getElementById('cp-prize-text');
-                    if (pt) pt.textContent = data.prize_text;
+
+                if (!_cpInitialized) {
+                    _cpInitialized = true;
+                    if (data.end_date) startCpCountdown(new Date(data.end_date));
+                    if (data.prize_text) {
+                        const pt = document.getElementById('cp-prize-text');
+                        if (pt) pt.textContent = data.prize_text;
+                    }
                 }
+
                 const lb = data.leaderboard || [];
-                renderPodium(lb.slice(0,3));
+                renderPodium(lb.slice(0, 3));
                 renderList(lb.slice(3));
-                if (data.my_rank) {
-                    const bar = document.getElementById('cp-my-rank-bar');
-                    if (bar) { bar.style.display = 'flex'; }
-                    const rn = document.getElementById('cp-my-rank-num');
-                    const mt = document.getElementById('cp-my-tickets');
-                    if (rn) rn.textContent = '#' + data.my_rank;
-                    if (mt) mt.textContent = (data.my_tickets || 0).toLocaleString('ar');
-                }
+
             } catch(e) {
                 console.warn('[Competition]', e);
             }
@@ -1810,7 +1794,18 @@
         window.openCompetitionPage = function() {
             if (window.showPage) window.showPage('competition', null);
             loadCompetition();
+            // تحديث كل 5 ثواني
+            if (_cpRefreshTimer) clearInterval(_cpRefreshTimer);
+            _cpRefreshTimer = setInterval(loadCompetition, 5000);
         };
+
+        // إيقاف التحديث عند مغادرة صفحة المسابقة
+        document.addEventListener('pagechange', function(e) {
+            if (e.detail?.page !== 'competition' && _cpRefreshTimer) {
+                clearInterval(_cpRefreshTimer);
+                _cpRefreshTimer = null;
+            }
+        });
     })();
     </script>
 </body>

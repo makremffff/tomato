@@ -27,6 +27,7 @@ async function _mtgLoadState() {
         if (res?.monetag) {
             _MT.prizes      = res.monetag.watched_today ?? 0;  // FIX-2: كان .watched
             _MT.earnedToday = (_MT.prizes * MTG_TICKET_COUNT);
+            window._MT_PRIZES = _MT.prizes;  // مزامنة العداد اليومي
             // مزامنة daily_limit و cooldown من السيرفر إن وُجدا
             if (res.monetag.daily_limit)  _mtgSetDailyLimit(res.monetag.daily_limit);
             if (res.monetag.cooldown_ms)  _mtgSetCooldown(res.monetag.cooldown_ms);
@@ -113,6 +114,8 @@ async function _mtgGrantReward() {
                 // [FIX-2] حقل watched_today موجود في رد السيرفر
                 _MT.prizes      = res.watched_today  ?? (_MT.prizes + 1);
                 _MT.earnedToday = _MT.prizes * MTG_TICKET_COUNT;
+                // مزامنة global للعداد اليومي في صفحة الربح
+                window._MT_PRIZES = _MT.prizes;
 
                 // [FIX-3] Refresh فوري للـ balance بدون reload
                 _mtgRefreshBalance(res.points);
@@ -133,6 +136,7 @@ async function _mtgGrantReward() {
             // fallback محلي لو الشبكة انقطعت
             _MT.prizes++;
             _MT.earnedToday = _MT.prizes * MTG_TICKET_COUNT;
+            window._MT_PRIZES = _MT.prizes;
         }
 
         // منح التذاكر للمسابقة

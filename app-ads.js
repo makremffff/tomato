@@ -117,7 +117,7 @@ function _showPartialAdNotice(ptsEarned, fullPts) {
 const AD_BLOCK_ID    = '30161';
 const AD_MAX_RETRIES = 2;
 const AD_MIN_MS      = 7000;
-const AD_PRELOAD     = 2;
+const AD_PRELOAD     = 1;
 
 let _adController    = null;
 let _adStartedAt     = 0;
@@ -153,7 +153,7 @@ function _updateAdUINoBtn() {
     const ads = _AS.ads;
     const r   = ads.remaining;
     const setText = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-    const _combinedWatched1 = ads.watched||0;
+    const _combinedWatched1 = (ads.watched||0) + (window._MT_PRIZES||0);
     setText('ads-remaining', r);
     setText('ads-watched',       ads.watched);
     setText('ads-watched-total', _combinedWatched1);
@@ -176,7 +176,7 @@ export function updateAdUI() {
     const r   = ads.remaining;
 
     const setText = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-    const _combinedWatched2 = ads.watched||0;
+    const _combinedWatched2 = (ads.watched||0) + (window._MT_PRIZES||0);
     setText('ads-remaining', r);
     setText('ads-watched',       ads.watched);
     setText('ads-watched-total', _combinedWatched2);
@@ -315,13 +315,10 @@ export async function watchAd() {
         }
         _adElapsedMs = adResult.elapsed_ms; // نحفظ elapsed الحقيقي
         successCount++;
-        _adController = null; // reset حتى الإعلان التالي يحمّل instance جديد
 
         if (i<AD_PRELOAD-1) {
-            let rem=2;
+            let rem=6;
             if (overlay) overlay.classList.add('visible');
-            if(countEl) countEl.textContent=`${rem}s`;
-            if(labelEl) labelEl.textContent=`إعلان ${successCount} ✓ — التالي فوراً...`;
             await new Promise(resolve=>{
                 const tick=setInterval(()=>{
                     rem--;
