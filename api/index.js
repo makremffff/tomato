@@ -9,7 +9,6 @@ const {
 } = require('../lib/services-social');
 
 const { CFG, ADMIN_SECRET } = require('../lib/config');
-const { grantTickets: grantCompetitionTickets } = require('./competition');
 const { rateLimitMap, ensureBootstrap } = require('../lib/db');
 const { hashIp, hashFp, getIp, rateLimit } = require('../lib/utils');
 const { validateSession, issueNonce, writeAudit } = require('../lib/security');
@@ -19,6 +18,7 @@ const {
   handleClaimDailyMission, handleClaimGift, handleGetChannels,
   handleVerifyChannelTask, handleCheckChannelMembership, handleVerifyTgTask, handleSubmitWithdraw,
   handleGetReferrals, handleTrackAdEvent, handleAdmin, handleAdsgramCallback,
+  handleGetCompetition, awardCompetitionTickets,
 } = require('../lib/services');
 
 module.exports = async function handler(req, res) {
@@ -77,7 +77,7 @@ module.exports = async function handler(req, res) {
   try { fpData = JSON.parse(fpRaw); } catch (_) {}
   const fpHash = hashFp(fpData);
 
-  const isWrite = !['load', 'get_state', 'create_session', 'get_referrals', 'track_ad_event', 'start_ad', 'check_channel_membership'].includes(type);
+  const isWrite = !['load', 'get_state', 'create_session', 'get_referrals', 'track_ad_event', 'start_ad', 'check_channel_membership', 'get_competition'].includes(type);
   if (!rateLimit(`ip_${ipHash}_${type}`, isWrite ? CFG.RATE_WRITE_MAX : CFG.RATE_MAX)) {
     return res.status(429).json({ ok: false, error: 'rate_limited' });
   }
@@ -162,11 +162,6 @@ module.exports = async function handler(req, res) {
       case 'start_ad':            result = await handleStartAd(userId, sessionId, ipHash, fpHash); break;
       case 'reward_ad':           result = await handleRewardAd(userId, sessionId, ipHash, fpHash, body, rawNonce); break;
       case 'monetag_reward':       result = await handleMonetagReward(userId, sessionId, ipHash, fpHash, body); break;
-      case 'grant_competition_tickets': {
-        const count = parseInt(body?.data?.count) || 50;
-        result = await grantCompetitionTickets(userId, count);
-        break;
-      }
       case 'start_adsgram_task':  result = await handleStartAdsgramTask(userId, sessionId, ipHash, fpHash); break;
       case 'claim_adsgram_task':  result = await handleClaimAdsgramTask(userId, sessionId, ipHash, fpHash, rawNonce); break;
       case 'claim_daily_mission': result = await handleClaimDailyMission(userId, body, rawNonce, sessionId, fpHash, ipHash); break;
@@ -178,6 +173,8 @@ module.exports = async function handler(req, res) {
       case 'check_channel_membership': result = await handleCheckChannelMembership(userId); break;
       case 'get_referrals':       result = await handleGetReferrals(userId); break;
       case 'track_ad_event':      result = await handleTrackAdEvent(userId, sessionId, body, ipHash, fpHash); break;
+      // ── Competition ──
+      case 'get_competition':     result = await handleGetCompetition(body, userId); break;
       // ── Social Tasks ──
       case 'social_get_tasks':    result = await handleSocialGetTasks(userId); break;
       case 'social_submit_proof': result = await handleSocialSubmitProof(userId, body); break;
