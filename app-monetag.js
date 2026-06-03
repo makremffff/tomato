@@ -19,28 +19,39 @@ const _MT = {
     _coolTimer:    null,
 };
 
+// ── [FIX-1] استخدام get_state (الموجود فعلاً في API) بدل get_monetag_state
+// ── [FIX-2] قراءة watched_today بدل watched
 async function _mtgLoadState() {
     try {
-        const res = await fetchApi({ type: 'get_monetag_state', data: {} });
+        const res = await fetchApi({ type: 'get_state', data: {} });
         if (res?.monetag) {
-            _MT.prizes      = res.monetag.watched      ?? 0;
-            _MT.earnedToday = res.monetag.earned_today ?? 0;
+            _MT.prizes      = res.monetag.watched_today ?? 0;  // FIX-2: كان .watched
+            _MT.earnedToday = (_MT.prizes * MTG_TICKET_COUNT);
+            // مزامنة daily_limit و cooldown من السيرفر إن وُجدا
+            if (res.monetag.daily_limit)  _mtgSetDailyLimit(res.monetag.daily_limit);
+            if (res.monetag.cooldown_ms)  _mtgSetCooldown(res.monetag.cooldown_ms);
         }
     } catch (_) {}
 }
 
+// دعم dynamic limit/cooldown من السيرفر
+let _dynDailyLimit  = MTG_DAILY_LIMIT;
+let _dynCooldownMs  = MTG_COOLDOWN_MS;
+function _mtgSetDailyLimit(v) { _dynDailyLimit = parseInt(v) || MTG_DAILY_LIMIT; }
+function _mtgSetCooldown(v)   { _dynCooldownMs = parseInt(v) || MTG_COOLDOWN_MS; }
+
 function _mtgUpdateUI() {
-    const remaining = Math.max(0, MTG_DAILY_LIMIT - _MT.prizes);
+    const remaining = Math.max(0, _dynDailyLimit - _MT.prizes);
     const el = id => document.getElementById(id);
 
     if (el('monetag-watched'))     el('monetag-watched').textContent     = _MT.prizes;
     if (el('monetag-remaining'))   el('monetag-remaining').textContent   = remaining;
-    if (el('monetag-daily-limit')) el('monetag-daily-limit').textContent = MTG_DAILY_LIMIT;
+    if (el('monetag-daily-limit')) el('monetag-daily-limit').textContent = _dynDailyLimit;
 
     const ring = el('monetag-mini-ring');
     if (ring) {
         const circ = 2 * Math.PI * 15;
-        ring.style.strokeDashoffset = circ * (1 - Math.min(_MT.prizes / MTG_DAILY_LIMIT, 1));
+        ring.style.strokeDashoffset = circ * (1 - Math.min(_MT.prizes / _dynDailyLimit, 1));
     }
 
     const btn = el('monetag-watch-btn');
@@ -71,7 +82,7 @@ function _mtgUpdateUI() {
 }
 
 function _mtgStartCooldown() {
-    _MT.cooldownUntil = Date.now() + MTG_COOLDOWN_MS;
+    _MT.cooldownUntil = Date.now() + _dynCooldownMs;
     clearInterval(_MT._coolTimer);
     _mtgUpdateUI();
     _MT._coolTimer = setInterval(() => {
@@ -80,25 +91,48 @@ function _mtgStartCooldown() {
     }, 500);
 }
 
+// ── [FIX-3] بعد الجائزة: تحديث فوري للـ balance في الـ UI
+function _mtgRefreshBalance(newPoints) {
+    if (newPoints !== undefined && newPoints !== null) {
+        APP_STATE.balance = parseInt(newPoints) || APP_STATE.balance;
+    }
+    try { updateBalanceUI(); } catch (_) {}
+    try { animateBalance?.(APP_STATE.balance); } catch (_) {}
+}
+
 async function _mtgGrantReward() {
     _MT.isClaiming = true;
     try {
+        let res;
         try {
-            const res = await fetchApi({
+            res = await fetchApi({
                 type: 'monetag_reward',
                 data: { provider: 'monetag', ad_type: 'rewarded_interstitial' },
             });
             if (res?.ok) {
+                // [FIX-2] حقل watched_today موجود في رد السيرفر
                 _MT.prizes      = res.watched_today  ?? (_MT.prizes + 1);
-                _MT.earnedToday += MTG_TICKET_COUNT;
+                _MT.earnedToday = _MT.prizes * MTG_TICKET_COUNT;
+
+                // [FIX-3] Refresh فوري للـ balance بدون reload
+                _mtgRefreshBalance(res.points);
+
+                // تحديث daily_limit/cooldown لو السيرفر أرسلهم
+                if (res.remaining !== undefined) {
+                    // اشتق الـ limit من watched + remaining
+                    _dynDailyLimit = _MT.prizes + res.remaining;
+                }
+                if (res.cooldown_ms) _mtgSetCooldown(res.cooldown_ms);
+
             } else {
                 const msg = res?.error === 'daily_limit_reached' ? 'وصلت للحد اليومي ✓' : 'خطأ في منح التذاكر';
                 showToast('warning', 'Monetag', msg, 'orange', '!');
                 return;
             }
         } catch (_) {
+            // fallback محلي لو الشبكة انقطعت
             _MT.prizes++;
-            _MT.earnedToday += MTG_TICKET_COUNT;
+            _MT.earnedToday = _MT.prizes * MTG_TICKET_COUNT;
         }
 
         // منح التذاكر للمسابقة
@@ -110,7 +144,11 @@ async function _mtgGrantReward() {
         } catch (_) {}
 
         showToast('trophy', 'Monetag 🎟️', `+${MTG_TICKET_COUNT} تذكرة مسابقة`, 'green', `+${MTG_TICKET_COUNT}`);
+
+        // [FIX-3] Refresh ثانٍ بعد منح التذاكر — يُحدّث كل الـ UI دفعةً واحدة
+        _mtgUpdateUI();
         _mtgStartCooldown();
+
     } finally {
         _MT.isClaiming = false;
     }
@@ -118,7 +156,7 @@ async function _mtgGrantReward() {
 
 window.watchMonetag = async function () {
     if (_MT.isWatching || _MT.isClaiming) return;
-    if (_MT.prizes >= MTG_DAILY_LIMIT) {
+    if (_MT.prizes >= _dynDailyLimit) {
         showToast('info', 'Monetag', 'وصلت للحد اليومي ✓', 'blue', '✓');
         return;
     }
@@ -149,6 +187,7 @@ window.watchMonetag = async function () {
     }
 };
 
+// ── [FIX-1] init: load من السيرفر مباشرة عند فتح الصفحة
 async function _mtgInit() {
     await _mtgLoadState();
     _mtgUpdateUI();
