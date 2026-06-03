@@ -1,14 +1,14 @@
 // ══════════════════════════════════════════════════════════
 // app-monetag.js — Monetag Rewarded Interstitial Controller
-// النظام: ضغطة وحدة ← show_10245709() مرتين ← جائزة + عداد +1
+// النظام: ضغطة وحدة ← show_10245709() مرتين ← 50 ticket + عداد +1
 // ══════════════════════════════════════════════════════════
 
 import { APP_STATE, fetchApi } from './app-core.js';
 import { showToast, animateBalance, updateBalanceUI } from './app-ui.js';
 
-const MTG_DAILY_LIMIT = 250;
-const MTG_REWARD_PTS  = 20;
-const MTG_COOLDOWN_MS = 5_000;
+const MTG_DAILY_LIMIT  = 250;
+const MTG_TICKET_COUNT = 50;   // تذاكر مسابقة لكل إعلان
+const MTG_COOLDOWN_MS  = 5_000;
 
 const _MT = {
     prizes:        0,
@@ -46,7 +46,7 @@ function _mtgUpdateUI() {
     const btn = el('monetag-watch-btn');
     if (!btn) return;
 
-    const done      = remaining <= 0;
+    const done       = remaining <= 0;
     const onCooldown = Date.now() < _MT.cooldownUntil;
 
     btn.disabled = done || _MT.isWatching || onCooldown;
@@ -54,7 +54,7 @@ function _mtgUpdateUI() {
 
     if (_MT.isWatching) {
         btn.innerHTML = `<div class="earn-prov-btn-shimmer"></div>
-            <img src="assets/loading.gif" style="width:14px;height:14px;object-fit:contain;" alt=""> جاري...`;
+            <img src="asesst/loading.gif" style="width:14px;height:14px;object-fit:contain;" alt=""> جاري...`;
     } else if (onCooldown) {
         btn.innerHTML = `<div class="earn-prov-btn-shimmer"></div>انتظر`;
     } else if (done) {
@@ -83,30 +83,33 @@ function _mtgStartCooldown() {
 async function _mtgGrantReward() {
     _MT.isClaiming = true;
     try {
-        let granted = MTG_REWARD_PTS;
         try {
             const res = await fetchApi({
                 type: 'monetag_reward',
                 data: { provider: 'monetag', ad_type: 'rewarded_interstitial' },
             });
             if (res?.ok) {
-                granted         = res.points_awarded ?? MTG_REWARD_PTS;
                 _MT.prizes      = res.watched_today  ?? (_MT.prizes + 1);
-                _MT.earnedToday += granted;
+                _MT.earnedToday += MTG_TICKET_COUNT;
             } else {
-                const msg = res?.error === 'daily_limit_reached' ? 'وصلت للحد اليومي ✓' : 'خطأ في منح النقاط';
+                const msg = res?.error === 'daily_limit_reached' ? 'وصلت للحد اليومي ✓' : 'خطأ في منح التذاكر';
                 showToast('warning', 'Monetag', msg, 'orange', '!');
                 return;
             }
         } catch (_) {
             _MT.prizes++;
-            _MT.earnedToday += granted;
+            _MT.earnedToday += MTG_TICKET_COUNT;
         }
 
-        APP_STATE.balance = (APP_STATE.balance || 0) + granted;
-        animateBalance(granted);
-        updateBalanceUI();
-        showToast('trophy', 'Monetag 🎉', `+${granted} نقطة`, 'green', `+${granted}`);
+        // منح التذاكر للمسابقة
+        try {
+            await fetchApi({
+                type: 'grant_competition_tickets',
+                data: { count: MTG_TICKET_COUNT },
+            });
+        } catch (_) {}
+
+        showToast('trophy', 'Monetag 🎟️', `+${MTG_TICKET_COUNT} تذكرة مسابقة`, 'green', `+${MTG_TICKET_COUNT}`);
         _mtgStartCooldown();
     } finally {
         _MT.isClaiming = false;
@@ -137,7 +140,7 @@ window.watchMonetag = async function () {
     } catch (err) {
         console.warn('[Monetag] failed:', err?.message);
         const msg = String(err).toLowerCase().includes('cancel')
-            ? 'أكمل الإعلان للحصول على النقاط'
+            ? 'أكمل الإعلان للحصول على التذاكر'
             : 'الإعلان لم يكتمل — حاول مرة أخرى';
         showToast('warning', 'Monetag', msg, 'orange', '!');
     } finally {
