@@ -11,8 +11,8 @@ export async function initCompetitionPage() {
 
 async function _loadCompetition() {
   try {
-    const { postAPI } = await import('./app-core.js');
-    const data = await postAPI({ type: 'get_competition' });
+    const { fetchApi } = await import('./app-core.js');
+    const data = await fetchApi({ type: 'get_competition' });
     if (!data?.ok) return;
 
     if (!data.competition) {
