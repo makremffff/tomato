@@ -88,7 +88,7 @@
     .cp-r2 .cp-pod-name { color:#9EAAB8; }
     .cp-r3 .cp-pod-name { color:#B87333; }
     .cp-tkt-badge { display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-family:'DynaPuff',cursive;font-size:11px;font-weight:600;margin-bottom:8px; }
-    .cp-tkt-badge img { width:18px;height:12px;object-fit:cover;border-radius:2px; }
+    .cp-tkt-badge img { width:24px;height:24px;object-fit:contain;border-radius:3px; }
     .cp-r1 .cp-tkt-badge { background:#191300;border:1px solid #2E2400;color:#E8B84B; }
     .cp-r2 .cp-tkt-badge { background:#101418;border:1px solid #1C2430;color:#9EAAB8; }
     .cp-r3 .cp-tkt-badge { background:#120A04;border:1px solid #221408;color:#B87333; }
@@ -349,7 +349,7 @@
                     </svg>
                 </div>
                 مهام إعلانية
-                <span class="tasks-slabel-badge" style="background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.12);color:rgba(245,200,66,.6);">+<span id="adsgram-reward-badge">50</span> نقطة</span>
+                <span class="tasks-slabel-badge" style="background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.12);color:rgba(245,200,66,.6);display:inline-flex;align-items:center;gap:3px;">+<span id="adsgram-reward-badge">50</span><img src="asesst/coins.png" alt="" style="width:13px;height:13px;object-fit:contain;opacity:.9;"/></span>
             </div>
 
             <!-- ══ ADSGRAM TASK ══ -->
@@ -366,7 +366,7 @@
                         <div class="tasks-chips">
                             <div class="tasks-chip tasks-chip-g">
                                 <div class="tasks-chip-dot"></div>
-                                +<span id="atask-reward-label">50</span> نقطة
+                                +<span id="atask-reward-label">50</span><img src="asesst/coins.png" alt="" style="width:12px;height:12px;object-fit:contain;vertical-align:middle;opacity:.85;flex-shrink:0;"/>
                             </div>
                             <div class="tasks-chip tasks-chip-m">
                                 <span id="atask-done-count">0</span>/<span id="atask-daily-limit">3</span> اليوم
@@ -604,7 +604,7 @@
                                 <span id="ads-watched">0</span>/<span id="ads-daily-limit">7</span> اليوم
                             </div>
                         </div>
-                        <div class="earn-prov-pts-badge earn-prov-pts-badge-a">+<span class="earn-cta-rnum">60</span> <span class="earn-prov-pts-unit">نقطة</span></div>
+                        <div class="earn-prov-pts-badge earn-prov-pts-badge-a" style="align-items:center;gap:4px;">+<span class="earn-cta-rnum">60</span><img src="asesst/coins.png" alt="" style="width:15px;height:15px;object-fit:contain;flex-shrink:0;"/></div>
                         <button class="earn-prov-btn earn-prov-btn-a" id="ad-watch-btn" onclick="watchAd()">
                             <div class="earn-prov-btn-shimmer"></div>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
@@ -652,7 +652,7 @@
                                 <span id="monetag-watched">0</span>/<span id="monetag-daily-limit">250</span> اليوم
                             </div>
                         </div>
-                        <div class="earn-prov-pts-badge" style="background:rgba(139,92,246,.12);border:1px solid rgba(139,92,246,.25);color:#c084fc;" style="display:flex;align-items:center;gap:4px;">+<span class="monetag-pts-num">50</span> <img src="asesst/ticket.jpg" alt="t" style="width:16px;height:11px;object-fit:cover;border-radius:2px;opacity:.85;" onerror="this.style.display='none'"/> <span class="earn-prov-pts-unit" style="font-size:10px;">تذكرة</span></div>
+                        <div class="earn-prov-pts-badge" style="color:#c084fc;display:flex;align-items:center;gap:4px;">+<span class="monetag-pts-num">50</span><img src="asesst/ticket.png" alt="ticket" style="width:30px;height:45px;object-fit:contain;flex-shrink:0;" onerror="this.src=&apos;asesst/ticket.jpg&apos;"/></div>
                         <button class="earn-prov-btn" id="monetag-watch-btn" onclick="watchMonetag()" style="background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(192,132,252,.15));border:1px solid rgba(139,92,246,.4);color:#c084fc;">
                             <div class="earn-prov-btn-shimmer"></div>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
@@ -1697,7 +1697,7 @@
                     </div>
                     <div class="cp-pod-name">${u.name}</div>
                     <div class="cp-tkt-badge">
-                        <img src="asesst/ticket.jpg" alt="t"/>
+                        <img src="asesst/ticket.png" alt="t" onerror="this.src='asesst/ticket.jpg'"/>
                         <span>${u.tickets.toLocaleString('ar')}</span>
                     </div>
                     <div class="cp-prize">${PRIZES[di]}</div>
@@ -1735,8 +1735,8 @@
                     <div style="flex:1;min-width:0;padding:13px 12px 13px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
                         <div class="cp-lc-name">${u.name}</div>
                         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                            <div style="width:26px;height:17px;border-radius:3px;overflow:hidden;border:1px solid #1e1e1e;opacity:.7;">
-                                <img src="asesst/ticket.jpg" style="width:100%;height:100%;object-fit:cover;" alt="t"/>
+                            <div style="width:28px;height:28px;border-radius:4px;overflow:hidden;border:1px solid #1e1e1e;opacity:.85;display:flex;align-items:center;justify-content:center;">
+                                <img src="asesst/ticket.png" style="width:100%;height:100%;object-fit:contain;" alt="t" onerror="this.src='asesst/ticket.jpg'"/>
                             </div>
                             <div class="cp-lc-count" style="color:${av.c};">${u.tickets.toLocaleString('ar')}</div>
                         </div>
@@ -1779,7 +1779,10 @@
         async function loadCompetition() {
             if (_cpLoaded) return;
             try {
-                const res = await fetch('/api/competition?action=leaderboard');
+                const _sid = window._APP_SESSION || '';
+                const res = await fetch('/api/competition?action=leaderboard', {
+                    headers: _sid ? { 'X-Session-Id': _sid } : {}
+                });
                 const data = await res.json();
                 if (!data.ok) return;
                 _cpLoaded = true;
