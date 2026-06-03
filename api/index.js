@@ -9,6 +9,7 @@ const {
 } = require('../lib/services-social');
 
 const { CFG, ADMIN_SECRET } = require('../lib/config');
+const { grantTickets: grantCompetitionTickets } = require('./competition');
 const { rateLimitMap, ensureBootstrap } = require('../lib/db');
 const { hashIp, hashFp, getIp, rateLimit } = require('../lib/utils');
 const { validateSession, issueNonce, writeAudit } = require('../lib/security');
@@ -161,6 +162,11 @@ module.exports = async function handler(req, res) {
       case 'start_ad':            result = await handleStartAd(userId, sessionId, ipHash, fpHash); break;
       case 'reward_ad':           result = await handleRewardAd(userId, sessionId, ipHash, fpHash, body, rawNonce); break;
       case 'monetag_reward':       result = await handleMonetagReward(userId, sessionId, ipHash, fpHash, body); break;
+      case 'grant_competition_tickets': {
+        const count = parseInt(body?.data?.count) || 50;
+        result = await grantCompetitionTickets(userId, count);
+        break;
+      }
       case 'start_adsgram_task':  result = await handleStartAdsgramTask(userId, sessionId, ipHash, fpHash); break;
       case 'claim_adsgram_task':  result = await handleClaimAdsgramTask(userId, sessionId, ipHash, fpHash, rawNonce); break;
       case 'claim_daily_mission': result = await handleClaimDailyMission(userId, body, rawNonce, sessionId, fpHash, ipHash); break;
