@@ -167,9 +167,9 @@ function _startCountdown(end) {
 
 // ── Crown images ─────────────────────────────────────────────────────────────
 function _crown1() {
-  return `<img src="asesst/first.png" alt="🥇" draggable="false" style="width:58px;height:46px;object-fit:contain;display:block;"/>`;
+  return `<img src="asesst/frst.png" alt="🥇" draggable="false" style="width:116px;height:92px;object-fit:contain;display:block;"/>`;
 }
 function _crownSmall(cls) {
   const src = cls === 'rank-2-item' ? 'asesst/sec.png' : 'asesst/thrd.png';
-  return `<img src="${src}" alt="🏅" draggable="false" style="width:38px;height:30px;object-fit:contain;display:block;"/>`;
+  return `<img src="${src}" alt="🏅" draggable="false" style="width:76px;height:60px;object-fit:contain;display:block;"/>`;
 }
