@@ -2069,14 +2069,16 @@
         /* Points badge */
         .earn-prov-pts-badge {
             font-family: 'DynaPuff', sans-serif;
-            font-size: 12px;
+            font-size: 15px;
             font-weight: 700;
             border-radius: 10px;
             padding: 5px 9px;
             flex-shrink: 0;
             display: flex;
-            align-items: baseline;
-            gap: 3px;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+            
         }
         .earn-prov-pts-unit {
             font-family: 'Tajawal', sans-serif;
@@ -2091,8 +2093,8 @@
         }
         .earn-prov-pts-badge-a {
             color: #fde68a;
-            background: rgba(251,191,36,.10);
-            border: 1px solid rgba(251,191,36,.20);
+            
+     
         }
         /* Watch button */
         .earn-prov-btn {
@@ -2947,22 +2949,18 @@
 
         /* ── Balance Section ── */
         .hm-balance-section {
-            margin-top: 38px;
+            margin-top: 18px;
             display: flex; align-items: flex-start;
-            justify-content: center; gap: 28px;
+            justify-content: center; gap: 36px;
         }
-        .hm-bal-sep {
-            width: 1px; height: 48px; align-self: center;
-            background: linear-gradient(180deg, transparent, rgba(232,223,200,.15), transparent);
-            flex-shrink: 0;
-        }
-        .hm-bal-block { display: flex; flex-direction: column; }
+        .hm-bal-sep { display: none; }
+        .hm-bal-block { display: flex; flex-direction: column; align-items: center; }
         .hm-bal-micro {
             font-size: 10px; color: var(--hm-faint);
             font-weight: 500; letter-spacing: 1.8px;
             text-transform: uppercase; margin-bottom: 7px;
         }
-        .hm-bal-row { display: flex; align-items: center; gap: 9px; }
+        .hm-bal-row { display: flex; align-items: center; justify-content: center; gap: 9px; height: 36px; }
         .hm-bal-icon {
             width: 26px; height: 26px; object-fit: contain; flex-shrink: 0;
             transform: translateX(56px); opacity: 0;
@@ -2970,6 +2968,7 @@
         }
         .hm-coins-img  { transition-delay: .42s; }
         .hm-dollar-img { transition-delay: .54s; }
+        .hm-ticket-img { width: 26px; height: 26px; transition-delay: .54s; }
         .hm-bal-icon.hm-in { transform: translateX(0); opacity: 1; }
         .hm-bal-num {
             font-family: 'DynaPuff', sans-serif;
