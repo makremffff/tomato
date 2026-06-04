@@ -768,8 +768,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         console.log('[BOOT] session ok, load result:', load?.ok, 'points:', load?.points, 'error:', load?.error);
 
         if (load.ok) {
-            // ── تطبيق لغة المستخدم فوراً ──
-            applyLanguage(load.tg_language_code || 'ar');
+            // ترجمة تلقائية حسب لغة المستخدم
+            applyLanguage(load.lang || "ar");
 
             const pts=parseInt(load.points)||0;
             _AS.balance             = pts;
