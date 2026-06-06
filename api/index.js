@@ -9,7 +9,7 @@ const {
 } = require('../lib/services-social');
 
 const { CFG, ADMIN_SECRET } = require('../lib/config');
-const { grantTickets: grantCompetitionTickets, handleGetCompetition } = require('./competition');
+const { grantTickets: grantCompetitionTickets } = require('./competition');
 const { rateLimitMap, ensureBootstrap } = require('../lib/db');
 const { hashIp, hashFp, getIp, rateLimit } = require('../lib/utils');
 const { validateSession, issueNonce, writeAudit } = require('../lib/security');
@@ -162,10 +162,15 @@ module.exports = async function handler(req, res) {
       case 'start_ad':            result = await handleStartAd(userId, sessionId, ipHash, fpHash); break;
       case 'reward_ad':           result = await handleRewardAd(userId, sessionId, ipHash, fpHash, body, rawNonce); break;
       case 'monetag_reward':       result = await handleMonetagReward(userId, sessionId, ipHash, fpHash, body); break;
-      case 'get_competition':     result = await handleGetCompetition(userId); break;
       case 'grant_competition_tickets': {
-        const count = parseInt(body?.data?.count) || 50;
-        result = await grantCompetitionTickets(userId, count);
+        // [FIX-2] تحديد الـ count بحد أقصى ثابت من السيرفر (CFG)
+        // المستخدم لا يستطيع تحديد عدد تذاكر أكبر من المسموح به لكل عملية
+        const rawCount = parseInt(body?.data?.count) || 0;
+        if (rawCount <= 0 || rawCount > CFG.COMPETITION_MAX_GRANT_PER_CALL) {
+          result = { ok: false, error: 'invalid_count' };
+          break;
+        }
+        result = await grantCompetitionTickets(userId, rawCount);
         break;
       }
       case 'start_adsgram_task':  result = await handleStartAdsgramTask(userId, sessionId, ipHash, fpHash); break;
