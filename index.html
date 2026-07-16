@@ -1,1901 +1,831 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr" id="htmlRoot">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>الربح عربي</title>
-    <!-- Adsgram SDK is loaded dynamically in body with retry logic -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>EarnBox — Watch. Play. Earn.</title>
+<meta name="description" content="EarnBox: earn real crypto by watching ads, playing games and inviting friends. Withdraw instantly to TON.">
 
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script>
-        if (window.Telegram?.WebApp) {
-            Telegram.WebApp.setHeaderColor('#000000');
-            Telegram.WebApp.setBackgroundColor('#000000');
-        }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&family=Tajawal:wght@400;500;700;800;900&family=Cairo:wght@400;500;600;700;800;900&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="style.css">
-    <!-- Adsgram SDK -->
-    <script src="adsgram-sdk.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=DynaPuff:wght@500;700;800&family=Tajawal:wght@400;500;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --gold:#f5c840;
+  --gold-a15: rgba(245,200,64,.15);
+  --gold-a30: rgba(245,200,64,.30);
+  --gold-a45: rgba(245,200,64,.45);
+  --bg:#07090f;
+  --bg-2:#0c0f18;
+  --card:rgba(255,255,255,.035);
+  --card-b:rgba(255,255,255,.08);
+  --muted:rgba(180,190,210,.55);
+  --muted-dim:rgba(180,190,210,.35);
+  --text:#f3f4f8;
+  --green:#3ddc84;
+  --purple:#a78bfa;
+  --blue:#5eb8ff;
+  --max:1120px;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+html{scroll-behavior:smooth}
+
+html[lang="en"] body{font-family:'Inter',sans-serif}
+html[lang="ar"] body{font-family:'Tajawal',sans-serif}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  overflow-x:hidden;
+  position:relative;
+  min-height:100vh;
+}
+
+/* ambient background */
+.bg-glow{
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(600px 400px at 15% 8%, rgba(167,139,250,.10), transparent 60%),
+    radial-gradient(700px 500px at 85% 15%, var(--gold-a15), transparent 60%),
+    radial-gradient(800px 600px at 50% 100%, rgba(61,220,132,.06), transparent 60%),
+    var(--bg);
+}
+.bg-noise{
+  position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.wrap{position:relative; z-index:1;}
+.container{max-width:var(--max); margin:0 auto; padding:0 22px;}
+
+/* ---------- Type scale ---------- */
+html[lang="en"] .display{font-family:'Permanent Marker',cursive; letter-spacing:1px;}
+html[lang="ar"] .display{font-family:'Tajawal',sans-serif; font-weight:900; letter-spacing:0;}
+.numeric{font-family:'DynaPuff',cursive; font-weight:800;}
+html[lang="ar"] .numeric{font-family:'Tajawal',sans-serif; font-weight:800;}
+
+.gold-text{
+  background:linear-gradient(135deg,#ffe87c 0%, var(--gold) 45%, #c8860a 100%);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 18px var(--gold-a30));
+}
+
+/* ---------- Icon base ---------- */
+.icn{width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; display:block;}
+
+/* ---------- Language gate (first-visit splash) ---------- */
+.lang-gate{
+  position:fixed; inset:0; z-index:200;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--bg);
+  padding:24px;
+  transition:opacity .5s ease, visibility .5s ease;
+}
+.lang-gate::before{
+  content:''; position:absolute; inset:0; z-index:-1;
+  background:
+    radial-gradient(600px 400px at 20% 15%, rgba(167,139,250,.14), transparent 60%),
+    radial-gradient(700px 500px at 80% 20%, var(--gold-a15), transparent 60%),
+    radial-gradient(800px 600px at 50% 100%, rgba(61,220,132,.08), transparent 60%);
+}
+.lang-gate.gate-hidden{opacity:0; visibility:hidden; pointer-events:none;}
+
+.gate-card{
+  width:100%; max-width:400px; text-align:center;
+}
+.gate-mark{
+  width:56px; height:56px; border-radius:16px; margin:0 auto 26px;
+  background:linear-gradient(135deg,#ffe87c, var(--gold) 60%, #c8860a);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 8px 28px var(--gold-a45);
+}
+.gate-mark svg{width:28px; height:28px; stroke:#1a1200; stroke-width:2.1;}
+
+.gate-title{
+  font-family:'Permanent Marker',cursive; letter-spacing:1px;
+  font-size:26px; margin-bottom:8px; color:var(--text);
+}
+.gate-sub{
+  font-family:'Inter',sans-serif; color:var(--muted); font-size:14px;
+  margin-bottom:34px; line-height:1.6;
+}
+
+.gate-options{display:flex; flex-direction:column; gap:14px;}
+.gate-btn{
+  display:flex; align-items:center; gap:16px;
+  width:100%; text-align:left;
+  background:var(--card); border:1px solid var(--card-b);
+  border-radius:18px; padding:18px 20px; cursor:pointer;
+  transition:transform .2s, border-color .2s, background .2s;
+  font-family:'Inter',sans-serif;
+}
+.gate-btn:hover{transform:translateY(-2px); border-color:var(--gold-a45); background:var(--gold-a15);}
+.gate-flag{
+  width:44px; height:44px; border-radius:12px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px; font-weight:800; font-family:'Inter',sans-serif;
+  background:rgba(255,255,255,.06); border:1px solid var(--card-b);
+}
+.gate-btn[data-lang="en"] .gate-flag{color:var(--blue);}
+.gate-btn[data-lang="ar"] .gate-flag{color:var(--green);}
+.gate-text{flex:1;}
+.gate-lang-name{font-size:16px; font-weight:700; color:var(--text); margin-bottom:2px;}
+.gate-lang-sub{font-size:12.5px; color:var(--muted-dim);}
+.gate-btn[data-lang="ar"] .gate-lang-name,
+.gate-btn[data-lang="ar"] .gate-lang-sub{font-family:'Tajawal',sans-serif;}
+.gate-arrow{width:18px; height:18px; stroke:var(--muted-dim); flex-shrink:0; transition:transform .2s, stroke .2s;}
+.gate-btn:hover .gate-arrow{transform:translateX(3px); stroke:var(--gold);}
+.gate-btn[data-lang="ar"] .gate-arrow{transform:scaleX(-1);}
+.gate-btn[data-lang="ar"]:hover .gate-arrow{transform:scaleX(-1) translateX(3px);}
+
+.top-spacer{height:26px;}
+@keyframes pulse{0%,100%{opacity:1} 50%{opacity:.35}}
+
+/* ---------- Section shared ---------- */
+.section{padding:70px 0;}
+.section-head{text-align:center; max-width:600px; margin:0 auto 48px;}
+.eyebrow{
+  display:inline-flex; align-items:center; gap:7px;
+  font-size:12.5px; font-weight:700; letter-spacing:2px;
+  color:var(--gold); text-transform:uppercase; margin-bottom:14px;
+  font-family:'Inter',sans-serif;
+}
+html[lang="ar"] .eyebrow{font-family:'Tajawal',sans-serif; letter-spacing:0;}
+.eyebrow svg{width:14px; height:14px; stroke:var(--gold);}
+.section-head h2{font-size:34px; margin-bottom:14px; line-height:1.22;}
+.section-head p{color:var(--muted); font-size:15.5px; line-height:1.6; font-family:'Inter',sans-serif;}
+html[lang="ar"] .section-head p{font-family:'Tajawal',sans-serif;}
+
+/* ---------- Screenshot showcase (real app screens) — copy stacked above phone ---------- */
+.showcase-section{
+  background:var(--bg-2);
+  border-top:1px solid var(--card-b); border-bottom:1px solid var(--card-b);
+}
+.showcase{
+  display:flex; flex-direction:column; align-items:center;
+  gap:36px; padding:64px 0;
+  text-align:center;
+  max-width:600px; margin:0 auto;
+}
+.showcase:not(:last-child){border-bottom:1px solid var(--card-b);}
+
+.showcase-phone{position:relative; display:flex; justify-content:center; width:100%;}
+.phone-frame{
+  width:100%; max-width:250px;
+  border-radius:32px; overflow:hidden;
+  border:1px solid var(--card-b);
+  box-shadow:0 30px 60px -20px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.02);
+  position:relative;
+}
+.phone-frame::after{
+  content:''; position:absolute; inset:0; border-radius:32px; pointer-events:none;
+  box-shadow: inset 0 0 0 8px #0a0c12;
+}
+.phone-frame img{display:block; width:100%; height:auto;}
+.showcase-glow{
+  position:absolute; width:280px; height:280px; border-radius:50%;
+  filter:blur(70px); opacity:.22; z-index:-1; top:50%; left:50%; transform:translate(-50%,-50%);
+}
+.showcase:nth-of-type(1) .showcase-glow{background:var(--gold);}
+.showcase:nth-of-type(2) .showcase-glow{background:var(--purple);}
+.showcase:nth-of-type(3) .showcase-glow{background:var(--green);}
+.showcase:nth-of-type(4) .showcase-glow{background:var(--blue);}
+.showcase:nth-of-type(5) .showcase-glow{background:#f97362;}
+
+.showcase-copy{width:100%; display:flex; flex-direction:column; align-items:center;}
+.showcase-copy .eyebrow{margin-bottom:16px;}
+.showcase-copy h3{font-size:28px; margin-bottom:16px; line-height:1.25;}
+.showcase-copy p.lead{
+  color:var(--muted); font-size:15px; line-height:1.7; margin-bottom:28px;
+  font-family:'Inter',sans-serif; max-width:440px;
+}
+html[lang="ar"] .showcase-copy p.lead{font-family:'Tajawal',sans-serif;}
+
+.showcase-points{display:flex; flex-direction:column; gap:14px; text-align:left; width:100%; max-width:440px;}
+html[dir="rtl"] .showcase-points{text-align:right;}
+.showcase-point{display:flex; align-items:flex-start; gap:12px;}
+.showcase-point .pt-icon{
+  width:32px; height:32px; border-radius:10px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--gold-a15); border:1px solid var(--gold-a30);
+}
+.showcase-point .pt-icon svg{width:16px; height:16px; stroke:var(--gold);}
+.showcase-point .pt-text{font-size:14px; color:var(--text); line-height:1.55; padding-top:5px; font-family:'Inter',sans-serif;}
+html[lang="ar"] .showcase-point .pt-text{font-family:'Tajawal',sans-serif; padding-top:4px;}
+.showcase-point .pt-text b{color:var(--gold); font-weight:700;}
+
+@media (max-width:860px){
+  .showcase{gap:28px; padding:48px 0;}
+}
+
+/* ---------- Scroll reveal animation ---------- */
+.reveal{
+  opacity:0; transform:translateY(34px);
+  transition:opacity .8s cubic-bezier(.22,.7,.2,1), transform .8s cubic-bezier(.22,.7,.2,1);
+}
+.reveal.in-view{opacity:1; transform:translateY(0);}
+.reveal-1{transition-delay:.05s;}
+.reveal-2{transition-delay:.16s;}
+.reveal-3{transition-delay:.27s;}
+@media (prefers-reduced-motion: reduce){
+  .reveal{opacity:1; transform:none; transition:none;}
+}
+
+
+/* ---------- Ways to earn ---------- */
+.ways-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px;}
+.way-card{
+  background:var(--card); border:1px solid var(--card-b); border-radius:20px;
+  padding:26px 22px;
+  transition:transform .25s, border-color .25s;
+}
+.way-card:hover{transform:translateY(-3px); border-color:var(--gold-a30);}
+.way-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+.way-icon{
+  width:44px; height:44px; border-radius:13px;
+  display:flex; align-items:center; justify-content:center;
+}
+.way-icon svg{width:22px; height:22px;}
+.way-card:nth-child(1) .way-icon{background:rgba(94,184,255,.12); border:1px solid rgba(94,184,255,.25);}
+.way-card:nth-child(1) .way-icon svg{stroke:var(--blue);}
+.way-card:nth-child(2) .way-icon{background:rgba(167,139,250,.12); border:1px solid rgba(167,139,250,.25);}
+.way-card:nth-child(2) .way-icon svg{stroke:var(--purple);}
+.way-card:nth-child(3) .way-icon{background:var(--gold-a15); border:1px solid var(--gold-a30);}
+.way-card:nth-child(3) .way-icon svg{stroke:var(--gold);}
+.way-tag{
+  font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:100px;
+  background:var(--gold-a15); color:var(--gold); font-family:'Inter',sans-serif;
+}
+html[lang="ar"] .way-tag{font-family:'Tajawal',sans-serif;}
+.way-card h3{font-size:17px; margin-bottom:8px; font-family:'Inter',sans-serif; font-weight:700;}
+html[lang="ar"] .way-card h3{font-family:'Tajawal',sans-serif; font-weight:800;}
+.way-card p{color:var(--muted); font-size:13.5px; line-height:1.6; font-family:'Inter',sans-serif;}
+html[lang="ar"] .way-card p{font-family:'Tajawal',sans-serif;}
+
+/* ---------- FAQ ---------- */
+.faq-list{max-width:680px; margin:0 auto; display:flex; flex-direction:column; gap:12px;}
+.faq-item{
+  background:var(--card); border:1px solid var(--card-b); border-radius:16px;
+  overflow:hidden; cursor:pointer;
+}
+.faq-q{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:18px 22px; font-size:15px; font-weight:600;
+  font-family:'Inter',sans-serif;
+}
+html[lang="ar"] .faq-q{font-family:'Tajawal',sans-serif; font-weight:700;}
+.faq-q .faq-plus{
+  width:24px; height:24px; flex-shrink:0; border-radius:50%;
+  border:1px solid var(--card-b); display:flex; align-items:center; justify-content:center;
+  transition:transform .3s, border-color .3s;
+}
+.faq-q .faq-plus svg{width:12px; height:12px; stroke:var(--gold); transition:transform .3s;}
+.faq-item.open .faq-plus{transform:rotate(135deg); border-color:var(--gold-a45);}
+.faq-a{
+  max-height:0; overflow:hidden; transition:max-height .35s ease, padding .35s ease;
+  padding:0 22px; color:var(--muted); font-size:14px; line-height:1.65;
+  font-family:'Inter',sans-serif;
+}
+html[lang="ar"] .faq-a{font-family:'Tajawal',sans-serif;}
+.faq-item.open .faq-a{max-height:200px; padding:0 22px 20px;}
+
+/* ---------- Final CTA ---------- */
+.final-cta{text-align:center; padding:90px 0 100px; position:relative;}
+.final-cta h2{font-size:40px; margin-bottom:16px;}
+.final-cta p{color:var(--muted); font-size:16px; margin-bottom:36px; font-family:'Inter',sans-serif;}
+html[lang="ar"] .final-cta p{font-family:'Tajawal',sans-serif;}
+
+.btn-primary{
+  display:inline-flex; align-items:center; gap:10px;
+  background:linear-gradient(135deg,#ffe87c, var(--gold) 55%, #d9a521);
+  color:#1a1200; font-weight:800; font-size:16px;
+  padding:16px 34px; border-radius:100px; text-decoration:none;
+  box-shadow:0 8px 32px var(--gold-a45);
+  transition:transform .25s cubic-bezier(.25,.8,.25,1), box-shadow .25s;
+  font-family:'Inter',sans-serif;
+}
+html[lang="ar"] .btn-primary{font-family:'Tajawal',sans-serif;}
+.btn-primary:hover{transform:translateY(-3px) scale(1.02); box-shadow:0 12px 40px var(--gold-a45);}
+.btn-primary svg{width:19px; height:19px; stroke:#1a1200;}
+
+/* ---------- Footer ---------- */
+.footer{border-top:1px solid var(--card-b); padding:30px 0; text-align:center;}
+.footer p{color:var(--muted-dim); font-size:12.5px; font-family:'Inter',sans-serif;}
+html[lang="ar"] .footer p{font-family:'Tajawal',sans-serif;}
+
+/* ---------- Utility text direction swap ---------- */
+[data-ar]{display:none;}
+html[lang="ar"] [data-en]{display:none;}
+html[lang="ar"] [data-ar]{display:inline;}
+
+/* ---------- Responsive ---------- */
+@media (max-width:860px){
+  .ways-grid{grid-template-columns:1fr 1fr;}
+  .section-head h2{font-size:26px;}
+  .final-cta h2{font-size:28px;}
+}
+@media (max-width:520px){
+  .ways-grid{grid-template-columns:1fr;}
+  .container{padding:0 16px;}
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.01ms !important; transition-duration:.01ms !important;}
+}
+
+/* Focus visibility */
+a:focus-visible, button:focus-visible{outline:2px solid var(--gold); outline-offset:3px; border-radius:8px;}
+</style>
 </head>
 <body>
 
-    <!-- ══════════════════════════════════════════
-         LANGUAGE SELECTOR SCREEN
-    ══════════════════════════════════════════ -->
-    <div id="lang-select-screen" style="
-        position:fixed;inset:0;z-index:100000;
-        background:radial-gradient(ellipse at 50% 30%, #111827 0%, #000 100%);
-        display:flex;flex-direction:column;align-items:center;justify-content:center;
-        gap:0;
-        transition:opacity 0.4s ease,visibility 0.4s;
-    ">
-        <!-- شعار / أيقونة -->
-        <div style="margin-bottom:28px;display:flex;flex-direction:column;align-items:center;gap:10px;">
-            <img src="asesst/online.gif" alt="" style="
-                width:90px;height:90px;object-fit:contain;
-                background:transparent;
-            ">
-            <div id="ls-title" data-i18n="lang_screen_title" style="font-family:'Tajawal',sans-serif;font-size:20px;font-weight:800;color:#fff;letter-spacing:0.5px;">اختر لغتك</div>
-            <div id="ls-sub" data-i18n="lang_screen_sub" style="font-family:'Tajawal',sans-serif;font-size:12px;color:rgba(255,255,255,0.4);font-weight:500;">يمكنك تغييرها لاحقاً من الإعدادات</div>
-        </div>
-
-        <!-- بطاقات اللغات -->
-        <div style="display:flex;flex-direction:column;gap:12px;width:min(300px,85vw);">
-            <!-- عربي -->
-            <button onclick="window._selectLang('ar')" id="lang-btn-ar" style="
-                background:rgba(255,255,255,0.05);
-                border:1.5px solid rgba(255,255,255,0.1);
-                border-radius:16px;padding:16px 20px;
-                display:flex;align-items:center;gap:14px;
-                cursor:pointer;transition:all 0.2s ease;
-                width:100%;text-align:right;
-            " onmouseenter="this.style.background='rgba(251,191,36,0.12)';this.style.borderColor='rgba(251,191,36,0.5)'"
-               onmouseleave="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='rgba(255,255,255,0.1)'">
-                <span style="font-size:28px;line-height:1;flex-shrink:0;">🇸🇦</span>
-                <div style="flex:1;">
-                    <div style="font-family:'Tajawal',sans-serif;font-size:16px;font-weight:700;color:#fff;">العربية</div>
-                    <div style="font-family:'Tajawal',sans-serif;font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">Arabic</div>
-                </div>
-                <div style="width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);flex-shrink:0;" id="radio-ar"></div>
-            </button>
-
-            <!-- English -->
-            <button onclick="window._selectLang('en')" id="lang-btn-en" style="
-                background:rgba(255,255,255,0.05);
-                border:1.5px solid rgba(255,255,255,0.1);
-                border-radius:16px;padding:16px 20px;
-                display:flex;align-items:center;gap:14px;
-                cursor:pointer;transition:all 0.2s ease;
-                width:100%;text-align:left;
-            " onmouseenter="this.style.background='rgba(251,191,36,0.12)';this.style.borderColor='rgba(251,191,36,0.5)'"
-               onmouseleave="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='rgba(255,255,255,0.1)'">
-                <span style="font-size:28px;line-height:1;flex-shrink:0;">🇬🇧</span>
-                <div style="flex:1;text-align:left;">
-                    <div style="font-family:'Readex Pro',sans-serif;font-size:16px;font-weight:700;color:#fff;">English</div>
-                    <div style="font-family:'Readex Pro',sans-serif;font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">الإنجليزية</div>
-                </div>
-                <div style="width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);flex-shrink:0;" id="radio-en"></div>
-            </button>
-
-            <!-- Русский -->
-            <button onclick="window._selectLang('ru')" id="lang-btn-ru" style="
-                background:rgba(255,255,255,0.05);
-                border:1.5px solid rgba(255,255,255,0.1);
-                border-radius:16px;padding:16px 20px;
-                display:flex;align-items:center;gap:14px;
-                cursor:pointer;transition:all 0.2s ease;
-                width:100%;text-align:left;
-            " onmouseenter="this.style.background='rgba(251,191,36,0.12)';this.style.borderColor='rgba(251,191,36,0.5)'"
-               onmouseleave="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='rgba(255,255,255,0.1)'">
-                <span style="font-size:28px;line-height:1;flex-shrink:0;">🇷🇺</span>
-                <div style="flex:1;text-align:left;">
-                    <div style="font-family:'Readex Pro',sans-serif;font-size:16px;font-weight:700;color:#fff;">Русский</div>
-                    <div style="font-family:'Readex Pro',sans-serif;font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">الروسية</div>
-                </div>
-                <div style="width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);flex-shrink:0;" id="radio-ru"></div>
-            </button>
-        </div>
-
-        <!-- نقاط تزيينية -->
-        <div style="position:absolute;top:15%;left:10%;width:6px;height:6px;border-radius:50%;background:rgba(251,191,36,0.3);animation:ls-float 3s ease-in-out infinite;"></div>
-        <div style="position:absolute;top:25%;right:12%;width:4px;height:4px;border-radius:50%;background:rgba(251,191,36,0.2);animation:ls-float 4s ease-in-out infinite reverse;"></div>
-        <div style="position:absolute;bottom:20%;left:15%;width:5px;height:5px;border-radius:50%;background:rgba(251,191,36,0.25);animation:ls-float 3.5s ease-in-out infinite;"></div>
+<!-- LANGUAGE GATE — shown on first visit only -->
+<div class="lang-gate" id="langGate">
+  <div class="gate-card">
+    <div class="gate-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4 6v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6l-8-4z"/><path d="M9 12l2 2 4-4"/></svg>
     </div>
-
-    <!-- ══════════════════════════════════════════
-         LOADING SCREEN — Professional skeleton
-    ══════════════════════════════════════════ -->
-    <div id="app-loading-screen" style="
-        position:fixed;inset:0;z-index:99999;
-        background:#000;
-        display:none;flex-direction:column;align-items:center;justify-content:center;
-        gap:18px;
-        transition:opacity 0.5s cubic-bezier(0.4,0,0.2,1),visibility 0.5s;
-    ">
-        <img src="asesst/loading.gif" alt="loading" style="width:100px;height:100px;object-fit:contain;">
-        <div id="loading-text" data-i18n="loading_text" style="font-family:'Tajawal',sans-serif;font-size:15px;font-weight:700;color:rgba(255,255,255,0.85);">جاري التحميل...</div>
+    <div class="gate-title">EarnBox</div>
+    <div class="gate-sub">Choose your language to continue<br>اختر لغتك للمتابعة</div>
+    <div class="gate-options">
+      <button class="gate-btn" data-lang="en" onclick="chooseLang('en')">
+        <span class="gate-flag">EN</span>
+        <span class="gate-text">
+          <span class="gate-lang-name">English</span>
+          <span class="gate-lang-sub">Continue in English</span>
+        </span>
+        <svg class="gate-arrow" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+      <button class="gate-btn" data-lang="ar" onclick="chooseLang('ar')">
+        <span class="gate-flag">AR</span>
+        <span class="gate-text">
+          <span class="gate-lang-name">العربية</span>
+          <span class="gate-lang-sub">تابع باللغة العربية</span>
+        </span>
+        <svg class="gate-arrow" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
     </div>
+  </div>
+</div>
 
-    <style>
-        /* ══ LANGUAGE SCREEN ══ */
-        @keyframes ls-float {
-            0%,100% { transform:translateY(0px); opacity:0.6; }
-            50%      { transform:translateY(-10px); opacity:1; }
-        }
-        @keyframes ls-fadein {
-            from { opacity:0; transform:scale(0.96) translateY(8px); }
-            to   { opacity:1; transform:scale(1) translateY(0); }
-        }
-        #lang-select-screen { animation: ls-fadein 0.4s ease; }
+<div class="bg-glow"></div>
+<div class="bg-noise"></div>
 
-        /* ══ LOADING SCREEN ══ */
-        @keyframes loadPulse {
-            0%,100% { box-shadow:0 0 40px rgba(251,191,36,0.15); transform:scale(1); }
-            50%      { box-shadow:0 0 60px rgba(251,191,36,0.3);  transform:scale(1.04); }
-        }
-        @keyframes loadSpin { to { transform:rotate(360deg); } }
-        @keyframes skelShimmer {
-            0%   { background:rgba(255,255,255,0.04); }
-            50%  { background:rgba(255,255,255,0.08); }
-            100% { background:rgba(255,255,255,0.04); }
-        }
-    
-    /* ══ COMPETITION PAGE ══ */
-    @keyframes cp-blink  { 0%,100%{color:#282828} 50%{color:#141414} }
-    @keyframes cp-skel   { to{background-position:-200% 0} }
-    @keyframes cp-card-in{ from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes cp-flipIn { from{transform:translateY(-6px);opacity:0} to{transform:translateY(0);opacity:1} }
+<div class="wrap">
 
-    /* ── COUNTDOWN ── */
-    .cp-cd-label { display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px;font-weight:600;color:#555;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px; }
-    .cp-cd-grid  { display:flex;align-items:center;justify-content:center;gap:6px; }
-    .cp-cd-unit  { display:flex;flex-direction:column;align-items:center;gap:10px; }
-    .cp-cd-box   { width:48px;background:transparent;border:none;border-radius:12px;padding:10px 6px;text-align:center;font-family:'DynaPuff',cursive;font-size:28px;font-weight:700;color:#E8B84B;line-height:1; }
-    .cp-cd-name  { font-size:10px;font-weight:600;color:#555;letter-spacing:.5px; }
-    .cp-cd-sep   { font-family:'DynaPuff',cursive;font-size:24px;font-weight:700;color:#1E1E1E;margin-bottom:18px;animation:cp-blink 1s step-end infinite; }
-    .cp-flipping { animation:cp-flipIn .22s ease; }
+  <div class="top-spacer"></div>
 
-    /* ── SECTION LABEL ── */
-    .cp-sec-lbl       { display:flex;align-items:center;justify-content:center;margin-bottom:22px; }
-    .cp-sec-lbl-inner { display:flex;align-items:center;gap:8px;background:#111;border:1px solid #1e1e1e;border-radius:30px;padding:6px 16px; }
-    .cp-sec-lbl-inner span { font-size:11px;font-weight:700;color:#555;letter-spacing:2px;text-transform:uppercase; }
+  <!-- SCREENSHOT SHOWCASE — real app screens -->
+  <section class="showcase-section">
+    <div class="container">
 
-    /* ── PODIUM ── */
-    .cp-podium    { display:flex;align-items:flex-end;justify-content:center;gap:6px;margin-bottom:28px; }
-    .cp-pod-item  { flex:1;display:flex;flex-direction:column;align-items:center; }
-    .cp-pod-ring  { border-radius:50%;padding:2px;display:inline-block;line-height:0;margin-bottom:8px; }
-    .cp-pod-inner { border-radius:50%;background:#0d0d0d;padding:2px;display:block; }
-    .cp-pod-face  { border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden; }
-    .cp-r1 .cp-pod-face { width:78px;height:78px; }
-    .cp-r2 .cp-pod-face,
-    .cp-r3 .cp-pod-face { width:60px;height:60px; }
-    .cp-r1 .cp-pod-ring { background:conic-gradient(#E8B84B,#FFF5C0,#C9922A,#E8B84B,#FFF5C0,#C9922A,#E8B84B); }
-    .cp-r2 .cp-pod-ring { background:conic-gradient(#9EAAB8,#D4DCE4,#6A7A88,#9EAAB8,#D4DCE4,#6A7A88,#9EAAB8); }
-    .cp-r3 .cp-pod-ring { background:conic-gradient(#B87333,#D4975A,#7A4F20,#B87333,#D4975A,#7A4F20,#B87333); }
-    .cp-pod-name  { font-size:11.5px;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;margin-bottom:5px; }
-    .cp-r1 .cp-pod-name { color:#E8B84B;font-size:12.5px; }
-    .cp-r2 .cp-pod-name { color:#9EAAB8; }
-    .cp-r3 .cp-pod-name { color:#B87333; }
-    .cp-tkt-badge { display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-family:'DynaPuff',cursive;font-size:11px;font-weight:600;margin-bottom:8px; }
-    .cp-tkt-badge img { width:24px;height:24px;object-fit:contain;border-radius:3px; }
-    .cp-r1 .cp-tkt-badge { background:#191300;border:1px solid #2E2400;color:#E8B84B; }
-    .cp-r2 .cp-tkt-badge { background:#101418;border:1px solid #1C2430;color:#9EAAB8; }
-    .cp-r3 .cp-tkt-badge { background:#120A04;border:1px solid #221408;color:#B87333; }
-    .cp-prize { font-family:'DynaPuff',cursive;font-size:13px;font-weight:700;margin-bottom:6px; }
-    .cp-r1 .cp-prize { color:#E8B84B; }
-    .cp-r2 .cp-prize { color:#9EAAB8; }
-    .cp-r3 .cp-prize { color:#B87333; }
-
-    /* ── LIST CARDS ── */
-    .cp-lc { background:linear-gradient(135deg,#121212 0%,#0e0e0e 100%);border:1px solid #1a1a1a;border-radius:18px;display:flex;align-items:center;gap:0;padding:10px 0;margin-bottom:10px;animation:cp-card-in .45s both ease-out;overflow:hidden;position:relative;transition:transform .18s,border-color .18s;cursor:default; }
-    .cp-lc:hover { transform:translateY(-2px);border-color:#242424; }
-    .cp-lc-stripe { width:4px;align-self:stretch;flex-shrink:0;border-radius:0 4px 4px 0;background:var(--cp-c);opacity:.7; }
-    .cp-lc-rank { width:30px;height:30px;border-radius:50%;background:#0c0c0c;border:1px solid #1e1e1e;display:flex;align-items:center;justify-content:center;font-family:'DynaPuff',cursive;font-size:12px;font-weight:700;color:#3a3a3a; }
-    .cp-lc-av { width:46px;height:46px;border-radius:50%;overflow:hidden;border:2px solid var(--cp-c);box-shadow:0 0 10px var(--cp-cg);display:flex;align-items:center;justify-content:center;flex-shrink:0; }
-    .cp-lc-name { font-size:13px;font-weight:700;color:#e0e0e0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-    .cp-lc-count { font-family:'DynaPuff',cursive;font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0; }
-
-    /* ── AVATAR COLORS ── */
-    .av-purple { background:linear-gradient(135deg,#1a1230,#281d44); }
-    .av-teal   { background:linear-gradient(135deg,#081e1e,#0f3030); }
-    .av-rose   { background:linear-gradient(135deg,#200814,#381020); }
-    .av-amber  { background:linear-gradient(135deg,#1c1000,#2c1e00); }
-    .av-sky    { background:linear-gradient(135deg,#081420,#102030); }
-    .av-green  { background:linear-gradient(135deg,#081408,#103018); }
-    .av-indigo { background:linear-gradient(135deg,#101028,#1a1a3a); }
-</style>
-
-    <!-- ══════════════════════════════════════════
-         OFFLINE BANNER
-    ══════════════════════════════════════════ -->
-    <div id="offline-banner" style="
-        position:fixed;top:0;left:0;right:0;z-index:9998;
-        background:rgba(248,113,113,0.15);
-        border-bottom:1px solid rgba(248,113,113,0.3);
-        padding:10px 16px;
-        text-align:center;
-        font-family:'Tajawal',sans-serif;
-        font-size:13px;color:#f87171;font-weight:700;
-        backdrop-filter:blur(12px);
-        display:none;
-        transform:translateY(-100%);
-        transition:transform 0.3s ease;
-    ">
-        <span data-i18n="offline_msg">📵 أنت غير متصل بالإنترنت — سيتم إعادة الاتصال تلقائياً</span>
-    </div>
-
-    <!-- ══════════════════════════════════════════
-         TOP BAR
-    ══════════════════════════════════════════ -->
-    <div class="top-bar">
-        <div style="max-width:520px; margin:0 auto; display:flex; justify-content:space-between; align-items:center;">
-            <!-- Notifications -->
-            <button class="top-bar-btn glass-btn" aria-label="الإشعارات" onclick="openNotifPanel()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
-                </svg>
-                <span class="notif-dot" id="notif-badge"></span>
-            </button>
-
-            <!-- Settings -->
-            <button class="top-bar-btn glass-btn" aria-label="الإعدادات" onclick="openSettings()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-            </button>
+      <!-- 1. Deposit screen -->
+      <div class="showcase">
+        <div class="showcase-copy reveal">
+          <span class="eyebrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            <span data-en>Screen 01 · Deposit</span>
+            <span data-ar>الشاشة 01 · الإيداع</span>
+          </span>
+          <h3 data-en>Load up on tickets, paid in TON</h3>
+          <h3 data-ar>اشحن رصيدك بالتذاكر، ادفع بعملة TON</h3>
+          <p class="lead" data-en>This is the Deposit tab inside EarnBox. Every package is paid directly in TON, and the bigger the package, the more bonus tickets you get per TON spent.</p>
+          <p class="lead" data-ar>هذه هي شاشة الإيداع داخل EarnBox. كل باقة تُدفع مباشرة بعملة TON، وكلما كبرت الباقة زادت التذاكر الإضافية مقابل كل TON تدفعه.</p>
+          <div class="showcase-points">
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+              <span class="pt-text">
+                <span data-en><b>15,000 tickets</b> for 0.1 TON — the entry package, at a rate of 150K tickets per TON.</span>
+                <span data-ar><b>15,000 تذكرة</b> مقابل 0.1 TON — باقة البداية، بمعدل 150 ألف تذكرة لكل TON.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg></span>
+              <span class="pt-text">
+                <span data-en><b>40,000 tickets</b> for 0.25 TON, marked "Popular" — a better rate at 160K per TON.</span>
+                <span data-ar><b>40,000 تذكرة</b> مقابل 0.25 TON، موسومة بـ"الأكثر شيوعًا" — معدل أفضل بـ160 ألف لكل TON.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 100-8 4 4 0 000 8z"/><path d="M4.2 15a8 8 0 1115.6 0"/><path d="M12 3v2M12 19v2M3 12H1M23 12h-2"/></svg></span>
+              <span class="pt-text">
+                <span data-en><b>250,000 tickets</b> for 1 TON is the "Best Value" package — a +67% bonus at 250K per TON.</span>
+                <span data-ar><b>250,000 تذكرة</b> مقابل 1 TON هي باقة "الأفضل قيمة" — مكافأة +67% بمعدل 250 ألف لكل TON.</span>
+              </span>
+            </div>
+          </div>
         </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════
-         HOME PAGE
-    ══════════════════════════════════════════ -->
-    <main id="page-home" class="page active">
-        <div class="page-wrap hm-wrap">
-
-            <!-- ── TOP BRAND BAR ── -->
-            <div class="hm-topbar s1">
-                <div class="hm-brand"></div>
-                <div class="hm-vip-pill">VIP</div>
-            </div>
-
-            <!-- ── USER SECTION ── -->
-            <div class="hm-user-section s2">
-                <div class="uc-avatar-wrap">
-                    <div class="uc-avatar-ring hm-avatar-ring">
-                        <img id="uc-user-photo" src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4" alt="avatar">
-                    </div>
-                    <span class="uc-online"></span>
-                </div>
-                <div>
-                    <div class="uc-greeting hm-greeting" data-i18n="user_greeting">مرحباً بعودتك</div>
-                    <div class="uc-name hm-user-name-el" id="uc-user-name">@مستخدم</div>
-                    <div class="hm-rank-text"><span data-i18n="rank_label">الترتيب</span> <strong class="uc-rank-num" id="hm-user-rank">#--</strong></div>
-                </div>
-            </div>
-
-            <!-- ── BALANCE SECTION ── -->
-            <div class="hm-balance-section s3">
-                <div class="hm-bal-block">
-                    <div class="hm-bal-micro" data-i18n="balance_label">الرصيد الكلي</div>
-                    <div class="hm-bal-row">
-                        <img class="hm-bal-icon hm-coins-img" src="asesst/dollar.png" alt="">
-                        <div id="uc-balance-num" class="uc-balance-num balance-number hm-bal-num hm-gold" data-target="0">0</div>
-                    </div>
-                    <div class="hm-bal-unit">USDT</div>
-                </div>
-                <div class="hm-bal-block">
-                    <div class="hm-bal-micro" data-i18n="tickets_label">تذاكري</div>
-                    <div class="hm-bal-row">
-                        <img class="hm-bal-icon hm-ticket-img" src="asesst/ticket.png" onerror="this.src='asesst/ticket.jpg'" alt="ticket">
-                        <div id="uc-tickets-val" class="hm-bal-num hm-green">0</div>
-                    </div>
-                    <div class="hm-bal-unit" data-i18n="ticket_unit">تذكرة</div>
-                </div>
-            </div>
-
-            <!-- ── LEVEL RING ── -->
-            <div id="hm-ring-container" class="hm-level-center tier-gold s4">
-                <div class="hm-ring-box">
-                    <svg class="hm-ring-svg" width="70" height="70" viewBox="0 0 70 70">
-                        <circle class="hm-ring-bg"   cx="35" cy="35" r="32"/>
-                        <circle class="hm-ring-fill" cx="35" cy="35" r="32"/>
-                    </svg>
-                    <div class="hm-ring-label">
-                        <div class="hm-ring-num" id="ring-level-num">1</div>
-                        <div class="hm-ring-lv-sub">LEVEL</div>
-                    </div>
-                </div>
-                <div class="hm-tier-badge">
-                    <div class="hm-tier-dot"></div>
-                    <span id="hm-tier-label">مستوى ذهبي</span>
-                </div>
-                <!-- Hidden XP elements — preserved for updateBalanceUI() compatibility -->
-                <div class="uc-xp" style="display:none;position:absolute;pointer-events:none;">
-                    <div class="uc-xp-labels">
-                        <span class="uc-xp-level">المستوى 1</span>
-                        <span class="uc-xp-pct">0%</span>
-                    </div>
-                    <div class="uc-xp-track"><div class="uc-xp-fill"></div></div>
-                </div>
-            </div>
-
-            <!-- ── STATS ── -->
-            <div class="hm-stats s5">
-                <div class="hm-stat">
-                    <div class="uc-stat-val green counter hm-stat-num" data-target="0">0</div>
-                    <div class="hm-stat-label" data-i18n="friends_label">صديق مدعو</div>
-                </div>
-                <div class="hm-stat">
-                    <div class="uc-stat-val blue counter hm-stat-num" data-target="0">0</div>
-                    <div class="hm-stat-label" data-i18n="tasks_done_label">مهمة منجزة</div>
-                </div>
-                <div class="hm-stat">
-                    <div class="uc-stat-val gold counter hm-stat-num" data-target="0">0</div>
-                    <div class="hm-stat-label" data-i18n="total_earned_label">إجمالي المكتسب</div>
-                </div>
-            </div>
-
-            <!-- ── ACTIONS ── -->
-            <div class="hm-actions s6">
-                <button class="hm-act-btn hm-charge" onclick="openDepositSupport()">
-                    <svg width="62" height="62" viewBox="0 0 62 62" fill="none">
-                        <circle cx="31" cy="31" r="29.5" stroke="rgba(240,180,41,0.13)" stroke-width="1"/>
-                        <rect x="15" y="22" width="32" height="22" rx="4.5" stroke="#f0b429" stroke-width="1.7" stroke-linejoin="round"/>
-                        <path d="M21 22v-3.5a3.5 3.5 0 013.5-3.5h13a3.5 3.5 0 013.5 3.5V22" stroke="#f0b429" stroke-width="1.7" stroke-linecap="round"/>
-                        <rect x="36" y="28.5" width="7" height="8" rx="2.2" fill="rgba(240,180,41,0.10)" stroke="#f0b429" stroke-width="1.3"/>
-                        <circle cx="45" cy="21" r="7" fill="#0d0a1a"/>
-                        <path d="M45 17v8M41 21h8" stroke="#f0b429" stroke-width="1.8" stroke-linecap="round"/>
-                    </svg>
-                    <span class="hm-act-label" data-i18n="charge_btn">شحن</span>
-                </button>
-                <button class="hm-act-btn hm-withdraw-btn" onclick="showPage('withdraw', document.querySelector('[data-nav=withdraw]'))">
-                    <svg width="62" height="62" viewBox="0 0 62 62" fill="none">
-                        <circle cx="31" cy="31" r="29.5" stroke="rgba(45,212,160,0.13)" stroke-width="1"/>
-                        <rect x="13" y="20" width="36" height="24" rx="4.5" stroke="#2dd4a0" stroke-width="1.7" stroke-linejoin="round"/>
-                        <path d="M13 27h36" stroke="#2dd4a0" stroke-width="1.7"/>
-                        <rect x="18" y="33" width="10" height="7" rx="2" fill="rgba(45,212,160,0.10)" stroke="#2dd4a0" stroke-width="1.3"/>
-                        <path d="M33 34.5c1.2.8 2 2.1 2 3.5M36 32.5c2.2 1.4 3.5 3.8 3.5 6.5" stroke="#2dd4a0" stroke-width="1.3" stroke-linecap="round"/>
-                        <circle cx="46" cy="20" r="7" fill="#0d0a1a"/>
-                        <path d="M43 23l6-6M49 23v-6h-6" stroke="#2dd4a0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span class="hm-act-label" data-i18n="withdraw_btn">سحب</span>
-                </button>
-            </div>
-
-            <!-- ── TICKER ── -->
-            <div class="hm-ticker s7">
-                <div class="hm-ticker-inner" id="hm-ticker-inner">
-                    <!-- populated by _updateHomeTicker() in app-ui.js -->
-                </div>
-            </div>
-
+        <div class="showcase-phone reveal reveal-1">
+          <div class="showcase-glow" style="top:50%; left:50%;"></div>
+          <div class="phone-frame">
+            <img src="images/deposit.jpg" alt="EarnBox deposit screen showing four ticket packages paid in TON" loading="lazy">
+          </div>
         </div>
-    </main>
-    <!-- ═══���══════════════════════════════════════
-         EARN PAGE
-    ══════════════════════════════════════════ -->
-    <main id="page-earn" class="page">
-        <div class="page-wrap">
-
-            <!-- ── HEADER ── -->
-            <div class="earn-hd earn-e" data-earn-d="0" data-earn-dir="down">
-                <div class="earn-hd-title" data-i18n="earn_title">ال<em>ربح</em></div>
-            </div>
-
-
-
-            <!-- ── PROVIDERS SECTION ── -->
-            <div class="earn-providers-wrap earn-e" data-earn-d="240" data-earn-dir="up">
-                <div class="earn-providers-card glass">
-
-                    <!-- ── Adsgram Row ── -->
-                    <div class="earn-prov-row" id="adsgram-prov-row">
-                        <div class="earn-prov-ring-wrap">
-                            <svg class="earn-prov-ring-svg" viewBox="0 0 40 40">
-                                <defs>
-                                    <linearGradient id="adsgramRg2" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="#f59e0b"/>
-                                        <stop offset="100%" stop-color="#fde68a"/>
-                                    </linearGradient>
-                                </defs>
-                                <circle class="earn-prov-rt" cx="20" cy="20" r="15"/>
-                                <circle class="earn-prov-rf" id="adsgram-mini-ring" cx="20" cy="20" r="15"
-                                    stroke="url(#adsgramRg2)" style="filter:drop-shadow(0 0 4px rgba(245,158,11,.6));"/>
-                            </svg>
-                            <span class="earn-prov-ring-num" id="ads-remaining" style="color:#fde68a;">7</span>
-                        </div>
-                        <div class="earn-prov-info">
-                            <div class="earn-prov-name"><img src="asesst/adsgram.jpg" style="height:22px;object-fit:contain;vertical-align:middle;border-radius:4px;" alt="Adsgram"></div>
-                            <div class="earn-prov-count">
-                                <span id="ads-watched">0</span>/<span id="ads-daily-limit">7</span> <span data-i18n="today">اليوم</span>
-                            </div>
-                        </div>
-                        <div class="earn-prov-pts-badge earn-prov-pts-badge-a" style="align-items:center;gap:4px;flex-direction:column;">
-                            <div style="display:flex;align-items:center;gap:4px;">+<span class="earn-cta-rnum">500</span><img src="asesst/ticket.png" onerror="this.src='asesst/ticket.jpg'" alt="ticket" style="width:22px;height:33px;object-fit:contain;flex-shrink:0;"/></div>
-                            <div style="display:flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:#34d399;">+<img src="asesst/dollar.png" alt="" style="width:12px;height:12px;object-fit:contain;"><span class="earn-cta-usdt">0.001</span></div>
-                        </div>
-                        <button class="earn-prov-btn earn-prov-btn-a" id="ad-watch-btn" onclick="watchAd()">
-                            <div class="earn-prov-btn-shimmer"></div>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="opacity:.8;"><path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
-                            <span data-i18n="watch_btn">شاهد</span>
-                        </button>
-                    </div>
-
-                    <!-- Done state for Adsgram (existing) -->
-                    <div class="ad-done-state" id="ad-done-state" style="display:none;padding:8px 0 4px;">
-                        <div class="ad-done-icon">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                                <path d="M20 6L9 17l-5-5" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        </div>
-                        <div class="ad-done-title" data-i18n="all_done_title" style="font-size:13px;">أحسنت! انتهيت من كل الإعلانات</div>
-                        <div class="ad-done-sub" data-i18n="all_done_sub" style="font-size:11px;">عد غداً للحصول على إعلانات جديدة</div>
-                    </div>
-
-                </div>
-            </div>
-
-            <!-- Cooldown countdown -->
-            <div id="ad-cooldown-msg" style="display:none;text-align:center;font-size:12px;color:rgba(251,191,36,0.7);font-weight:600;margin-top:10px;padding:6px 14px;border-radius:20px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.12);"></div>
-
-            <!-- hidden compat elements (kept for JS) -->
-            <div style="display:none;">
-                <div id="ads-progress"></div>
-                <div class="ad-quota-total">/ 7</div>
-                <div id="ad-preload-bar"></div>
-                <span id="ad-preload-label">0 / 1</span>
-            </div>
-
-            <!-- ── STATS ROW ── -->
-            <div class="earn-stats glass earn-e" data-earn-d="340" data-earn-dir="up">
-                <div class="earn-stat">
-                    <div class="earn-stat-val" id="earned-today">0</div>
-                    <div class="earn-stat-label" data-i18n="tickets_today">تذاكر اليوم</div>
-                </div>
-                <div class="earn-stat-div"></div>
-                <div class="earn-stat">
-                    <div class="earn-stat-val" id="ads-watched-total">0</div>
-                    <div class="earn-stat-label" data-i18n="ads_watched">إعلان شوهد</div>
-                </div>
-                <div class="earn-stat-div"></div>
-                <div class="earn-stat">
-                    <div class="earn-stat-val" id="earn-daily-limit-pts" style="display:flex;align-items:center;justify-content:center;gap:4px;"><img src="asesst/ticket.png" onerror="this.src='asesst/ticket.jpg'" style="width:18px;height:27px;object-fit:contain;" alt="🎟">0</div>
-                    <div class="earn-stat-label" data-i18n="daily_limit">الحد اليومي</div>
-                </div>
-            </div>
-
-            <!-- ── SECTION: اكسب أكثر ── -->
-            <p class="earn-sec-lbl earn-e" data-earn-d="420" data-earn-dir="up" data-i18n="earn_more_label">اكسب أكثر</p>
-
-            <!-- دعوة الأصدقاء -->
-            <div class="earn-feat-card earn-feat-v earn-e" data-earn-d="480" data-earn-dir="up" onclick="showPage('invite', document.querySelector('[data-page=earn]'))">
-                <div class="earn-shimmer"></div>
-                <div class="earn-fc-ico earn-ico-v">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b8a9f5" stroke-width="1.85">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952
-                               4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07
-                               M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766
-                               l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0
-                               3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
-                    </svg>
-                </div>
-                <div class="earn-fc-body">
-                    <div class="earn-fc-name earn-v-name" data-i18n="invite_btn_title">دعوة الأصدقاء</div>
-                    <div class="earn-fc-hint earn-v-hint" data-i18n="invite_btn_sub">ادعُ واربح معاً</div>
-                </div>
-                <div class="earn-fc-end">
-                    <div class="earn-fc-chip earn-v-chip inv-referral-pts-badge">+500</div>
-                    <svg class="earn-fc-arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#b8a9f5" stroke-width="2.3">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/>
-                    </svg>
-                </div>
-            </div>
-
-            <!-- مكافأة يومية -->
-            <!-- المسابقة الأسبوعية -->
-            <div class="earn-feat-card earn-feat-p earn-e" data-earn-d="500" data-earn-dir="up" onclick="openCompetitionPage()" style="cursor:pointer;">
-                <div class="earn-shimmer"></div>
-                <div class="earn-fc-dot"></div>
-                <div class="earn-fc-ico earn-ico-p">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="1.85">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
-                    </svg>
-                </div>
-                <div class="earn-fc-body">
-                    <div class="earn-fc-name earn-p-name" data-i18n="contests">المسابقة الأسبوعية</div>
-                    <div class="earn-fc-hint earn-p-hint" data-i18n="contests_sub">تنافس على جوائز كبرى</div>
-                </div>
-                <div class="earn-fc-end">
-                    <div class="earn-fc-chip earn-p-chip" style="background:rgba(244,114,182,.12);border:1px solid rgba(244,114,182,.25);color:#f472b6;" data-i18n="weekly_badge">أسبوعي</div>
-                    <svg class="earn-fc-arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2.3">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/>
-                    </svg>
-                </div>
-            </div>
-
-            <!-- مكافأة يومية (الأصلي) -->
-            <div class="earn-feat-card earn-feat-g earn-e" data-earn-d="540" data-earn-dir="up" onclick="openDailyGiftOverlay()">
-                <div class="earn-shimmer"></div>
-                <div class="earn-fc-dot"></div>
-                <div class="earn-fc-ico earn-ico-g">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <path d="M20 12v10H4V12" stroke="#f5c138" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M22 7H2v5h20V7z" stroke="#f5c138" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M12 22V7" stroke="#f5c138" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" stroke="#fde68a" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" stroke="#fde68a" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </div>
-                <div class="earn-fc-body">
-                    <div class="earn-fc-name earn-g-name" data-i18n="gift_title">مكافأة يومية</div>
-                    <div class="earn-fc-hint earn-g-hint" data-i18n="gift_sub">استلم هديتك الآن</div>
-                </div>
-                <div class="earn-fc-end">
-                    <div class="earn-fc-chip earn-g-chip" data-i18n="daily">يومي</div>
-                    <svg class="earn-fc-arr" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f5c138" stroke-width="2.3">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/>
-                    </svg>
-                </div>
-            </div>
-
-            <!-- ── SECTION: قريباً ── -->
-            <p class="earn-sec-lbl earn-e" data-earn-d="600" data-earn-dir="up" data-i18n="coming_soon">قريباً</p>
-
-            <!-- الإنجازات -->
-            <div class="earn-feat-card earn-feat-b earn-dim earn-e" data-earn-d="660" data-earn-dir="up">
-                <div class="earn-fc-ico earn-ico-b">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.85">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12
-                               l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09
-                               L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/>
-                    </svg>
-                </div>
-                <div class="earn-fc-body">
-                    <div class="earn-fc-name earn-b-name" data-i18n="achievements">الإنجازات</div>
-                    <div class="earn-fc-hint earn-b-hint" data-i18n="achievements_sub">اكسب شارات خاصة</div>
-                </div>
-                <div class="earn-fc-end">
-                    <div class="earn-fc-chip earn-b-chip" data-i18n="soon">قريباً</div>
-                </div>
-            </div>
-
-
-        </div>
-    </main>
-
-    <!-- ════════════════════════════════════���═════
-         INVITE PAGE
-    ══════════════════════════════════════════ -->
-    <main id="page-invite" class="page">
-        <div class="page-wrap">
-
-            <!-- Header -->
-            <div class="page-header" style="position:relative;">
-                <button class="inv-back-btn" onclick="showPage('earn', document.querySelector('[data-page=earn]'))">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
-                    </svg>
-                </button>
-                <h1 class="site-title" data-i18n="invite_page_title">دعوة الأصدقاء</h1>
-                <div class="shine-line"></div>
-            </div>
-
-            <!-- Hero — GIF + title + sub + link card + reward rows -->
-            <div class="invite-hero">
-                <div class="inv-hero-gif-wrap">
-                    <img src="asesst/invite.gif" alt="invite" onerror="this.style.display='none'">
-                </div>
-                <div class="invite-hero-title" data-i18n="invite_hero_title">ادعُ أصدقاءك واربح</div>
-                <div class="invite-hero-sub" data-i18n="invite_hero_sub">
-                    شارك رابطك الخاص واحصل على مكافآت فورية<br>لكل صديق ينضم عبرك
-                </div>
-
-                <!-- Link Card — داخل الـ hero مباشرة -->
-                <div class="invite-link-card">
-                    <div class="invite-link-label" data-i18n="your_ref_link">رابط الإحالة الخاص بك</div>
-                    <div class="invite-link-box">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.45)" stroke-width="2" style="flex-shrink:0">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
-                        </svg>
-                        <span class="invite-link-text" id="referral-link-text">https://t.me/SPINN_TON_Bot/earn?startapp=ref_0000000000</span>
-                    </div>
-                    <div class="invite-share-row">
-                        <button class="invite-copy-btn" id="copy-btn" onclick="copyReferralLink()">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/>
-                            </svg>
-                            <span data-i18n="copy_btn_text">نسخ</span>
-                        </button>
-                        <button class="invite-share-btn share-btn-telegram" onclick="shareTelegram()">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8l-1.68 7.92c-.12.56-.46.7-.94.43l-2.6-1.92-1.26 1.21c-.14.14-.26.26-.52.26l.18-2.64 4.72-4.26c.2-.18-.04-.28-.32-.1L7.3 14.6 4.74 13.8c-.56-.18-.58-.56.12-.82l9.12-3.52c.46-.18.88.1.66.34z"/>
-                            </svg>
-                            <span data-i18n="telegram_share">تيليغرام</span>
-                        </button>
-                        <button class="invite-share-btn share-btn-whatsapp" onclick="shareWhatsApp()">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.37 5.07L2 22l5.07-1.35A9.96 9.96 0 0012 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm5.03 14.23c-.22.62-1.28 1.18-1.75 1.22-.44.04-.86.2-2.9-.6-2.45-.96-4.02-3.43-4.14-3.59-.12-.16-.98-1.3-.98-2.48s.62-1.76.84-2c.22-.24.48-.3.64-.3.16 0 .32 0 .46.01.15.01.35-.06.54.42.2.5.68 1.72.74 1.84.06.12.1.27.02.43-.08.16-.12.26-.24.4-.12.14-.25.31-.36.42-.12.12-.24.25-.1.49.14.24.62.97 1.34 1.57.92.78 1.7 1.02 1.94 1.14.24.12.38.1.52-.06.14-.16.6-.7.76-.94.16-.24.32-.2.54-.12.22.08 1.4.66 1.64.78.24.12.4.18.46.28.06.1.06.56-.16 1.18z"/>
-                            </svg>
-                            <span data-i18n="whatsapp_share">واتساب</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Reward rows -->
-                <div class="inv-reward-pills">
-                    <div class="inv-reward-pill">
-                        <div class="inv-pill-icon">
-                            <img src="asesst/ticket.jpg" alt="ticket" width="30" height="40"
-                                style="object-fit:contain;border-radius:3px;">
-                        </div>
-                        <div class="inv-pill-text">
-                            <div class="inv-pill-label" data-i18n="ref_join_reward">مكافأة انضمام الصديق</div>
-                            <div class="inv-pill-val gold inv-referral-pts-badge">500 تذكرة</div>
-                        </div>
-                        <div class="inv-pill-badge gold" data-i18n="instant_badge">فوري</div>
-                    </div>
-                    <div class="inv-reward-pill">
-                        <div class="inv-pill-icon">
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                                <rect x="2" y="5" width="20" height="14" rx="3" stroke="var(--purple)" stroke-width="1.8"/>
-                                <path d="M8 15V9l4 3 4-3v6" stroke="var(--purple)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                <circle cx="18" cy="8" r="3" fill="#fbbf24"/>
-                                <text x="18" y="11" text-anchor="middle" font-size="4.5" fill="#000" font-weight="800" font-family="sans-serif">%</text>
-                            </svg>
-                        </div>
-                        <div class="inv-pill-text">
-                            <div class="inv-pill-label" data-i18n="ref_ads_share">من أرباح إعلانات صديقك</div>
-                            <div class="inv-pill-val purple" data-i18n="ref_pct">25% دائماً</div>
-                        </div>
-                        <div class="inv-pill-badge" data-i18n="ongoing_badge">مستمر</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Stats -->
-            <div class="invite-stats">
-                <div class="invite-stat-card">
-                    <div class="invite-stat-val" style="color:var(--purple);">
-                        <span class="counter" data-target="0">0</span>
-                    </div>
-                    <div class="invite-stat-label" data-i18n="total_referrals">إجمالي الاحلات النشطه</div>
-                </div>
-                <div class="invite-stat-card">
-                    <div class="invite-stat-val">
-                        <img src="asesst/coins.png" alt="" class="inv-stat-coin">
-                        <span style="color:var(--gold);" class="counter" data-target="0">0</span>
-                    </div>
-                    <div class="invite-stat-label" data-i18n="earned_from_refs">مكتسب من احلات +25% من ربحهم</div>
-                </div>
-            </div>
-
-            <!-- Referral List -->
-            <div class="invite-list-card">
-                <div class="section-header" style="margin-bottom:14px;">
-                    <div class="section-title" data-i18n="invited_friends_title">الأصدقاء المدعوون</div>
-                    <div class="section-badge" id="referral-friends-badge">0 صديق</div>
-                </div>
-
-                <!-- ✅ يُملأ من السيرفر عبر renderReferralList() — لا بيانات مزيفة -->
-                <div id="referral-list-container" style="display:flex;flex-direction:column;">
-                    <!-- empty state — يختفي عند وصول البيانات -->
-                    <div id="referral-empty-state" class="empty-state" style="padding:24px 0;">
-                        <div class="empty-icon" style="margin:0 auto 12px;">
-                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1.5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
-                            </svg>
-                        </div>
-                        <div class="empty-title" style="font-size:13px;" data-i18n="no_friends_yet">لا يوجد أصدقاء مدعوون بعد</div>
-                        <div class="empty-desc" data-i18n="share_link_hint">شارك رابطك وابدأ الكسب معاً</div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-    </main>
-
-    <!-- ══════════════════════════════════════════
-         WITHDRAW PAGE
-    ══════════════════════════════════════════ -->
-    <main id="page-withdraw" class="page">
-        <div class="page-wrap">
-
-            <!-- ── HERO ── -->
-            <div class="wd-hero">
-                <div class="wd-hero-label" data-i18n="balance_available">رصيدك المتاح للسحب</div>
-                <div class="wd-balance-row">
-                    <img src="asesst/dollar.png" alt="" class="wd-hero-coin">
-                    <span class="balance-hero-number wd-hero-number" id="withdraw-balance-hero">0.000</span>
-                </div>
-                <div class="wd-hero-unit">USDT</div>
-            </div>
-
-            <div class="wd-divider"></div>
-
-            <!-- ── METHODS ── -->
-            <div class="wd-section-label" data-i18n="withdraw_methods_title">طرق السحب</div>
-
-            <div class="wd-methods">
-
-                <!-- TON Wallet — active -->
-                <div class="method-item wd-method-row wd-method-ton" onclick="openTonWithdraw()">
-                    <div class="wd-method-logo">
-                        <img src="https://files.catbox.moe/tym38y.jpg" alt="TON">
-                    </div>
-                    <div class="method-info wd-method-body">
-                        <div class="method-name wd-method-name wd-blue" data-i18n="ton_wallet">محفظة TON</div>
-                        <div class="method-min wd-method-meta">
-                            <span data-i18n="min_label">الحد الأدنى</span> · <span id="withdraw-ton-min-display">…</span> USDT
-                        </div>
-                    </div>
-                    <div class="wd-method-end">
-                        <span class="wd-badge-on" data-i18n="available_badge">متاح</span>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(83,147,255,0.4)" stroke-width="2.5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/>
-                        </svg>
-                    </div>
-                </div>
-
-                <!-- PayPal — locked -->
-                <div class="method-item wd-method-row wd-method-locked">
-                    <div class="wd-method-logo-svg">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                            <path d="M7.144 19.532l1.049-5.751c.075-.414.43-.713.85-.713h4.93c2.112 0 3.69-.842 4.367-2.377.114-.262.2-.53.259-.803C19.202 12.03 18.37 13 16.5 13H12a1 1 0 00-.986.836l-1.049 5.75-.821.001z" fill="#009cde"/>
-                            <path d="M18.599 10.888C18.03 13.619 15.9 15 12.923 15H9.5l-1.25 6.5H5.75L8 8.5h5.846c2.883 0 4.617 1.167 4.753 2.388z" fill="#012169"/>
-                            <path d="M5.75 21.5L8.5 6.5h5.846c1.867 0 3.18.456 3.884 1.327.548.678.72 1.571.508 2.661C18.03 13.219 15.9 14.5 12.923 14.5H9.5L8.25 21H5.75z" fill="#003087"/>
-                        </svg>
-                    </div>
-                    <div class="method-info wd-method-body">
-                        <div class="method-name wd-method-name wd-locked" data-i18n="paypal_name">باي بال</div>
-                        <div class="method-min wd-method-meta"><span data-i18n="min_label">الحد الأدنى</span> · 0.03 USDT</div>
-                    </div>
-                    <div class="wd-method-end">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="2">
-                            <rect x="5" y="11" width="14" height="10" rx="2"/><path stroke-linecap="round" d="M8 11V7a4 4 0 018 0v4"/>
-                        </svg>
-                        <span class="wd-badge-soon" data-i18n="soon">قريباً</span>
-                    </div>
-                </div>
-
-                <!-- Fawry — locked -->
-                <div class="method-item wd-method-row wd-method-locked">
-                    <div class="wd-method-logo">
-                        <img src="https://files.catbox.moe/j5tzam.jpg" alt="Fawry">
-                    </div>
-                    <div class="method-info wd-method-body">
-                        <div class="method-name wd-method-name wd-locked" data-i18n="fawry_name">فوري باي</div>
-                        <div class="method-min wd-method-meta"><span data-i18n="min_label">الحد الأدنى</span> · 0.03 USDT</div>
-                    </div>
-                    <div class="wd-method-end">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="2">
-                            <rect x="5" y="11" width="14" height="10" rx="2"/><path stroke-linecap="round" d="M8 11V7a4 4 0 018 0v4"/>
-                        </svg>
-                        <span class="wd-badge-soon" data-i18n="soon">قريباً</span>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- ── HISTORY ── -->
-            <div class="wd-history-wrap">
-                <div class="wd-history-header">
-                    <div class="wd-history-title" data-i18n="withdraw_history_title">سجل السحوبات</div>
-                    <span class="wd-history-badge" id="withdraw-count-badge" style="display:none;"></span>
-                </div>
-                <div id="withdraw-history-list">
-                    <div class="empty-state" id="withdraw-empty">
-                        <div class="empty-icon wd-empty-icon">
-                            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1.5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                        </div>
-                        <div class="empty-title" data-i18n="no_transactions">لا توجد سحوبات سابقة</div>
-                        <div class="empty-sub" data-i18n="no_tx_sub">ستظهر هنا بعد أول سحب</div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-    </main>
-    </main>
-
-    <!-- ══════════════════════════════════════════
-         SOCIAL TASKS PAGE
-    ══════════════════════════════════════════ -->
-    <main id="page-social" class="page">
-        <div class="page-wrap" style="padding-bottom:90px;">
-
-            <!-- ══ PROMO HEADER (enhanced design) ══ -->
-            <div class="sc-top-header">
-                <div class="sc-top-avatar">
-                        <script src="https://cdn.lordicon.com/lordicon.js"></script>
-    <lord-icon
-      src="https://cdn.lordicon.com/motnbmtz.json"
-      trigger="in"
-      delay="500"
-      state="in-reveal"
-      colors="primary:#ee66aa,secondary:#b4b4b4"
-      style="width:80px;height:80px">
-    </lord-icon>
-
-                </div>
-                <div class="sc-top-title" data-i18n="social_promo_title">هل تريد الترويج لمنتجك؟</div>
-                <div class="sc-top-sub" data-i18n="social_promo_sub">أضف مهمتك الخاصة على منصتك المفضلة وحدد المكافأة للمستخدمين</div>
-                <div class="sc-platforms-row">
-                    <div class="sc-platform-chip sc-p-fb">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                        <span data-i18n="facebook">فيسبوك</span>
-                    </div>
-                    <div class="sc-platform-chip sc-p-tw">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.261 5.635zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                        <span data-i18n="twitter">تويتر</span>
-                    </div>
-                    <div class="sc-platform-chip sc-p-tt">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.76a4.86 4.86 0 01-1.01-.07z"/></svg>
-                        <span data-i18n="tiktok">تيكتوك</span>
-                    </div>
-                    <div class="sc-platform-chip sc-p-yt">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M21.543 6.498C22 8.28 22 12 22 12s0 3.72-.457 5.502c-.254.985-.997 1.76-1.938 2.022C17.896 20 12 20 12 20s-5.893 0-7.605-.476c-.945-.266-1.687-1.04-1.938-2.022C2 15.72 2 12 2 12s0-3.72.457-5.502c.254-.985.997-1.76 1.938-2.022C6.107 4 12 4 12 4s5.896 0 7.605.476c.945.266 1.687 1.04 1.938 2.022zM10 15.5l6-3.5-6-3.5v7z"/></svg>
-                        <span data-i18n="youtube">يوتيوب</span>
-                    </div>
-                    <div class="sc-platform-chip sc-p-ig">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/></svg>
-                        <span data-i18n="instagram">انستغرام</span>
-                    </div>
-                </div>
-                <button style="font-family: Tajawal;" class="sc-btn-contact" onclick="_socialOpenDev()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"/></svg>
-                    <span data-i18n="contact_dev">تواصل مع المطور</span>
-                </button>
-            </div>
-
-            <!-- divider -->
-            <div class="sc-header-divider"></div>
-
-            <!-- section label -->
-            <div class="sc-sec-lbl sc-sec-lbl-enhanced">
-                <span data-i18n="available_tasks">المهام المتاحة</span>
-            </div>
-
-            <!-- Cards injected by JS -->
-            <div id="social-cards-wrap"></div>
-
-        </div>
-    </main>
-
-
-    <!-- ══════════════════════════════════════════
-         COMPETITION PAGE
-    ══════════════════════════════════════════ -->
-    <main id="page-competition" class="page">
-        <div class="page-wrap" style="max-width:460px;margin:0 auto;padding:0 16px 60px;">
-
-            <!-- Header -->
-            <div class="page-header" style="position:relative;">
-                <button class="inv-back-btn" onclick="showPage('earn', document.querySelector('[data-page=earn]'))">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
-                    </svg>
-                </button>
-                <h1 class="site-title"><img src="asesst/ranking.png" width="80"></h1>
-               <span style="color: rgba(85,85,85);" data-i18n="comp_subtitle">قم بجمع تذاكر وكن انت الرابح</span>
-            </div>
-
-            <!-- ════ COUNTDOWN ════ -->
-            <div style="padding:4px 0 20px;">
-                <div class="cp-cd-label">
-                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                        <circle cx="6.5" cy="6.5" r="5.5" stroke="#555" stroke-width="1.1"/>
-                        <path d="M6.5 3.5V7L9 8.5" stroke="#555" stroke-width="1.1" stroke-linecap="round"/>
-                    </svg>
-                    <span data-i18n="time_remaining">الوقت المتبقي</span>
-                </div>
-                <div class="cp-cd-grid">
-                    <div class="cp-cd-unit">
-                        <div class="cp-cd-box" id="cp-cd-days">--</div>
-                        <div class="cp-cd-name" data-i18n="day_unit">يوم</div>
-                    </div>
-                    <div class="cp-cd-sep">:</div>
-                    <div class="cp-cd-unit">
-                        <div class="cp-cd-box" id="cp-cd-hours">--</div>
-                        <div class="cp-cd-name" data-i18n="hour_unit">ساعة</div>
-                    </div>
-                    <div class="cp-cd-sep">:</div>
-                    <div class="cp-cd-unit">
-                        <div class="cp-cd-box" id="cp-cd-mins">--</div>
-                        <div class="cp-cd-name" data-i18n="minute_unit">دقيقة</div>
-                    </div>
-                    <div class="cp-cd-sep">:</div>
-                    <div class="cp-cd-unit">
-                        <div class="cp-cd-box" id="cp-cd-secs">--</div>
-                        <div class="cp-cd-name" data-i18n="second_unit">ثانية</div>
-                    </div>
-                </div>
-                <div style="text-align:center;margin-top:12px;font-size:13px;font-weight:700;color:#555;">
-                    جائزة <span style="font-family:'DynaPuff',cursive;color:#E8B84B;font-size:15px;" id="cp-prize-text">10$</span> لأفضل ثلاثة
-                </div>
-            </div>
-
-
-            <!-- ════ SECTION LABEL: المتصدرون ════ -->
-            <div class="cp-sec-lbl">
-                <div class="cp-sec-lbl-inner">
-                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
-                        <path d="M10 13.5C7.24 13.5 5 11.26 5 8.5V3.5H15V8.5C15 11.26 12.76 13.5 10 13.5Z" fill="#555"/>
-                        <path d="M5 5H3C3 5 2 5 2 7C2 9 3.5 10 5 10.5" stroke="#555" stroke-width="1.2" stroke-linecap="round" fill="none"/>
-                        <path d="M15 5H17C17 5 18 5 18 7C18 9 16.5 10 15 10.5" stroke="#555" stroke-width="1.2" stroke-linecap="round" fill="none"/>
-                        <rect x="7.5" y="13.5" width="5" height="2.5" rx="0.5" fill="#555"/>
-                        <rect x="6" y="16" width="8" height="1.5" rx="0.75" fill="#555"/>
-                        <path d="M8 7.5C8 7.5 8.5 9 10 9C11.5 9 12 7.5 12 7.5" stroke="#333" stroke-width="0.8" stroke-linecap="round" fill="none"/>
-                    </svg>
-                    <span data-i18n="top_leaders">المتصدرون</span>
-                </div>
-            </div>
-
-            <!-- ════ PODIUM (skeleton → filled by JS) ════ -->
-            <div id="cp-podium" class="cp-podium">
-                <!-- skeleton -->
-                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;">
-                    <div style="width:38px;height:30px;background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%);background-size:200% 100%;animation:cp-skel 1.4s infinite;border-radius:6px;"></div>
-                    <div style="width:64px;height:64px;background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%);background-size:200% 100%;animation:cp-skel 1.4s infinite;border-radius:50%;"></div>
-                    <div style="width:70px;height:12px;background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%);background-size:200% 100%;animation:cp-skel 1.4s infinite;border-radius:6px;"></div>
-                </div>
-                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;">
-                    <div style="width:58px;height:46px;background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%);background-size:200% 100%;animation:cp-skel 1.4s infinite;border-radius:6px;"></div>
-                    <div style="width:82px;height:82px;background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%);background-size:200% 100%;animation:cp-skel 1.4s infinite;border-radius:50%;"></div>
-                    <div style="width:80px;height:13px;background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%);background-size:200% 100%;animation:cp-skel 1.4s infinite;border-radius:6px;"></div>
-                </div>
-                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;">
-                    <div style="width:38px;height:30px;background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%);background-size:200% 100%;animation:cp-skel 1.4s infinite;border-radius:6px;"></div>
-                    <div style="width:64px;height:64px;background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%);background-size:200% 100%;animation:cp-skel 1.4s infinite;border-radius:50%;"></div>
-                    <div style="width:70px;height:12px;background:linear-gradient(90deg,#111 25%,#1a1a1a 50%,#111 75%);background-size:200% 100%;animation:cp-skel 1.4s infinite;border-radius:6px;"></div>
-                </div>
-            </div>
-
-            <!-- ════ SECTION LABEL: باقي المتصدرين ════ -->
-            <div class="cp-sec-lbl">
-                <div class="cp-sec-lbl-inner">
-                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
-                        <rect x="2"  y="10" width="4" height="8" rx="1" fill="#555"/>
-                        <rect x="8"  y="5"  width="4" height="13" rx="1" fill="#555"/>
-                        <rect x="14" y="8"  width="4" height="10" rx="1" fill="#555"/>
-                        <rect x="1"  y="18" width="18" height="1.2" rx="0.6" fill="#444"/>
-                        <circle cx="4"  cy="8.5" r="1.5" fill="#666"/>
-                        <circle cx="10" cy="3.5" r="1.8" fill="#666"/>
-                        <circle cx="16" cy="6.5" r="1.5" fill="#666"/>
-                    </svg>
-                    <span data-i18n="rest_leaders">باقي المتصدرين</span>
-                </div>
-            </div>
-
-            <div id="cp-lb-list"></div>
-
-        </div>
-    </main>
-
-    <!-- ══════════════════════════════════════════
-         BOTTOM NAV
-    ══════════════════════════════════════════ -->
-    <nav class="bottom-nav" role="navigation" aria-label="القائمة الرئيسية">
-        <div class="nav-inner">
-
-            <button class="nav-item active" onclick="showPage('home', this)" data-page="home" aria-label="الرئيسية">
-                <div class="nav-icon-wrap">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75"/>
-                    </svg>
-                </div>
-                <span class="nav-label" data-i18n="nav_home">الرئيسية</span>
-                <div class="nav-pill"></div>
-            </button>
-
-            <button class="nav-item" onclick="showPage('earn', this)" data-page="earn" aria-label="الربح">
-                <div class="nav-icon-wrap">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                </div>
-                <span class="nav-label" data-i18n="nav_earn">الربح</span>
-                <div class="nav-pill"></div>
-            </button>
-
-            <button class="nav-item" onclick="showPage('withdraw', this)" data-page="withdraw" data-nav="withdraw" aria-label="السحب">
-                <div class="nav-icon-wrap">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/>
-                    </svg>
-                </div>
-                <span class="nav-label" data-i18n="nav_withdraw">السحب</span>
-                <div class="nav-pill"></div>
-            </button>
-
-            <button class="nav-item" onclick="showPage('social', this); initSocialPage();" data-page="social" aria-label="تواصل">
-                <div class="nav-icon-wrap">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"/>
-                    </svg>
-                </div>
-                <span class="nav-label" data-i18n="nav_social">تواصل</span>
-                <div class="nav-pill"></div>
-            </button>
-
-        </div>
-    </nav>
-
-    <!-- ══════════════════════════════════════════
-         AD TOAST CONTAINER
-    ══════════════════════════════════════════ -->
-    <div id="ad-toast-container"></div>
-
-    <!-- Ad watching overlay -->
-    <div id="ad-watch-overlay">
-        <!-- GIF تحميل -->
-        <img src="asesst/loading.gif"
-             alt="loading"
-             style="width:96px;height:96px;object-fit:contain;border-radius:16px;">
-
-        <!-- رقم الإعلان الحالي -->
-        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-            <div id="overlay-count"
-                 style="font-family:'DynaPuff',sans-serif;font-size:22px;font-weight:700;
-                        color:#fbbf24;letter-spacing:1px;">
-                <img src="asesst/loading.gif" style="width:40px;height:40px;object-fit:contain;border-radius:8px;">
-            </div>
-            <div id="overlay-label"
-                 style="font-family:'Readex Pro',sans-serif;font-size:13px;font-weight:600;
-                        color:rgba(255,255,255,0.7);text-align:center;">
-                <span data-i18n="ad_loading">جاري تحميل الإعلان...</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════
-         JAVASCRIPT
-    ══════════════════════════════════════════ -->
-    <!-- ══════════════════════════════════════════
-         DAILY GIFT OVERLAY (ad-style)
-    ══════════════════════════════════════════ -->
-    <div id="daily-gift-overlay" style="
-        position:fixed;inset:0;z-index:300;
-        background:rgba(0,0,0,0.88);
-        backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-        display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px;
-        opacity:0;pointer-events:none;transition:opacity 0.3s ease;
-    ">
-        <!-- Static gift icon -->
-        <div style="width:100px;height:100px;border-radius:28px;background:rgba(251,191,36,0.13);border:1.5px solid rgba(251,191,36,0.35);display:flex;align-items:center;justify-content:center;box-shadow:0 0 40px rgba(251,191,36,0.18),0 8px 32px rgba(0,0,0,0.3);">
-            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" id="gift-ring-icon">
-                <path d="M20 12v10H4V12" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M22 7H2v5h20V7z" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M12 22V7" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" stroke="#fcd34d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" stroke="#fcd34d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        </div>
-
-        <!-- Day label -->
-        <div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;">
-            <div id="gift-day-text" style="
-                font-family:'Tajawal',sans-serif;font-size:18px;font-weight:900;
-                color:#fff;letter-spacing:0.3px;
-            ">اليوم الأول</div>
-            <div id="gift-desc-text" style="
-                font-size:12px;font-weight:600;
-                color:rgba(255,255,255,0.45);
-                line-height:1.65;text-align:center;max-width:240px;
-            ">مبروك! بداية رائعة في مسيرتك معنا</div>
-        </div>
-
-        <!-- Reward badge -->
-        <div style="display:flex;align-items:center;gap:10px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.25);border-radius:50px;padding:10px 24px;">
-            <img src="asesst/coins.png" alt="" style="width:22px;height:22px;object-fit:contain;filter:drop-shadow(0 0 6px rgba(251,191,36,0.8));">
-            <span id="gift-amount" style="font-family:'Tajawal',sans-serif;font-size:26px;font-weight:900;color:#fbbf24;">+100</span>
-            <span style="font-size:12px;color:rgba(251,191,36,0.6);font-weight:600;" data-i18n="pts">نقطة</span>
-        </div>
-
-        <!-- Streak dots -->
-        <div id="gift-streak-dots" style="display:flex;justify-content:center;gap:7px;"></div>
-
-        <!-- Countdown / Claim button -->
-        <div id="gift-countdown-wrap" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
-            <div style="font-size:11px;color:rgba(255,255,255,0.3);font-weight:600;" id="gift-loading-label" data-i18n="gift_preparing">جاري تحضير هديتك...</div>
-            <button id="gift-claim-btn" onclick="claimGift()" style="
-                display:none;
-                padding:14px 48px;border-radius:50px;border:none;cursor:pointer;
-                background:linear-gradient(135deg,#f59e0b 0%,#fbbf24 50%,#fcd34d 100%);
-                font-family:'Cairo',sans-serif;font-size:14px;font-weight:900;
-                color:#0d0a1a;letter-spacing:0.3px;
-                box-shadow:0 6px 24px rgba(251,191,36,0.35);
-                transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1);
-            "
-            onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 32px rgba(251,191,36,0.48)'"
-            onmouseleave="this.style.transform='';this.style.boxShadow='0 6px 24px rgba(251,191,36,0.35)'"
-            onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform=''">
-                <span data-i18n="gift_claim_btn">استلم هديتك</span>
-            </button>
-        </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════
-         TON WITHDRAW OVERLAY
-    ══════════════════════════════════════════ -->
-    <div id="ton-withdraw-overlay" onclick="handleTonOverlayClick(event)">
-        <div class="ton-sheet">
-            <div class="ton-sheet-handle"><div class="ton-sheet-handle-bar"></div></div>
-            <div class="ton-sheet-header">
-                <button class="ton-sheet-close" onclick="closeTonWithdraw()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-                <div class="ton-sheet-title" data-i18n="ton_withdraw_title">سحب TON</div>
-                <img src="https://files.catbox.moe/tym38y.jpg" alt="TON" style="width:34px;height:34px;border-radius:10px;object-fit:cover;">
-            </div>
-            <div class="ton-sheet-divider"></div>
-            <div class="ton-sheet-body">
-
-                <!-- First Withdraw Special Offer Banner -->
-                <div id="first-withdraw-offer" style="
-                    display:none;
-                    align-items:center;gap:12px;
-                    margin-bottom:16px;
-                    padding:12px 14px;
-                    border-radius:14px;
-                    background:linear-gradient(135deg,rgba(52,211,153,0.12),rgba(52,211,153,0.05));
-                    border:1px solid rgba(52,211,153,0.28);
-                ">
-                    <div style="font-size:22px;flex-shrink:0;">🎉</div>
-                    <div>
-                        <div style="font-family:'Tajawal',sans-serif;font-size:13px;font-weight:800;color:#34d399;margin-bottom:2px;">
-                            <span data-i18n="first_withdraw_title">عرض السحب الأول!</span>
-                        </div>
-                        <div style="font-family:'Readex Pro',sans-serif;font-size:11px;color:rgba(255,255,255,0.45);line-height:1.5;">
-                            الحد الأدنى لأول سحبة
-                            <span id="ton-min-pts" style="color:#34d399;font-weight:700;">0.03</span> USDT فقط — بدون متطلب مستوى
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Balance row -->
-                <div class="ton-balance-row">
-                    <div class="ton-balance-label" data-i18n="your_avail_balance">رصيدك المتاح</div>
-                    <div class="ton-balance-amount">
-                        <img src="asesst/dollar.png" alt="" style="width:16px;height:16px;object-fit:contain;filter:drop-shadow(0 0 5px rgba(52,211,153,0.7));">
-                        <span class="ton-balance-pts" id="ton-sheet-pts">0.000</span>
-                        <span style="font-size:11px;color:rgba(255,255,255,0.35);font-weight:500;">USDT</span>
-                    </div>
-                </div>
-
-                <!-- Info chip - min only -->
-                <div class="ton-info-row" style="justify-content:center;">
-                    <div class="ton-info-chip">
-                        <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-                            <span class="ton-info-chip-label">الحد الأدنى</span>
-                            <span class="ton-info-chip-val gold" id="ton-min-chip-val">0.03 USDT</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Level requirement notice -->
-                <div id="ton-level-warn" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:var(--radius-md);background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.22);text-align:right;">
-                    <div style="font-size:12px;font-weight:700;color:rgba(248,113,113,0.9);">
-                        🔒 يتطلب المستوى <span id="ton-req-level">5</span> لفتح السحب
-                    </div>
-                    <div style="font-size:10px;color:rgba(248,113,113,0.55);margin-top:3px;font-weight:500;">
-                        مستواك الحالي: <span id="ton-current-level">1</span>
-                    </div>
-                </div>
-
-                <!-- Points requirement notice -->
-                <div id="ton-pts-warn" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:var(--radius-md);background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.22);text-align:right;">
-                    <div style="font-size:12px;font-weight:700;color:rgba(248,113,113,0.9);">
-                        ⚠️ رصيدك أقل من الحد الأدنى للسحب
-                    </div>
-                    <div style="font-size:10px;color:rgba(248,113,113,0.55);margin-top:3px;font-weight:500;">
-                        تحتاج على الأقل <span id="ton-pts-warn-min">0.03</span> USDT للسحب
-                    </div>
-                </div>
-
-                <!-- Wallet address input -->
-                <div class="ton-input-label" data-i18n="ton_address_label">عنوان محفظة TON</div>
-                <input
-                    type="text"
-                    class="ton-address-input"
-                    id="ton-address-input"
-                    placeholder="EQ... أو UQ..."
-                    autocomplete="off"
-                    autocorrect="off"
-                    spellcheck="false"
-                    oninput="clearTonError()"
-                >
-                <div class="ton-error-msg" id="ton-error-msg" data-i18n="ton_address_error">الرجاء إدخال عنوان محفظة TON صحيح</div>
-
-                <div style="height:18px;"></div>
-
-                <!-- Submit button -->
-                <button class="ton-submit-btn" id="ton-submit-btn" onclick="submitTonWithdraw()">
-                    <span data-i18n="submit_withdraw">إرسال طلب السحب</span>
-                </button>
-
-            </div>
-        </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════
-         NOTIFICATIONS PANEL
-    ══════════════════════════════════════════ -->
-    <div id="notif-backdrop" onclick="closeNotifPanel()"></div>
-    <div id="notif-panel">
-        <div class="notif-panel-inner">
-            <div class="notif-panel-header">
-                <button class="notif-close-btn" onclick="closeNotifPanel()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-                <div class="notif-panel-title" style="display:flex;align-items:center;gap:6px;">
-                    <script src="https://cdn.lordicon.com/lordicon.js"></script>
-                    <lord-icon
-                        src="https://cdn.lordicon.com/xovdoewm.json"
-                        trigger="hover"
-                        stroke="bold"
-                        style="width:26px;height:26px">
-                    </lord-icon>
-                    <span data-i18n="notifications_title">الإشعارات</span>
-                </div>
-                <div style="width:34px;"></div>
-            </div>
-            <div class="notif-list" id="notif-list">
-                <div class="notif-empty" id="notif-empty-msg" data-i18n="no_notifs">لا توجد إشعارات بعد</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════
-         SETTINGS BACKDROP
-    ══════════════════════════════════════════ -->
-    <div id="settings-backdrop" onclick="closeSettings()" style="
-        position:fixed;inset:0;z-index:400;
-        background:rgba(0,0,0,0.6);
-        backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
-        opacity:0;pointer-events:none;
-        transition:opacity 0.3s ease;
-    "></div>
-
-    <!-- Drawer -->
-    <div id="settings-drawer" style="
-        position:fixed;bottom:0;left:0;right:0;z-index:401;
-        background:linear-gradient(180deg,rgba(12,8,28,0.98) 0%,rgba(8,5,18,1) 100%);
-        border-top:1px solid rgba(255,255,255,0.1);
-        border-radius:28px 28px 0 0;
-        padding:0 0 36px;
-        transform:translateY(110%);
-        transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
-        box-shadow:0 -12px 60px rgba(0,0,0,0.6);
-        max-width:520px;margin:0 auto;
-    ">
-        <!-- Handle -->
-        <div style="display:flex;justify-content:center;padding:14px 0 10px;">
-            <div style="width:40px;height:4px;background:rgba(255,255,255,0.15);border-radius:2px;"></div>
-        </div>
-
-        <!-- Header -->
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 20px 18px;">
-            <button onclick="closeSettings()" style="width:34px;height:34px;border-radius:10px;border:none;cursor:pointer;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.6);">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-            </button>
-            <div style="font-family:'Tajawal',sans-serif;font-size:18px;font-weight:900;color:#fff;" id="settings-title">الإعدادات</div>
-            <div style="width:34px;"></div>
-        </div>
-
-        <!-- Divider -->
-        <div style="height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent);margin:0 20px 22px;"></div>
-
-        <!-- Language Section -->
-        <div style="padding:0 20px;">
-            <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:rgba(255,255,255,0.3);text-transform:uppercase;margin-bottom:14px;" id="settings-lang-label">اللغة</div>
-
-            <!-- Arabic -->
-            <div onclick="setLang('ar')" id="lang-ar" style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;margin-bottom:10px;cursor:pointer;border:1.5px solid rgba(251,191,36,0.4);background:rgba(251,191,36,0.08);transition:all 0.2s ease;">
-                <div style="width:40px;height:40px;border-radius:12px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🇸🇦</div>
-                <div style="flex:1;text-align:right;">
-                    <div style="font-size:15px;font-weight:800;color:#fff;line-height:1.2;">العربية</div>
-                    <div style="font-size:11px;color:rgba(255,255,255,0.4);font-weight:500;margin-top:2px;">Arabic</div>
-                </div>
-                <div id="check-ar" style="width:22px;height:22px;border-radius:50%;background:#fbbf24;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0d0a1a" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
-                </div>
-            </div>
-
-            <!-- English -->
-            <div onclick="setLang('en')" id="lang-en" style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;margin-bottom:10px;cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);transition:all 0.2s ease;">
-                <div style="width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🇬🇧</div>
-                <div style="flex:1;text-align:right;">
-                    <div style="font-size:15px;font-weight:800;color:rgba(255,255,255,0.7);line-height:1.2;">English</div>
-                    <div style="font-size:11px;color:rgba(255,255,255,0.3);font-weight:500;margin-top:2px;">الإنجليزية</div>
-                </div>
-                <div id="check-en" style="width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:0;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
-                </div>
-            </div>
-
-            <!-- Russian -->
-            <div onclick="setLang('ru')" id="lang-ru" style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:16px;cursor:pointer;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);transition:all 0.2s ease;">
-                <div style="width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🇷🇺</div>
-                <div style="flex:1;text-align:right;">
-                    <div style="font-size:15px;font-weight:800;color:rgba(255,255,255,0.7);line-height:1.2;">Русский</div>
-                    <div style="font-size:11px;color:rgba(255,255,255,0.3);font-weight:500;margin-top:2px;">الروسية</div>
-                </div>
-                <div id="check-ru" style="width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:0;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
-                </div>
-            </div>
-        </div>
-    </div>
-    <script type="module" src="app-ads.js"></script>
-    <!-- app-social -->
-    <script src="settings.js"></script>
-    <script>
-        /* openDepositSupport — لم يُنقل بعد إلى الملفات الجديدة */
-        function openDepositSupport() {
-            const msg = encodeURIComponent('مرحبا أريد إيداع داخل البوت');
-            const url = 'https://t.me/arabicwin_founder?text=' + msg;
-            if (window.Telegram?.WebApp) window.Telegram.WebApp.openTelegramLink(url);
-            else window.open(url, '_blank');
-        }
-    </script>
-    <script type="module" src="app-social.js"></script>
-    <script>
-      function _socialOpenDev() {
-        const url = 'https://t.me/arabicwin_founder';
-        if (window.Telegram?.WebApp) window.Telegram.WebApp.openTelegramLink(url);
-        else window.open(url, '_blank');
-      }
-    </script>
-
-    <!-- SOCIAL TASK SHEET -->
-    <div class="sheet-overlay" id="overlay" onclick="_scCloseSheetGlobal()"></div>
-    <div class="sheet" id="sheet">
-      <div class="sheet-bar">
-        <div class="sheet-pill"></div>
-        <button class="sheet-close" onclick="_scCloseSheetGlobal()">
-          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
       </div>
-      <div id="sheet-content"></div>
+
+      <!-- 2. Withdraw screen -->
+      <div class="showcase">
+        <div class="showcase-copy reveal">
+          <span class="eyebrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/></svg>
+            <span data-en>Screen 02 · Withdraw</span>
+            <span data-ar>الشاشة 02 · السحب</span>
+          </span>
+          <h3 data-en>Pick a tier, tap withdraw, done</h3>
+          <h3 data-ar>اختر الفئة، اضغط سحب، وانتهى الأمر</h3>
+          <p class="lead" data-en>This is the actual Withdraw tab inside EarnBox. Four instant tiers are always on screen — the more you cash out at once, the lower the fee percentage.</p>
+          <p class="lead" data-ar>هذه هي شاشة السحب الحقيقية داخل EarnBox. أربع فئات سحب فورية معروضة دائمًا — كلما سحبت مبلغًا أكبر دفعة واحدة قلّت نسبة العمولة.</p>
+          <div class="showcase-points">
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+              <span class="pt-text">
+                <span data-en><b>$0.07</b> starter tier — 14% fee, net $0.06. Good for your very first withdrawal.</span>
+                <span data-ar><b>$0.07</b> فئة البداية — عمولة 14%، صافي $0.06. مناسبة لأول عملية سحب.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg></span>
+              <span class="pt-text">
+                <span data-en><b>$0.15</b> marked "Popular" — 10% fee, net $0.135. Most users' go-to amount.</span>
+                <span data-ar><b>$0.15</b> موسومة بـ"الأكثر شيوعًا" — عمولة 10%، صافي $0.135. الخيار المفضل لمعظم المستخدمين.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 100-8 4 4 0 000 8z"/><path d="M4.2 15a8 8 0 1115.6 0"/><path d="M12 3v2M12 19v2M3 12H1M23 12h-2"/></svg></span>
+              <span class="pt-text">
+                <span data-en><b>$0.60</b> is the "Best offer" — just 5% fee, net $0.57. The most efficient withdrawal on the board.</span>
+                <span data-ar><b>$0.60</b> هي "الأفضل" — عمولة 5% فقط، صافي $0.57. أكثر عملية سحب توفيرًا.</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="showcase-phone reveal reveal-1">
+          <div class="showcase-glow" style="top:50%; left:50%;"></div>
+          <div class="phone-frame">
+            <img src="images/withdraw.jpg" alt="EarnBox withdraw screen showing four withdrawal tiers from $0.07 to $0.60" loading="lazy">
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Contest screen -->
+      <div class="showcase">
+        <div class="showcase-copy reveal">
+          <span class="eyebrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v6a5 5 0 01-10 0V4z"/><path d="M7 5H4a2 2 0 002 4M17 5h3a2 2 0 01-2 4"/></svg>
+            <span data-en>Screen 03 · Contest</span>
+            <span data-ar>الشاشة 03 · المسابقة</span>
+          </span>
+          <h3 data-en>A live leaderboard, real cash prizes</h3>
+          <h3 data-ar>ترتيب مباشر وجوائز نقدية حقيقية</h3>
+          <p class="lead" data-en>Straight from the Contest tab — this is what rank 23 sees. Every ticket you collect pushes you up the board, and each rank is worth real money at the end of the cycle.</p>
+          <p class="lead" data-ar>مباشرة من شاشة المسابقة — هذا ما يراه صاحب الترتيب 23. كل تذكرة تجمعها تدفعك للأعلى، وكل مرتبة تساوي مبلغًا حقيقيًا في نهاية الدورة.</p>
+          <div class="showcase-points">
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6 6 1-4.5 4.5L18 20l-6-3-6 3 1.5-6.5L3 9l6-1z"/></svg></span>
+              <span class="pt-text">
+                <span data-en><b>1st place</b> currently sits at 54,355 tickets, winning <b>$25</b> this cycle.</span>
+                <span data-ar><b>المركز الأول</b> حاليًا عند 54,355 تذكرة، يربح <b>$25</b> هذه الدورة.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="5" height="10"/><rect x="9.5" y="6" width="5" height="14"/><rect x="16" y="12" width="5" height="8"/></svg></span>
+              <span class="pt-text">
+                <span data-en>2nd and 3rd place take home <b>$10</b> and <b>$7</b> — and every rank down to #6 still earns <b>$1</b>.</span>
+                <span data-ar>المركزان الثاني والثالث يحصلان على <b>$10</b> و<b>$7</b> — وحتى المركز السادس يربح <b>$1</b>.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M9 5v14"/></svg></span>
+              <span class="pt-text">
+                <span data-en>Tickets from ads, tasks, and referrals all count toward the same ranking.</span>
+                <span data-ar>التذاكر من الإعلانات والمهام والإحالات كلها تُحسب لنفس الترتيب.</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="showcase-phone reveal reveal-1">
+          <div class="showcase-glow" style="top:50%; left:50%;"></div>
+          <div class="phone-frame">
+            <img src="images/contest.jpg" alt="EarnBox contest leaderboard showing top 3 podium and ranked players" loading="lazy">
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Referral screen -->
+      <div class="showcase">
+        <div class="showcase-copy reveal">
+          <span class="eyebrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4"/></svg>
+            <span data-en>Screen 04 · Referral</span>
+            <span data-ar>الشاشة 04 · الإحالة</span>
+          </span>
+          <h3 data-en>Your link, shown exactly as it appears</h3>
+          <h3 data-ar>رابطك كما يظهر تمامًا داخل التطبيق</h3>
+          <p class="lead" data-en>This account has already earned 50,000 tickets purely from invites. Your personal link sits at the top of the Referral tab, ready to share to Telegram, X, or Facebook in one tap.</p>
+          <p class="lead" data-ar>هذا الحساب ربح بالفعل 50,000 تذكرة من الإحالات فقط. رابطك الخاص موجود أعلى شاشة الإحالة، جاهز للمشاركة على تيليجرام أو X أو فيسبوك بضغطة واحدة.</p>
+          <div class="showcase-points">
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M10.5 6.5H7a4 4 0 000 8h3.5M13.5 17.5H17a4 4 0 000-8h-3.5"/></svg></span>
+              <span class="pt-text">
+                <span data-en>Copy your link with one tap, or share directly through the built-in icons.</span>
+                <span data-ar>انسخ رابطك بضغطة واحدة، أو شاركه مباشرة عبر الأيقونات المدمجة.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8V6a2.5 2.5 0 10-2.5 2.5H12zM12 8V6a2.5 2.5 0 112.5 2.5H12z"/></svg></span>
+              <span class="pt-text">
+                <span data-en><b>5,000 tickets + $0.010</b> credited per friend who joins through your link.</span>
+                <span data-ar><b>5,000 تذكرة + $0.010</b> تُضاف عن كل صديق ينضم عبر رابطك.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg></span>
+              <span class="pt-text">
+                <span data-en>The same screen also lets you watch a quick ad for an extra $0.001, right below your link.</span>
+                <span data-ar>نفس الشاشة تتيح لك أيضًا مشاهدة إعلان سريع مقابل $0.001 إضافية، أسفل رابطك مباشرة.</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="showcase-phone reveal reveal-1">
+          <div class="showcase-glow" style="top:50%; left:50%;"></div>
+          <div class="phone-frame">
+            <img src="images/referral.jpg" alt="EarnBox referral screen showing invite link, tickets earned and watch-ad button" loading="lazy">
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Game screen -->
+      <div class="showcase">
+        <div class="showcase-copy reveal">
+          <span class="eyebrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="6"/><path d="M7 11v4M5 13h4"/><circle cx="16" cy="12" r="1"/><circle cx="18.5" cy="14.5" r="1"/></svg>
+            <span data-en>Screen 05 · Game</span>
+            <span data-ar>الشاشة 05 · اللعبة</span>
+          </span>
+          <h3 data-en>Tap to earn, chain combos for more</h3>
+          <h3 data-ar>اضغط لتربح، واصنع كومبو لمكافآت أكبر</h3>
+          <p class="lead" data-en>The Game tab drops falling bombs across the screen — tap them into the trash before time runs out. Every hit earns tickets, and chaining hits back-to-back builds a combo multiplier.</p>
+          <p class="lead" data-ar>شاشة اللعبة تُسقط قنابل عبر الشاشة — اضغط عليها لترميها بسلة المهملات قبل نفاد الوقت. كل ضربة تربحك تذاكر، وتوالي الضربات يبني مضاعف كومبو.</p>
+          <div class="showcase-points">
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+              <span class="pt-text">
+                <span data-en>A visible countdown keeps every round short and focused — this run has <b>32 seconds</b> left.</span>
+                <span data-ar>عداد تنازلي واضح يخلي كل جولة قصيرة ومركزة — هذه الجولة متبقٍ لها <b>32 ثانية</b>.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
+              <span class="pt-text">
+                <span data-en>Landing hits without missing builds a combo — <b>x4</b> shown here — that multiplies every ticket earned.</span>
+                <span data-ar>ضرب الأهداف دون تفويت يبني كومبو — <b>x4</b> ظاهر هنا — يضاعف كل تذكرة تربحها.</span>
+              </span>
+            </div>
+            <div class="showcase-point">
+              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg></span>
+              <span class="pt-text">
+                <span data-en>Your ticket total and personal best are always pinned at the top — this player's best run is <b>361</b>.</span>
+                <span data-ar>إجمالي تذاكرك وأفضل رقم لك مثبّتان دائمًا بالأعلى — أفضل جولة لهذا اللاعب <b>361</b>.</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="showcase-phone reveal reveal-1">
+          <div class="showcase-glow" style="top:50%; left:50%;"></div>
+          <div class="phone-frame">
+            <img src="images/game.jpg" alt="EarnBox game screen showing falling targets, a 32 second timer and x4 combo" loading="lazy">
+          </div>
+        </div>
+      </div>
+
     </div>
-    <script>
-      function _scCloseSheetGlobal() {
-        document.getElementById("overlay")?.classList.remove("open");
-        document.getElementById("sheet")?.classList.remove("open");
-        document.body.style.overflow = "";
+  </section>
+
+  <!-- WAYS TO EARN -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
+          <span data-en>Earning methods</span>
+          <span data-ar>طرق الربح</span>
+        </span>
+        <h2 data-en>Every corner of the app pays</h2>
+        <h2 data-ar>كل جزء من التطبيق يربحك</h2>
+        <p data-en>Mix and match — most users combine all three for the fastest balance growth.</p>
+        <p data-ar>يمكنك الجمع بينها — أغلب المستخدمين يستخدمون الثلاث طرق معًا لأسرع نمو للرصيد.</p>
+      </div>
+
+      <div class="ways-grid">
+        <div class="way-card">
+          <div class="way-top">
+            <span class="way-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg></span>
+            <span class="way-tag" data-en>Passive</span>
+            <span class="way-tag" data-ar>سهل</span>
+          </div>
+          <h3 data-en>Watch ads</h3>
+          <h3 data-ar>شاهد الإعلانات</h3>
+          <p data-en>Short video ads pay per view. Watch a full session for the full reward, or a partial one for half.</p>
+          <p data-ar>إعلانات فيديو قصيرة تدفع لكل مشاهدة. أكمل المشاهدة للحصول على المكافأة كاملة، أو نصفها إن قاطعتها.</p>
+        </div>
+        <div class="way-card">
+          <div class="way-top">
+            <span class="way-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg></span>
+            <span class="way-tag" data-en>Bonus</span>
+            <span class="way-tag" data-ar>مكافأة</span>
+          </div>
+          <h3 data-en>Play & complete tasks</h3>
+          <h3 data-ar>العب وأنجز المهام</h3>
+          <p data-en>Daily missions and simple social tasks hand out extra tickets on top of your ad earnings.</p>
+          <p data-ar>مهام يومية ومهام تواصل اجتماعي بسيطة تمنحك تذاكر إضافية فوق أرباح الإعلانات.</p>
+        </div>
+        <div class="way-card">
+          <div class="way-top">
+            <span class="way-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><circle cx="17.5" cy="8.5" r="2.6"/><path d="M15.8 12.5a5.2 5.2 0 016.7 5"/></svg></span>
+            <span class="way-tag" data-en>Forever</span>
+            <span class="way-tag" data-ar>مستمر</span>
+          </div>
+          <h3 data-en>Recruit friends</h3>
+          <h3 data-ar>ادعُ أصدقاءك</h3>
+          <p data-en>Earn a share of everything your invited friends make, automatically, for as long as they play.</p>
+          <p data-ar>احصل على نسبة من أرباح أصدقائك الذين تدعوهم تلقائيًا وباستمرار طوال فترة لعبهم.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 114 2c-.8.7-1.5 1.2-1.5 2.5M12 17h.01"/></svg>
+          <span data-en>Good to know</span>
+          <span data-ar>معلومات مفيدة</span>
+        </span>
+        <h2 data-en>Frequently asked questions</h2>
+        <h2 data-ar>الأسئلة الشائعة</h2>
+      </div>
+
+      <div class="faq-list" id="faqList">
+        <div class="faq-item">
+          <div class="faq-q">
+            <span data-en>Do I need to install anything?</span>
+            <span data-ar>هل أحتاج لتثبيت أي شيء؟</span>
+            <span class="faq-plus"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          </div>
+          <div class="faq-a">
+            <span data-en>No. EarnBox runs entirely inside Telegram as a Mini App — just tap the bot link and it opens instantly.</span>
+            <span data-ar>لا. يعمل EarnBox بالكامل داخل تيليجرام كتطبيق مصغّر — فقط اضغط رابط البوت ويفتح فورًا.</span>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">
+            <span data-en>Where do withdrawals go?</span>
+            <span data-ar>إلى أين تذهب الأموال المسحوبة؟</span>
+            <span class="faq-plus"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          </div>
+          <div class="faq-a">
+            <span data-en>Directly on-chain to your connected TON wallet. Connect it once inside the app and every withdrawal after that is instant.</span>
+            <span data-ar>مباشرة على البلوكشين إلى محفظة TON المرتبطة بحسابك. اربطها مرة واحدة داخل التطبيق وكل عملية سحب بعدها تكون فورية.</span>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">
+            <span data-en>Is there a minimum to withdraw?</span>
+            <span data-ar>هل يوجد حد أدنى للسحب؟</span>
+            <span class="faq-plus"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          </div>
+          <div class="faq-a">
+            <span data-en>The smallest tier starts at just $0.07, so you don't need to grind for weeks before your first payout.</span>
+            <span data-ar>أصغر فئة سحب تبدأ من $0.07 فقط، فلا تحتاج للانتظار أسابيع قبل أول عملية سحب.</span>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">
+            <span data-en>How does the referral commission work?</span>
+            <span data-ar>كيف تعمل عمولة الإحالة؟</span>
+            <span class="faq-plus"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          </div>
+          <div class="faq-a">
+            <span data-en>You earn a welcome bonus the moment a friend joins through your link, plus an ongoing percentage of their ad earnings for as long as they stay active.</span>
+            <span data-ar>تحصل على مكافأة ترحيبية فور انضمام صديقك عبر رابطك، بالإضافة إلى نسبة مستمرة من أرباحه من الإعلانات طالما بقي نشطًا.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="final-cta">
+    <div class="container">
+      <h2 class="display gold-text" data-en>Your balance is waiting.</h2>
+      <h2 class="display gold-text" data-ar>رصيدك بانتظارك.</h2>
+      <p data-en>Open the bot, watch your first ad, and see your first tickets land in seconds.</p>
+      <p data-ar>افتح البوت، شاهد أول إعلان، وشاهد أول تذاكرك تصل خلال ثوانٍ.</p>
+      <a class="btn-primary" href="https://t.me/EarnlixBot/play?startapp=ref_7741750541" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        <span data-en>Open Telegram Bot</span>
+        <span data-ar>افتح بوت تيليجرام</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <p data-en>EarnBox — earn, invite, withdraw. Not affiliated with Telegram.</p>
+      <p data-ar>EarnBox — اربح، ادعُ، اسحب. غير تابع لتيليجرام.</p>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+function applyLang(lang){
+  const html = document.getElementById('htmlRoot');
+  html.setAttribute('lang', lang);
+  html.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+}
+
+function chooseLang(lang){
+  applyLang(lang);
+  localStorage.setItem('earnbox_lang', lang);
+  const gate = document.getElementById('langGate');
+  gate.classList.add('gate-hidden');
+  document.body.style.overflow = '';
+}
+
+(function initLangGate(){
+  const saved = localStorage.getItem('earnbox_lang');
+  const gate = document.getElementById('langGate');
+  if(saved === 'en' || saved === 'ar'){
+    applyLang(saved);
+    gate.classList.add('gate-hidden');
+  } else {
+    document.body.style.overflow = 'hidden';
+  }
+})();
+
+// FAQ accordion
+document.querySelectorAll('.faq-item').forEach(item=>{
+  item.querySelector('.faq-q').addEventListener('click', ()=>{
+    const wasOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i=>i.classList.remove('open'));
+    if(!wasOpen) item.classList.add('open');
+  });
+});
+
+// Scroll reveal — each showcase copy/phone animates in as it enters view
+(function revealOnScroll(){
+  const targets = document.querySelectorAll('.reveal');
+  if(!('IntersectionObserver' in window)){
+    targets.forEach(t=>t.classList.add('in-view'));
+    return;
+  }
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(entry=>{
+      if(entry.isIntersecting){
+        entry.target.classList.add('in-view');
+        io.unobserve(entry.target);
       }
-    </script>
+    });
+  }, {threshold:0.18, rootMargin:'0px 0px -40px 0px'});
+  targets.forEach(t=>io.observe(t));
+})();
 
-    <!-- ════ COMPETITION PAGE LOGIC ════ -->
-    <script>
-    (function() {
-        const CROWN1 = `<img src="asesst/frst.png"  alt="🥇" draggable="false" style="width:116px;height:92px;object-fit:contain;display:block;"/>`;
-        const CROWN2 = `<img src="asesst/sec.png"   alt="🥈" draggable="false" style="width:76px;height:60px;object-fit:contain;display:block;"/>`;
-        const CROWN3 = `<img src="asesst/thrd.png"  alt="🥉" draggable="false" style="width:76px;height:60px;object-fit:contain;display:block;"/>`;
-        const CROWNS  = [CROWN1, CROWN2, CROWN3];
-        const PRIZES  = ['5$', '3$', '2$'];
-        const AV_COLORS = [
-            { cls:'av-purple', c:'#7c6fff', cg:'rgba(124,111,255,0.15)' },
-            { cls:'av-teal',   c:'#2dd4bf', cg:'rgba(45,212,191,0.12)'  },
-            { cls:'av-rose',   c:'#f472b6', cg:'rgba(244,114,182,0.12)' },
-            { cls:'av-amber',  c:'#fbbf24', cg:'rgba(251,191,36,0.12)'  },
-            { cls:'av-sky',    c:'#38bdf8', cg:'rgba(56,189,248,0.12)'  },
-            { cls:'av-green',  c:'#4ade80', cg:'rgba(74,222,128,0.12)'  },
-            { cls:'av-indigo', c:'#818cf8', cg:'rgba(129,140,248,0.12)' },
-        ];
+// Gentle, slow auto-scroll (pauses on any user interaction)
+(function autoScroll(){
+  let paused = false;
+  let resumeTimer = null;
+  const SPEED = 0.35; // px per frame, slow and light
 
+  function pause(){
+    paused = true;
+    clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(()=>{ paused = false; }, 2600);
+  }
+  ['wheel','touchstart','keydown','pointerdown'].forEach(evt=>{
+    window.addEventListener(evt, pause, {passive:true});
+  });
 
-        function renderPodium(top3) {
-            const ORDER  = [1, 0, 2]; // عرض: 2nd, 1st, 3rd
-            const RCLASS = ['cp-r2', 'cp-r1', 'cp-r3'];
-            const SIZES  = [60, 78, 60];
-            const wrap   = document.getElementById('cp-podium');
-            if (!wrap) return;
-            wrap.innerHTML = '';
-            ORDER.forEach((di, xi) => {
-                const u  = top3[di];
-                if (!u) return;
-                const av = AV_COLORS[di % AV_COLORS.length];
-                const sz = SIZES[xi];
-                const div = document.createElement('div');
-                div.className = 'cp-pod-item ' + RCLASS[xi];
-                const avatarContent = u.photo_url
-                    ? `<img src="${u.photo_url}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display='none';" alt=""/>`
-                    : `<svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}" fill="none">
-                        <circle cx="${sz/2}" cy="${sz*.4}" r="${sz*.18}" fill="${av.c}30"/>
-                        <ellipse cx="${sz/2}" cy="${sz*.86}" rx="${sz*.3}" ry="${sz*.2}" fill="${av.c}30"/>
-                        <circle cx="${sz/2}" cy="${sz*.4}" r="${sz*.15}" fill="${av.c}90"/>
-                        <ellipse cx="${sz/2}" cy="${sz*.85}" rx="${sz*.24}" ry="${sz*.17}" fill="${av.c}90"/>
-                        <text x="${sz/2}" y="${sz*.44}" text-anchor="middle" dominant-baseline="middle" font-family="Tajawal,sans-serif" font-size="${sz*.22}" font-weight="800" fill="${av.c}">${(u.name||'?').trim().charAt(0)}</text>
-                       </svg>`;
-                div.innerHTML = `
-                    <div style="margin-bottom:5px;">${CROWNS[di]}</div>
-                    <div class="cp-pod-ring">
-                        <div class="cp-pod-inner">
-                            <div class="cp-pod-face ${u.photo_url ? '' : av.cls}">${avatarContent}</div>
-                        </div>
-                    </div>
-                    <div class="cp-pod-name">${u.name}</div>
-                    <div class="cp-tkt-badge">
-                        <img src="asesst/ticket.png" alt="t" onerror="this.src='asesst/ticket.jpg'"/>
-                        <span>${u.tickets.toLocaleString('ar')}</span>
-                    </div>
-                    <div class="cp-prize">${PRIZES[di]}</div>
-                `;
-                wrap.appendChild(div);
-            });
-        }
-
-        function renderList(rest) {
-            const list = document.getElementById('cp-lb-list');
-            if (!list) return;
-            list.innerHTML = '';
-            rest.forEach((u, i) => {
-                const av   = AV_COLORS[(i + 3) % AV_COLORS.length];
-                const card = document.createElement('div');
-                card.className = 'cp-lc';
-                card.style.cssText = `animation-delay:${i * .06}s;--cp-c:${av.c};--cp-cg:${av.cg};`;
-                const avatarContent = u.photo_url
-                    ? `<img src="${u.photo_url}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display='none';" alt=""/>`
-                    : `<svg width="46" height="46" viewBox="0 0 46 46" fill="none">
-                        <circle cx="23" cy="18" r="9" fill="${av.c}25"/>
-                        <ellipse cx="23" cy="40" rx="16" ry="11" fill="${av.c}25"/>
-                        <circle cx="23" cy="18" r="7" fill="${av.c}80"/>
-                        <ellipse cx="23" cy="39" rx="12" ry="9" fill="${av.c}80"/>
-                        <text x="23" y="22" text-anchor="middle" dominant-baseline="middle" font-family="Tajawal,sans-serif" font-size="11" font-weight="800" fill="${av.c}">${(u.name||'?').trim().charAt(0)}</text>
-                       </svg>`;
-                card.innerHTML = `
-                    <div class="cp-lc-stripe"></div>
-                    <div style="width:48px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                        <div class="cp-lc-rank">${u.rank}</div>
-                    </div>
-                    <div style="flex-shrink:0;margin-left:12px;">
-                        <div class="cp-lc-av ${u.photo_url ? '' : av.cls}">${avatarContent}</div>
-                    </div>
-                    <div style="flex:1;min-width:0;padding:13px 12px 13px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-                        <div class="cp-lc-name">${u.name}</div>
-                        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                            <div style="width:28px;height:28px;border-radius:4px;overflow:hidden;border:1px solid #1e1e1e;opacity:.85;display:flex;align-items:center;justify-content:center;">
-                                <img src="asesst/ticket.png" style="width:100%;height:100%;object-fit:contain;" alt="t" onerror="this.src='asesst/ticket.jpg'"/>
-                            </div>
-                            <div class="cp-lc-count" style="color:${av.c};">${u.tickets.toLocaleString('ar')}</div>
-                        </div>
-                    </div>
-                `;
-                list.appendChild(card);
-            });
-        }
-
-        let _cpCountdownTimer = null;
-        function startCpCountdown(endDate) {
-            if (_cpCountdownTimer) clearInterval(_cpCountdownTimer);
-            function pad(n){ return String(n).padStart(2,'0'); }
-            function tick() {
-                const d = endDate - Date.now();
-                if (d <= 0) {
-                    ['cp-cd-days','cp-cd-hours','cp-cd-mins','cp-cd-secs'].forEach(id => {
-                        const el = document.getElementById(id);
-                        if (el) el.textContent = '00';
-                    });
-                    clearInterval(_cpCountdownTimer);
-                    return;
-                }
-                const days  = Math.floor(d / 86400000);
-                const hours = Math.floor((d % 86400000) / 3600000);
-                const mins  = Math.floor((d % 3600000) / 60000);
-                const secs  = Math.floor((d % 60000) / 1000);
-                const ids   = ['cp-cd-days','cp-cd-hours','cp-cd-mins','cp-cd-secs'];
-                const vals  = [days, hours, mins, secs];
-                ids.forEach((id,i) => {
-                    const el = document.getElementById(id);
-                    if (el) el.textContent = pad(vals[i]);
-                });
-            }
-            tick();
-            _cpCountdownTimer = setInterval(tick, 1000);
-        }
-
-        let _cpInitialized = false;
-        let _cpRefreshTimer = null;
-
-        async function loadCompetition() {
-            try {
-                const _sid = window._APP_SESSION || '';
-                const res = await fetch('/api/competition?action=leaderboard', {
-                    headers: _sid ? { 'X-Session-Id': _sid } : {}
-                });
-                const data = await res.json();
-                if (!data.ok) return;
-
-                if (!_cpInitialized) {
-                    _cpInitialized = true;
-                    if (data.end_date) startCpCountdown(new Date(data.end_date));
-                    if (data.prize_text) {
-                        const pt = document.getElementById('cp-prize-text');
-                        if (pt) pt.textContent = data.prize_text;
-                    }
-                }
-
-                const lb = data.leaderboard || [];
-                renderPodium(lb.slice(0, 3));
-                renderList(lb.slice(3));
-
-                // ── sync home: تذاكر + ترتيب ──────────────────────────
-                const rankEl    = document.getElementById('hm-user-rank');
-                const ticketsEl = document.getElementById('uc-tickets-val');
-                if (rankEl)    rankEl.textContent    = data.my_rank ? '#' + data.my_rank : '#--';
-                if (ticketsEl) ticketsEl.textContent = (data.my_tickets || 0).toLocaleString('ar');
-
-            } catch(e) {
-                console.warn('[Competition]', e);
-            }
-        }
-
-        window.openCompetitionPage = function() {
-            if (window.showPage) window.showPage('competition', null);
-            loadCompetition();
-            // تحديث كل 5 ثواني
-            if (_cpRefreshTimer) clearInterval(_cpRefreshTimer);
-            _cpRefreshTimer = setInterval(loadCompetition, 5000);
-        };
-
-        // إيقاف التحديث عند مغادرة صفحة المسابقة
-        document.addEventListener('pagechange', function(e) {
-            if (e.detail?.page !== 'competition' && _cpRefreshTimer) {
-                clearInterval(_cpRefreshTimer);
-                _cpRefreshTimer = null;
-            }
-        });
-    })();
-    </script>
-
-    <!-- ════════════════════════════════════════════
-         LANGUAGE SELECTION + I18N SYSTEM (inline, no module)
-    ════════════════════════════════════════════ -->
-    <script>
-    // ── قاموس الترجمات ─────────────────────────────
-    var _I18N = {
-      ar: {
-        // شاشة اللغة
-        lang_screen_title:'اختر لغتك',lang_screen_sub:'يمكنك تغييرها لاحقاً من الإعدادات',
-        // تحميل وشبكة
-        loading_text:'جاري التحميل...',offline_msg:'📵 أنت غير متصل بالإنترنت — سيتم إعادة الاتصال تلقائياً',
-        // الرئيسية
-        user_greeting:'مرحباً بعودتك',balance_label:'الرصيد الكلي',pts:'USDT',
-        tickets_label:'تذاكري',ticket_unit:'تذكرة',rank_label:'الترتيب',
-        friends_label:'صديق مدعو',tasks_done_label:'مهمة منجزة',total_earned_label:'إجمالي المكتسب',
-        charge_btn:'شحن',withdraw_btn:'سحب',
-        // المهام
-        tasks_hero_p:'أكمل المهام واجمع مكافآتك اليومية',
-        our_channel:'قناتنا الرسمية',exclusive_badge:'حصري',
-        ad_tasks_label:'مهام إعلانية',ad_task_name:'مهمة إعلانية',
-        today:'اليوم',loading_short:'جاري...',completed:'اكتمل',
-        start_btn:'ابدأ',verify_btn:'تحقق...',done_label:'تم',
-        daily_tasks_section_lbl:'المهام اليومية',
-        task_watch_10:'شاهد 10 إعلانات اليوم',task_watch_10_of:'من أصل 10 إعلانات',
-        task_watch_25:'شاهد 25 إعلاناً',task_watch_25_of:'من أصل 25 إعلاناً',
-        task_invite_3:'ادعُ 3 أصدقاء',task_invite_3_of:'من أصل 3 أصدقاء',
-        collect_btn:'جمع',add_channel_btn:'أضف قناتك',add_channel_sub:'اربح من كل مشترك جديد',
-        // الربح
-        earn_title:'الربح',watch_btn:'شاهد',tickets_today:'تذاكر اليوم',
-        ads_watched:'إعلان شوهد',daily_limit:'الحد اليومي',
-        all_done_title:'أحسنت! انتهيت من كل الإعلانات',all_done_sub:'عد غداً للحصول على إعلانات جديدة',
-        earn_more_label:'اكسب أكثر',weekly_badge:'أسبوعي',
-        invite_btn_title:'دعوة الأصدقاء',invite_btn_sub:'ادعُ واربح معاً',
-        contests:'المسابقة الأسبوعية',contests_sub:'تنافس على جوائز كبرى',
-        gift_title:'مكافأة يومية',gift_sub:'استلم هديتك الآن',daily:'يومي',coming_soon:'قريباً',
-        achievements:'الإنجازات',achievements_sub:'اكسب شارات مميزة',soon:'قريباً',available_badge:'متاح',
-        // الدعوة
-        invite_page_title:'ادعُ أصدقاءك',invite_hero_title:'اربح مع أصدقائك',
-        invite_hero_sub:'احصل على مكافأة مقابل كل دعوة',your_ref_link:'رابط دعوتك',
-        copy_btn_text:'نسخ',telegram_share:'تيليغرام',whatsapp_share:'واتساب',
-        ref_join_reward:'مكافأة انضمام الصديق',instant_badge:'فوري',
-        ref_ads_share:'من أرباح إعلانات صديقك',ref_pct:'25% دائماً',ongoing_badge:'مستمر',
-        total_referrals:'إجمالي الدعوات',earned_from_refs:'مكتسب من الدعوات',
-        invited_friends_title:'الأصدقاء المدعوون',no_friends_yet:'لا يوجد أصدقاء مدعوون بعد',
-        share_link_hint:'شارك رابطك وابدأ الكسب معاً',
-        // السحب
-        balance_available:'الرصيد المتاح',withdraw_methods_title:'طرق السحب',
-        withdraw_history_title:'سجل السحب',no_transactions:'لا توجد معاملات',
-        no_tx_sub:'ستظهر هنا بعد أول سحب',min_label:'الحد الأدنى',
-        ton_wallet:'محفظة TON',paypal_name:'باي بال',fawry_name:'فوري',
-        // الصفحة الاجتماعية
-        social_promo_title:'هل تريد الترويج لمنتجك؟',
-        social_promo_sub:'أضف مهمتك الخاصة على منصتك المفضلة وحدد المكافأة للمستخدمين',
-        facebook:'فيسبوك',twitter:'تويتر',tiktok:'تيكتوك',youtube:'يوتيوب',instagram:'انستغرام',
-        sc_upload_lbl:'ارفع لقطة الإثبات',sc_upload_sub:'PNG أو JPG — اضغط للاختيار',
-        sc_send_review:'إرسال للمراجعة',sc_cancel:'إلغاء',sc_task_instr:'تعليمات المهمة',
-        sc_proof_lbl:'إرسال صورة الإثبات',sc_under_review:'تحت المراجعة',
-        sc_review_sub:'سيتم مراجعة إثباتك وإضافة التذاكر قريباً',
-        sc_approved:'تمت الموافقة ✓',sc_approved_sub:'تم إضافة التذاكر إلى رصيدك',
-        sc_rejected:'تم رفض الإثبات',sc_rejected_sub:'لم يتم قبول الصورة المرسلة',
-        sc_retry:'إعادة المحاولة',sc_send_task:'إرسال المهمة',
-        sc_done:'تم ✓',sc_reviewing:'مراجعة...',sc_rejected_short:'مرفوض ↩',
-        sc_start_lbl:'· ابدأ',sc_pts_added:'✅ تم إنجاز المهمة وإضافة التذاكر',
-        sc_sent_review:'✅ تم الإرسال — بانتظار موافقة المشرف',
-        sc_upload_toast:'📋 أكمل المهمة ثم أرسل لقطة الإثبات',
-        sc_sending:'📤 جارٍ إرسال الصورة...',sc_sending_inline:'جارٍ الإرسال...',
-        sc_no_tasks:'لا توجد مهام متاحة الآن',sc_load_err:'تعذّر تحميل المهام — حاول مجدداً',
-        sc_copied:'✅ تم نسخ المنشور',sc_copy_done:'تم النسخ!',sc_copy_btn:'نسخ النص',
-        sc_promo_lbl:'نص ترويجي جاهز (اختياري)',
-        sc_plat_facebook:'فيسبوك',sc_plat_twitter:'تويتر',sc_plat_tiktok:'تيكتوك',
-        sc_plat_youtube:'يوتيوب',sc_plat_instagram:'انستغرام',sc_plat_telegram:'تيليغرام',
-        contact_dev:'تواصل مع المطور',available_tasks:'المهام المتاحة',nav_social:'تواصل',
-        // المسابقة
-        comp_subtitle:'قم بجمع تذاكر وكن انت الرابح',time_remaining:'الوقت المتبقي',
-        day_unit:'يوم',hour_unit:'ساعة',minute_unit:'دقيقة',second_unit:'ثانية',
-        top_leaders:'المتصدرون',rest_leaders:'باقي المتصدرين',
-        // نافذة TON
-        ton_withdraw_title:'سحب TON',first_withdraw_title:'عرض السحب الأول!',
-        first_withdraw_sub:'الحد الأدنى لأول سحبة',first_withdraw_note:'USDT فقط — بدون متطلب مستوى',
-        your_avail_balance:'رصيدك المتاح',min_chip_label:'الحد الأدنى',conversion_rate:'معدل التحويل',
-        ton_address_label:'عنوان محفظة TON',ton_address_error:'الرجاء إدخال عنوان محفظة TON صحيح',
-        submit_withdraw:'إرسال طلب السحب',
-        // إشعارات وإعدادات
-        notifications_title:'الإشعارات',no_notifs:'لا توجد إشعارات بعد',
-        settings_title:'الإعدادات',settings_lang_label:'اللغة',
-        // أوفرلاي
-        gift_claim_btn:'استلم',gift_preparing:'جاري تحضير هديتك...',ad_loading:'جاري تحميل الإعلان...',
-        // التنقل
-        nav_home:'الرئيسية',nav_earn:'اكسب',nav_tasks:'المهام',nav_withdraw:'السحب'
-      },
-      en: {
-        lang_screen_title:'Choose your language',lang_screen_sub:'You can change it later in settings',
-        loading_text:'Loading...',offline_msg:'📵 You are offline — reconnecting automatically',
-        user_greeting:'Welcome back',balance_label:'Total Balance',pts:'USDT',
-        tickets_label:'My Tickets',ticket_unit:'ticket',rank_label:'Rank',
-        friends_label:'Friend invited',tasks_done_label:'Task completed',total_earned_label:'Total Earned',
-        charge_btn:'Deposit',withdraw_btn:'Withdraw',
-        tasks_hero_p:'Complete tasks and collect your daily rewards',
-        our_channel:'Our Official Channel',exclusive_badge:'Exclusive',
-        ad_tasks_label:'Ad Tasks',ad_task_name:'Ad Task',
-        today:'today',loading_short:'Loading...',completed:'Completed',
-        start_btn:'Start',verify_btn:'Verifying...',done_label:'Done',
-        daily_tasks_section_lbl:'Daily Tasks',
-        task_watch_10:'Watch 10 ads today',task_watch_10_of:'out of 10 ads',
-        task_watch_25:'Watch 25 ads',task_watch_25_of:'out of 25 ads',
-        task_invite_3:'Invite 3 friends',task_invite_3_of:'out of 3 friends',
-        collect_btn:'Claim',add_channel_btn:'Add Your Channel',add_channel_sub:'Earn from every new subscriber',
-        earn_title:'Earn',watch_btn:'Watch',tickets_today:"Today\'s Tickets",
-        ads_watched:'Ad watched',daily_limit:'Daily limit',
-        all_done_title:"Great! You\'ve watched all ads",all_done_sub:'Come back tomorrow for new ads',
-        earn_more_label:'Earn More',weekly_badge:'Weekly',
-        invite_btn_title:'Invite Friends',invite_btn_sub:'Invite & earn together',
-        contests:'Weekly Contest',contests_sub:'Compete for big prizes',
-        gift_title:'Daily Reward',gift_sub:'Claim your gift now',daily:'Daily',coming_soon:'Coming Soon',
-        achievements:'Achievements',achievements_sub:'Earn special badges',soon:'Soon',available_badge:'Available',
-        invite_page_title:'Invite Friends',invite_hero_title:'Earn with Friends',
-        invite_hero_sub:'Get a reward for every invite',your_ref_link:'Your Referral Link',
-        copy_btn_text:'Copy',telegram_share:'Telegram',whatsapp_share:'WhatsApp',
-        ref_join_reward:'Friend Join Reward',instant_badge:'Instant',
-        ref_ads_share:"From your friend\'s ad earnings",ref_pct:'25% always',ongoing_badge:'Ongoing',
-        total_referrals:'Total Referrals',earned_from_refs:'Earned from Referrals',
-        invited_friends_title:'Invited Friends',no_friends_yet:'No invited friends yet',
-        share_link_hint:'Share your link and start earning together',
-        balance_available:'Available Balance',withdraw_methods_title:'Withdrawal Methods',
-        withdraw_history_title:'Withdrawal History',no_transactions:'No transactions yet',
-        no_tx_sub:'They will appear here after your first withdrawal',min_label:'Minimum',
-        ton_wallet:'TON Wallet',paypal_name:'PayPal',fawry_name:'Fawry',
-        social_promo_title:'Want to promote your product?',
-        social_promo_sub:'Add your own task on your favorite platform and set the reward for users',
-        facebook:'Facebook',twitter:'Twitter',tiktok:'TikTok',youtube:'YouTube',instagram:'Instagram',
-        sc_upload_lbl:'Upload Proof Screenshot',sc_upload_sub:'PNG or JPG — tap to choose',
-        sc_send_review:'Send for Review',sc_cancel:'Cancel',sc_task_instr:'Task Instructions',
-        sc_proof_lbl:'Submit Proof Image',sc_under_review:'Under Review',
-        sc_review_sub:'Your proof will be reviewed and tickets added soon',
-        sc_approved:'Approved ✓',sc_approved_sub:'Tickets added to your balance',
-        sc_rejected:'Proof Rejected',sc_rejected_sub:'Submitted image was not accepted',
-        sc_retry:'Retry',sc_send_task:'Submit Task',
-        sc_done:'Done ✓',sc_reviewing:'Reviewing...',sc_rejected_short:'Rejected ↩',
-        sc_start_lbl:'· Start',sc_pts_added:'✅ Task completed and tickets added',
-        sc_sent_review:'✅ Submitted — awaiting admin approval',
-        sc_upload_toast:'📋 Complete the task then upload a proof screenshot',
-        sc_sending:'📤 Uploading image...',sc_sending_inline:'Submitting...',
-        sc_no_tasks:'No tasks available right now',sc_load_err:'Failed to load tasks — try again',
-        sc_copied:'✅ Post copied',sc_copy_done:'Copied!',sc_copy_btn:'Copy Text',
-        sc_promo_lbl:'Ready Promo Text (optional)',
-        sc_plat_facebook:'Facebook',sc_plat_twitter:'Twitter',sc_plat_tiktok:'TikTok',
-        sc_plat_youtube:'YouTube',sc_plat_instagram:'Instagram',sc_plat_telegram:'Telegram',
-        contact_dev:'Contact Developer',available_tasks:'Available Tasks',nav_social:'Social',
-        comp_subtitle:'Collect tickets and be the winner',time_remaining:'Time Remaining',
-        day_unit:'day',hour_unit:'hour',minute_unit:'min',second_unit:'sec',
-        top_leaders:'Top Leaders',rest_leaders:'Other Leaders',
-        ton_withdraw_title:'Withdraw TON',first_withdraw_title:'First Withdrawal Offer!',
-        first_withdraw_sub:'Minimum for first withdrawal',first_withdraw_note:'USDT only — no level required',
-        your_avail_balance:'Your Available Balance',min_chip_label:'Minimum',conversion_rate:'Conversion Rate',
-        ton_address_label:'TON Wallet Address',ton_address_error:'Please enter a valid TON wallet address',
-        submit_withdraw:'Submit Withdrawal Request',
-        notifications_title:'Notifications',no_notifs:'No notifications yet',
-        settings_title:'Settings',settings_lang_label:'Language',
-        gift_claim_btn:'Claim',gift_preparing:'Preparing your gift...',ad_loading:'Loading ad...',
-        nav_home:'Home',nav_earn:'Earn',nav_tasks:'Tasks',nav_withdraw:'Withdraw'
-      },
-      ru: {
-        lang_screen_title:'Выберите язык',lang_screen_sub:'Вы можете изменить это позже в настройках',
-        loading_text:'Загрузка...',offline_msg:'📵 Нет подключения — переподключение...',
-        user_greeting:'Добро пожаловать',balance_label:'Общий баланс',pts:'USDT',
-        tickets_label:'Мои билеты',ticket_unit:'билет',rank_label:'Место',
-        friends_label:'Приглашённый друг',tasks_done_label:'Выполненных задач',total_earned_label:'Всего заработано',
-        charge_btn:'Пополнить',withdraw_btn:'Вывести',
-        tasks_hero_p:'Выполняйте задания и собирайте ежедневные награды',
-        our_channel:'Наш официальный канал',exclusive_badge:'Эксклюзив',
-        ad_tasks_label:'Рекламные задания',ad_task_name:'Рекламное задание',
-        today:'сегодня',loading_short:'Загрузка...',completed:'Завершено',
-        start_btn:'Начать',verify_btn:'Проверка...',done_label:'Готово',
-        daily_tasks_section_lbl:'Ежедневные задания',
-        task_watch_10:'Посмотри 10 реклам сегодня',task_watch_10_of:'из 10 реклам',
-        task_watch_25:'Посмотри 25 реклам',task_watch_25_of:'из 25 реклам',
-        task_invite_3:'Пригласи 3 друзей',task_invite_3_of:'из 3 друзей',
-        collect_btn:'Получить',add_channel_btn:'Добавить канал',add_channel_sub:'Зарабатывай с каждого подписчика',
-        earn_title:'Заработок',watch_btn:'Смотреть',tickets_today:'Билеты сегодня',
-        ads_watched:'Реклам просмотрено',daily_limit:'Дневной лимит',
-        all_done_title:'Отлично! Все реклам просмотрены',all_done_sub:'Возвращайтесь завтра за новыми',
-        earn_more_label:'Зарабатывай больше',weekly_badge:'Еженедельно',
-        invite_btn_title:'Пригласить друзей',invite_btn_sub:'Приглашай и зарабатывай',
-        contests:'Еженедельный конкурс',contests_sub:'Соревнуйся за большие призы',
-        gift_title:'Ежедневная награда',gift_sub:'Получи свой подарок',daily:'Ежедневно',coming_soon:'Скоро',
-        achievements:'Достижения',achievements_sub:'Зарабатывай значки',soon:'Скоро',available_badge:'Доступно',
-        invite_page_title:'Пригласить друзей',invite_hero_title:'Зарабатывай с друзьями',
-        invite_hero_sub:'Получай награду за каждое приглашение',your_ref_link:'Ваша реферальная ссылка',
-        copy_btn_text:'Копировать',telegram_share:'Telegram',whatsapp_share:'WhatsApp',
-        ref_join_reward:'Награда за приглашение',instant_badge:'Мгновенно',
-        ref_ads_share:'С рекламного дохода друга',ref_pct:'25% всегда',ongoing_badge:'Постоянно',
-        total_referrals:'Всего рефералов',earned_from_refs:'Заработано с рефералов',
-        invited_friends_title:'Приглашённые друзья',no_friends_yet:'Пока нет приглашённых',
-        share_link_hint:'Поделись ссылкой и зарабатывай вместе',
-        balance_available:'Доступный баланс',withdraw_methods_title:'Методы вывода',
-        withdraw_history_title:'История вывода',no_transactions:'Нет транзакций',
-        no_tx_sub:'Появится после первого вывода',min_label:'Минимум',
-        ton_wallet:'TON Кошелёк',paypal_name:'PayPal',fawry_name:'Fawry',
-        social_promo_title:'Хотите рекламировать продукт?',
-        social_promo_sub:'Добавь задание на любой платформе и укажи награду для пользователей',
-        facebook:'Facebook',twitter:'Twitter',tiktok:'TikTok',youtube:'YouTube',instagram:'Instagram',
-        sc_upload_lbl:'Загрузите скриншот',sc_upload_sub:'PNG или JPG — нажмите для выбора',
-        sc_send_review:'Отправить на проверку',sc_cancel:'Отмена',sc_task_instr:'Инструкции',
-        sc_proof_lbl:'Отправить фото подтверждения',sc_under_review:'На проверке',
-        sc_review_sub:'Ваше подтверждение будет проверено и билеты добавлены скоро',
-        sc_approved:'Одобрено ✓',sc_approved_sub:'Билеты добавлены на баланс',
-        sc_rejected:'Подтверждение отклонено',sc_rejected_sub:'Отправленное изображение не принято',
-        sc_retry:'Повторить',sc_send_task:'Отправить задание',
-        sc_done:'Готово ✓',sc_reviewing:'Проверка...',sc_rejected_short:'Отклонено ↩',
-        sc_start_lbl:'· Начать',sc_pts_added:'✅ Задание выполнено, билеты добавлены',
-        sc_sent_review:'✅ Отправлено — ожидает проверки',
-        sc_upload_toast:'📋 Выполните задание, затем загрузите скриншот',
-        sc_sending:'📤 Загрузка изображения...',sc_sending_inline:'Отправка...',
-        sc_no_tasks:'Нет доступных заданий',sc_load_err:'Не удалось загрузить — попробуйте снова',
-        sc_copied:'✅ Текст скопирован',sc_copy_done:'Скопировано!',sc_copy_btn:'Копировать текст',
-        sc_promo_lbl:'Готовый промо-текст (необязательно)',
-        sc_plat_facebook:'Facebook',sc_plat_twitter:'Twitter',sc_plat_tiktok:'TikTok',
-        sc_plat_youtube:'YouTube',sc_plat_instagram:'Instagram',sc_plat_telegram:'Telegram',
-        contact_dev:'Связаться с разработчиком',available_tasks:'Доступные задания',nav_social:'Соц. сети',
-        comp_subtitle:'Собирай билеты и стань победителем',time_remaining:'Осталось времени',
-        day_unit:'день',hour_unit:'час',minute_unit:'мин',second_unit:'сек',
-        top_leaders:'Лидеры',rest_leaders:'Другие лидеры',
-        ton_withdraw_title:'Вывод TON',first_withdraw_title:'Первый вывод!',
-        first_withdraw_sub:'Минимум для первого вывода',first_withdraw_note:'USDT — без уровня',
-        your_avail_balance:'Доступный баланс',min_chip_label:'Минимум',conversion_rate:'Курс обмена',
-        ton_address_label:'Адрес кошелька TON',ton_address_error:'Введите корректный адрес кошелька TON',
-        submit_withdraw:'Отправить запрос на вывод',
-        notifications_title:'Уведомления',no_notifs:'Уведомлений пока нет',
-        settings_title:'Настройки',settings_lang_label:'Язык',
-        gift_claim_btn:'Получить',gift_preparing:'Подготовка подарка...',ad_loading:'Загрузка рекламы...',
-        nav_home:'Главная',nav_earn:'Заработок',nav_tasks:'Задания',nav_withdraw:'Вывод'
+  function step(){
+    if(!paused){
+      const atBottom = (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 2);
+      if(!atBottom){
+        window.scrollBy(0, SPEED);
       }
-    };
-
-    var _currentLang = 'ar';
-
-    function _t(key) {
-        return (_I18N[_currentLang] || _I18N['ar'])[key] || key;
     }
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+})();
+</script>
 
-    function _applyTranslations(lang) {
-        _currentLang = lang || 'ar';
-        localStorage.setItem('app_lang', _currentLang);
-        var isRTL = (_currentLang === 'ar');
-        document.documentElement.lang = _currentLang;
-        document.documentElement.dir  = isRTL ? 'rtl' : 'ltr';
-        document.querySelectorAll('[data-i18n]').forEach(function(el) {
-            var key = el.getAttribute('data-i18n');
-            var val = _t(key);
-            if (val) el.textContent = val;
-        });
-    }
-
-    // Promise يُحل بعد اختيار اللغة
-    var _langResolve;
-    window._langReady = new Promise(function(res) { _langResolve = res; });
-    window._t = _t;
-    window._applyTranslations = _applyTranslations;
-
-    // ── دالة اختيار اللغة ────────────────────────
-    window._selectLang = function(lang) {
-        var langScreen    = document.getElementById('lang-select-screen');
-        var loadingScreen = document.getElementById('app-loading-screen');
-        var loadingText   = document.getElementById('loading-text');
-
-        // تحديث حالة الراديو
-        ['ar','en','ru'].forEach(function(l) {
-            var btn   = document.getElementById('lang-btn-' + l);
-            var radio = document.getElementById('radio-' + l);
-            if (!btn || !radio) return;
-            if (l === lang) {
-                btn.style.background    = 'rgba(251,191,36,0.15)';
-                btn.style.borderColor   = 'rgba(251,191,36,0.7)';
-                radio.style.background  = '#fbbf24';
-                radio.style.borderColor = '#fbbf24';
-                radio.style.boxShadow   = '0 0 8px rgba(251,191,36,0.6)';
-            } else {
-                btn.style.background    = 'rgba(255,255,255,0.05)';
-                btn.style.borderColor   = 'rgba(255,255,255,0.1)';
-                radio.style.background  = 'transparent';
-                radio.style.borderColor = 'rgba(255,255,255,0.2)';
-                radio.style.boxShadow   = 'none';
-            }
-        });
-
-        langScreen.style.pointerEvents = 'none';
-        _applyTranslations(lang);
-        if (loadingText) loadingText.textContent = _t('loading_text');
-
-        loadingScreen.style.display = 'flex';
-        langScreen.style.opacity    = '0';
-        langScreen.style.visibility = 'hidden';
-        setTimeout(function() { langScreen.style.display = 'none'; }, 420);
-
-        _langResolve();
-    };
-
-    // ── setLang للإعدادات (لا تعيد loading screen) ─────────────
-    window.setLang = function(lang) {
-        _applyTranslations(lang);
-        // تحديث المظهر النشط في صفحة الإعدادات
-        ['ar','en','ru'].forEach(function(l) {
-            var el = document.getElementById('lang-' + l);
-            if (!el) return;
-            if (l === lang) {
-                el.style.borderColor = 'rgba(251,191,36,0.4)';
-                el.style.background  = 'rgba(251,191,36,0.08)';
-            } else {
-                el.style.borderColor = 'rgba(255,255,255,0.08)';
-                el.style.background  = 'rgba(255,255,255,0.04)';
-            }
-        });
-    };
-
-    // ── تهيئة فورية ──────────────────────────────
-    (function() {
-        var saved = localStorage.getItem('app_lang');
-        var langScreen    = document.getElementById('lang-select-screen');
-        var loadingScreen = document.getElementById('app-loading-screen');
-        var loadingText   = document.getElementById('loading-text');
-        if (saved) {
-            langScreen.style.display    = 'none';
-            loadingScreen.style.display = 'flex';
-            _applyTranslations(saved);
-            if (loadingText) loadingText.textContent = _t('loading_text');
-            _langResolve();
-        } else {
-            langScreen.style.display    = 'flex';
-            loadingScreen.style.display = 'none';
-        }
-    })();
-    </script>
 </body>
 </html>
