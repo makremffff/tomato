@@ -77,10 +77,10 @@ const APP_CFG = {
   CONTEST_PRIZES_USD: { 1: 25, 2: 10, 3: 5 }, // جوائز المراكز 1/2/3 بالدولار، تُصرف تلقائياً عند انتهاء الأسبوع
 
   // 🎁 متجر النقاط (صفحة المكافآت) — النقاط عملة منفصلة عن رصيد الدولار
+  // ⚠️ ملاحظة أمان: الاستبدال يخصم فقط من عمود points، ولا يمسّ contest_score إطلاقاً —
+  // نقاط ترتيب المسابقة الأسبوعية محفوظة بعمود منفصل تماماً ولا تتأثر بالاستبدال هنا
   REWARDS_CATALOG: {
-    balance_2usd:    { cost: 500,  title: 'رصيد إضافي 2$',        type: 'balance', amountUsd: 2 },
-    elite_badge:     { cost: 900,  title: 'شارة اللاعب النخبة',   type: 'badge' },
-    double_earn_24h: { cost: 1200, title: 'مضاعفة الأرباح 24 ساعة', type: 'boost', hours: 24, multiplier: 2 },
+    balance_001usd: { cost: 10000, title: 'رصيد إضافي 0.01$', type: 'balance', amountUsd: 0.01 },
   },
 };
 
@@ -301,6 +301,14 @@ function verifyInitData(initData) {
 
 function escapeHtml(str) {
   return String(str || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+// 🛡️ يوحّد قيمة عمود DATE إلى نص "YYYY-MM-DD" بغض النظر هل السائق أرجعها ككائن Date
+// أو كنص جاهز — بدون هذا، مقارنة "===" مع تاريخ اليوم قد تفشل بصمت وتفتح ثغرة استلام متكرر
+function toDateStr(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v).slice(0, 10);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -659,7 +667,7 @@ module.exports = async function handler(req, res) {
 
         const today = new Date().toISOString().slice(0, 10);
         const doneTaskIds = tasksDone.map(r => r.task_id);
-        const watchAdsDoneToday = dbUser.last_ad_date === today ? dbUser.daily_ads : 0;
+        const watchAdsDoneToday = toDateStr(dbUser.last_ad_date) === today ? dbUser.daily_ads : 0;
 
         return res.json({
           ok: true,
@@ -689,7 +697,7 @@ module.exports = async function handler(req, res) {
             watch_ads_5: { progress: watchAdsDoneToday, required: APP_CFG.AD_BATCH_REQUIRED, done: watchAdsDoneToday >= APP_CFG.AD_BATCH_REQUIRED },
             join_channel: { done: doneTaskIds.includes('join_channel'), enabled: !!CHANNEL_USERNAME },
             invite_3_friends: { progress: refStats[0]?.active_count ?? 0, required: APP_CFG.REFERRAL_MILESTONE_FRIENDS, done: doneTaskIds.includes('invite_3_friends') },
-            daily_login: { streak: dbUser.daily_login_streak, required: APP_CFG.DAILY_LOGIN_STREAK_DAYS, done: dbUser.last_daily_login === today },
+            daily_login: { streak: dbUser.daily_login_streak, required: APP_CFG.DAILY_LOGIN_STREAK_DAYS, done: toDateStr(dbUser.last_daily_login) === today },
           },
           leaderboard: leaderboard.map(r => ({
             telegram_id: Number(r.telegram_id), name: r.first_name || 'مستخدم', photo_url: r.photo_url || null,
@@ -713,7 +721,7 @@ module.exports = async function handler(req, res) {
       // ═══════════ المهام: إعلانات (شبكة إعلانات حقيقية — Adsgram) ═══════════
       case 'tasks.startAd': {
         const today = new Date().toISOString().slice(0, 10);
-        const dailyCount = dbUser.last_ad_date === today ? dbUser.daily_ads : 0;
+        const dailyCount = toDateStr(dbUser.last_ad_date) === today ? dbUser.daily_ads : 0;
         if (dailyCount >= APP_CFG.AD_DAILY_MAX) {
           return res.status(429).json({ ok: false, error: 'daily_limit_reached' });
         }
@@ -783,7 +791,7 @@ module.exports = async function handler(req, res) {
         if (!claimed.length) return res.status(400).json({ ok: false, error: 'token_already_used' });
 
         const today = new Date().toISOString().slice(0, 10);
-        const isNewDay = dbUser.last_ad_date !== today;
+        const isNewDay = toDateStr(dbUser.last_ad_date) !== today;
         const doubleActive = dbUser.double_earn_until && new Date(dbUser.double_earn_until) > new Date();
         const reward = APP_CFG.AD_REWARD_USD * (doubleActive ? 2 : 1);
 
@@ -841,11 +849,11 @@ module.exports = async function handler(req, res) {
       // ═══════════ مهمة: تسجيل الدخول اليومي ═══════════
       case 'tasks.dailyLogin': {
         const today = new Date().toISOString().slice(0, 10);
-        if (dbUser.last_daily_login === today) {
+        if (toDateStr(dbUser.last_daily_login) === today) {
           return res.json({ ok: true, alreadyDone: true, streak: dbUser.daily_login_streak });
         }
         const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-        const continuesStreak = dbUser.last_daily_login === yesterday;
+        const continuesStreak = toDateStr(dbUser.last_daily_login) === yesterday;
         const newStreak = continuesStreak ? dbUser.daily_login_streak + 1 : 1;
         const hitMilestone = newStreak % APP_CFG.DAILY_LOGIN_STREAK_DAYS === 0;
         const reward = APP_CFG.DAILY_LOGIN_REWARD_USD + (hitMilestone ? APP_CFG.DAILY_LOGIN_STREAK_BONUS_USD : 0);
@@ -853,7 +861,7 @@ module.exports = async function handler(req, res) {
         await sql(
           `UPDATE users SET daily_login_streak = $1, last_daily_login = $2,
                              balance_usd = balance_usd + $3, points = points + $4
-           WHERE id = $5`,
+           WHERE id = $5 AND last_daily_login IS DISTINCT FROM $2`,
           [newStreak, today, reward, APP_CFG.DAILY_LOGIN_REWARD_POINTS, dbUser.id]
         );
         await logTx(dbUser.id, 'task', hitMilestone ? `مكافأة تسجيل الدخول — ${newStreak} أيام متتالية 🎉` : 'تسجيل دخول يومي', reward);
