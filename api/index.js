@@ -62,7 +62,7 @@ const APP_CFG = {
   // 👥 الإحالات
   REFERRAL_REWARD_USD:          0,     // لا جائزة فورية — فقط نسبة 10% مدى الحياة (تحت)
   REFERRAL_REWARD_POINTS:       500,
-  REFERRAL_ACTIVATION_ADS:      0,     // عدد الإعلانات المطلوبة من المُحال حتى تُفعَّل إحالته
+  REFERRAL_ACTIVATION_ADS:      5,     // عدد الإعلانات المطلوبة من المُحال حتى تُفعَّل إحالته
   REFERRAL_LIFETIME_PERCENT:    0.10,  // نسبة تُضاف للمُحيل من كل أرباح إعلانات المُحال، مدى الحياة
   REFERRAL_MILESTONE_FRIENDS:   3,     // عدد الأصدقاء المطلوب لمهمة "ادعُ 3 أصدقاء"
   REFERRAL_MILESTONE_REWARD_USD: 0.005,
@@ -649,7 +649,7 @@ module.exports = async function handler(req, res) {
 
       // ═══════════ الرئيسية ═══════════
       case 'init': {
-        const [rank, leaderboard, refStats, contest, todayRows, tasksDone] = await Promise.all([
+        const [rank, leaderboard, refStats, refList, contest, todayRows, tasksDone] = await Promise.all([
           getUserRank(dbUser.id),
           getLeaderboard(20),
           sql(
@@ -657,6 +657,9 @@ module.exports = async function handler(req, res) {
                     COUNT(*) FILTER (WHERE referral_activated = TRUE)::INT AS active_count,
                     COUNT(*) FILTER (WHERE referral_activated = FALSE)::INT AS pending_count
              FROM users WHERE referred_by = $1`, [dbUser.telegram_id]),
+          sql(
+            `SELECT first_name, username, photo_url, referral_activated, total_ads_watched, created_at
+             FROM users WHERE referred_by = $1 ORDER BY created_at DESC LIMIT 30`, [dbUser.telegram_id]),
           getActiveContest(),
           sql(
             `SELECT COALESCE(SUM(amount_usd),0)::FLOAT AS today_earn
@@ -705,6 +708,14 @@ module.exports = async function handler(req, res) {
           })),
           referral: {
             count: refStats[0]?.ref_count ?? 0, active: refStats[0]?.active_count ?? 0, pending: refStats[0]?.pending_count ?? 0,
+            list: refList.map(r => ({
+              name: r.first_name || r.username || 'مستخدم',
+              photo_url: r.photo_url || null,
+              activated: r.referral_activated,
+              ads_watched: r.total_ads_watched,
+              activation_required: APP_CFG.REFERRAL_ACTIVATION_ADS,
+              joined_at: r.created_at,
+            })),
           },
           contest: contest ? { name: contest.name, end_at: contest.end_at, start_at: contest.start_at } : null,
           config: {
