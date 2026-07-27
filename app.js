@@ -372,7 +372,7 @@
 
   function renderReferral(){
     const s = appState;
-    document.getElementById('refLinkText').textContent = `t.me/RealCash_bot?start=${s.user.referral_code}`;
+    document.getElementById('refLinkText').textContent = `${REFERRAL_LINK_BASE}${s.user.referral_code}`;
     document.getElementById('refActiveCount').textContent = s.referral.active;
     document.getElementById('refPendingCount').textContent = s.referral.pending;
   }
