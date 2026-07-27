@@ -24,11 +24,10 @@
   }
 
   function renderWalletConnected(address){
-    const short = address.slice(0,4) + '...' + address.slice(-4);
-    document.getElementById('walletSettingSub').textContent = short;
+    document.getElementById('walletSettingSub').textContent = address;
     const chip = document.getElementById('walletChipWallet');
     chip.style.display = 'flex';
-    document.getElementById('walletAddrWallet').textContent = short;
+    document.getElementById('walletAddrWallet').textContent = address;
     const addrInput = document.getElementById('withdrawAddress');
     if (addrInput) addrInput.value = address;
   }
@@ -51,21 +50,27 @@
   }
 
   /* ===== Withdraw flow ===== */
-  function openWithdrawModal(){
+  async function openWithdrawModal(){
     if (!connectedWallet){
       showToast('اربط محفظة TON أولًا من الإعدادات', 'error');
       goTo('settings');
       return;
     }
+    await loadHome(); // تحديث فوري لرصيد وبيانات المستخدم قبل عرض نافذة السحب
+    const min = appState?.config?.withdraw_min_usd ?? 0;
     document.getElementById('withdrawAmount').value = '';
+    document.getElementById('withdrawAmount').min = min;
     document.getElementById('withdrawAvailable').textContent = (appState?.user.balance_usd ?? 0).toFixed(2) + '$';
+    document.getElementById('withdrawMinNote').textContent = min.toFixed(3) + '$';
     openModal('withdrawModalOverlay');
   }
 
   async function submitWithdraw(){
     const amountInput = document.getElementById('withdrawAmount');
     const amount = parseFloat(amountInput.value);
+    const min = appState?.config?.withdraw_min_usd ?? 0;
     if (!amount || amount <= 0){ showToast('أدخل مبلغ صحيح', 'error'); return; }
+    if (amount < min){ showToast('الحد الأدنى للسحب ' + min.toFixed(3) + '$', 'error'); return; }
     if (!connectedWallet){ showToast('اربط محفظة TON أولًا', 'error'); return; }
 
     const btn = document.getElementById('withdrawConfirmBtn');
@@ -306,6 +311,19 @@
   function initials(name){
     return (name || '؟').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('');
   }
+  function escapeAttr(str){
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function avatarHtml(name, photoUrl){
+    const init = initials(name);
+    if (!photoUrl) return init;
+    return `<img src="${escapeAttr(photoUrl)}" alt="" data-fallback="${escapeAttr(init)}" onerror="avatarFallback(this)">`;
+  }
+  function avatarFallback(img){
+    const span = document.createElement('span');
+    span.textContent = img.dataset.fallback || '؟';
+    img.replaceWith(span);
+  }
 
   function renderHome(){
     const s = appState;
@@ -338,6 +356,9 @@
 
     const inv = s.tasks.invite_3_friends;
     document.getElementById('inviteFriendsProgress').textContent = `تقدمك: ${inv.progress} من ${inv.required}`;
+    const invBtn = document.getElementById('taskBtn-invite_3_friends');
+    const invStatus = document.getElementById('inviteFriendsStatus');
+    if (inv.done){ invBtn.style.display='none'; invStatus.style.display='flex'; } else { invBtn.style.display='inline-flex'; invStatus.style.display='none'; }
 
     const dl = s.tasks.daily_login;
     const dlBtn = document.getElementById('taskBtn-daily_login');
@@ -371,7 +392,7 @@
       const crown = cls[i] === 'gold' ? '<svg class="crown" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18l-1.5-9-4.5 4-3-6-3 6-4.5-4z"/></svg>' : '';
       return `<div class="pod-item ${cls[i]}">
         ${crown}
-        <div class="pod-avatar">${initials(p.name)}</div>
+        <div class="pod-avatar">${avatarHtml(p.name, p.photo_url)}</div>
         <div class="pod-name">${p.name}</div>
         <div class="pod-score anim-num">${p.score} نقطة</div>
         <div class="pod-bar">${p.rank}</div>
@@ -380,7 +401,7 @@
     document.getElementById('contestLeaderboard').innerHTML = lb.slice(3).map(p => `
       <div class="lb-row">
         <div class="lb-rank">${p.rank}</div>
-        <div class="ref-avatar">${initials(p.name)}</div>
+        <div class="ref-avatar">${avatarHtml(p.name, p.photo_url)}</div>
         <div class="lb-info"><div class="ln">${p.name}${p.telegram_id === s.user.telegram_id ? ' (أنت)' : ''}</div><div class="ld">${p.score} نقطة</div></div>
         <div class="lb-score anim-num">${p.score}</div>
       </div>
@@ -397,7 +418,7 @@
     const s = appState;
     document.getElementById('settingsName').textContent = s.user.name;
     document.getElementById('settingsHandle').textContent = '@' + s.user.telegram_id;
-    document.getElementById('settingsAvatarInitial').textContent = initials(s.user.name);
+    document.getElementById('settingsAvatarInitial').innerHTML = avatarHtml(s.user.name, s.user.photo_url);
     ['notify_tasks','notify_earnings','notify_contest'].forEach(k=>{
       document.getElementById('toggle-'+k).classList.toggle('on', !!s.user[k]);
     });
