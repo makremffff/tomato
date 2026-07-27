@@ -350,9 +350,11 @@
     const channelCard = document.getElementById('taskCard-join_channel');
     if (s.tasks.join_channel.enabled){
       channelCard.style.display = 'flex';
+      document.getElementById('joinChannelProgress').textContent = `انضم واحصل على ${s.config.join_channel_reward_usd.toFixed(3)}$ فوراً`;
       const jBtn = document.getElementById('taskBtn-join_channel');
       const jStatus = document.getElementById('joinChannelStatus');
       if (s.tasks.join_channel.done){ jBtn.style.display='none'; jStatus.style.display='flex'; }
+      else { jBtn.style.display='inline-flex'; jStatus.style.display='none'; }
     } else { channelCard.style.display = 'none'; }
 
     const inv = s.tasks.invite_3_friends;
