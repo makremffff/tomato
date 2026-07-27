@@ -11,7 +11,7 @@ const BOT_TOKEN       = process.env.BOT_TOKEN;
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET; // ← أضفه في Vercel env vars (يستخدمه أدمن بانل + توقيع ad tokens)
 
 // 📢 قناة الاشتراك الإجباري (اختيارية) — اتركها فارغة لتعطيل مهمة "انضم لقناة تيليجرام"
-const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '';
+const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || 'arabicchannel2026';
 
 // 🎬 Adsgram — بوابة تأكيد server-to-server حقيقية (اختيارية لكن يُنصح بشدة بتفعيلها).
 // بدونها، claimAd يعتمد فقط على توقيت التوكن (لا يزال آمناً)، لكن مع ضبط هذا السر
@@ -50,7 +50,7 @@ const APP_CFG = {
   AD_DURATIONS: { adsgram: 15, monetag: 16, default: 15 },
 
   // 📢 مهمة الانضمام للقناة
-  JOIN_CHANNEL_REWARD_USD:    0.25,
+  JOIN_CHANNEL_REWARD_USD:    0.005,
   JOIN_CHANNEL_REWARD_POINTS: 50,
 
   // 📅 تسجيل الدخول اليومي
@@ -61,7 +61,7 @@ const APP_CFG = {
 
   // 👥 الإحالات
   REFERRAL_REWARD_USD:          0,     // لا جائزة فورية — فقط نسبة 10% مدى الحياة (تحت)
-  REFERRAL_REWARD_POINTS:       100,
+  REFERRAL_REWARD_POINTS:       500,
   REFERRAL_ACTIVATION_ADS:      5,     // عدد الإعلانات المطلوبة من المُحال حتى تُفعَّل إحالته
   REFERRAL_LIFETIME_PERCENT:    0.10,  // نسبة تُضاف للمُحيل من كل أرباح إعلانات المُحال، مدى الحياة
   REFERRAL_MILESTONE_FRIENDS:   3,     // عدد الأصدقاء المطلوب لمهمة "ادعُ 3 أصدقاء"
@@ -441,6 +441,31 @@ async function maybeActivateReferral(dbUser) {
   ).catch(e => console.error('[referral notify]', e.message));
 }
 
+// 💸 عمولة مدى الحياة 10% للمُحيل — تُستدعى بعد أي ربح فعلي للمُحال (إعلان، مهمة، تسجيل دخول...)
+// تُحسب فقط لو كانت الإحالة مُفعَّلة، وتُرسِل إشعاراً فورياً للمُحيل بحصته من هذا الربح تحديداً
+async function creditReferralCommission(referredDbUser, earnedAmountUsd) {
+  if (!earnedAmountUsd || earnedAmountUsd <= 0) return;
+  if (!referredDbUser.referred_by || !referredDbUser.referral_activated) return;
+
+  const commission = earnedAmountUsd * APP_CFG.REFERRAL_LIFETIME_PERCENT;
+  if (commission <= 0) return;
+
+  const referrerRows = await sql(`SELECT * FROM users WHERE telegram_id = $1`, [referredDbUser.referred_by]);
+  const referrer = referrerRows[0];
+  if (!referrer) return;
+
+  await sql(`UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2`, [commission, referrer.id]);
+  const friendName = referredDbUser.first_name || referredDbUser.username || 'صديقك';
+  await logTx(referrer.id, 'referral', `حصة من ربح صديقك ${friendName}`, commission);
+
+  if (referrer.notify_earnings) {
+    sendTelegramMessage(
+      Number(referrer.telegram_id),
+      `🎁 لقد حصلت على حصة من ربح صديقك *${escapeHtml(friendName)}*: *${commission.toFixed(5)}$*\n\nتُضاف تلقائياً 10% من أرباح أصدقائك النشطين لرصيدك، مدى الحياة 💰`
+    ).catch(e => console.error('[referral commission notify]', e.message));
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  Contest / Leaderboard
 // ══════════════════════════════════════════════════════════════════════════════
@@ -678,6 +703,7 @@ module.exports = async function handler(req, res) {
             ad_reward_usd: APP_CFG.AD_REWARD_USD, ad_daily_max: APP_CFG.AD_DAILY_MAX,
             ad_batch_bonus_usd: APP_CFG.AD_BATCH_BONUS_USD,
             daily_login_reward_usd: APP_CFG.DAILY_LOGIN_REWARD_USD,
+            join_channel_reward_usd: APP_CFG.JOIN_CHANNEL_REWARD_USD,
             withdraw_min_usd: APP_CFG.WITHDRAW_MIN_USD, rewards_catalog: APP_CFG.REWARDS_CATALOG,
             channel_username: CHANNEL_USERNAME || null,
           },
@@ -785,6 +811,7 @@ module.exports = async function handler(req, res) {
 
         const refreshed = (await sql(`SELECT * FROM users WHERE id = $1`, [dbUser.id]))[0];
         await maybeActivateReferral(refreshed);
+        await creditReferralCommission(refreshed, reward + batchBonus);
 
         return res.json({
           ok: true, reward, batchBonus, newBalance: parseFloat(refreshed.balance_usd),
@@ -805,6 +832,7 @@ module.exports = async function handler(req, res) {
         await sql(`UPDATE users SET balance_usd = balance_usd + $1, points = points + $2 WHERE id = $3`,
           [APP_CFG.JOIN_CHANNEL_REWARD_USD, APP_CFG.JOIN_CHANNEL_REWARD_POINTS, dbUser.id]);
         await logTx(dbUser.id, 'task', 'انضمام لقناة تيليجرام', APP_CFG.JOIN_CHANNEL_REWARD_USD);
+        await creditReferralCommission(dbUser, APP_CFG.JOIN_CHANNEL_REWARD_USD);
 
         const refreshed = (await sql(`SELECT balance_usd, points FROM users WHERE id = $1`, [dbUser.id]))[0];
         return res.json({ ok: true, reward: APP_CFG.JOIN_CHANNEL_REWARD_USD, newBalance: parseFloat(refreshed.balance_usd), newPoints: Number(refreshed.points) });
@@ -829,6 +857,7 @@ module.exports = async function handler(req, res) {
           [newStreak, today, reward, APP_CFG.DAILY_LOGIN_REWARD_POINTS, dbUser.id]
         );
         await logTx(dbUser.id, 'task', hitMilestone ? `مكافأة تسجيل الدخول — ${newStreak} أيام متتالية 🎉` : 'تسجيل دخول يومي', reward);
+        await creditReferralCommission(dbUser, reward);
 
         const refreshed = (await sql(`SELECT balance_usd, points FROM users WHERE id = $1`, [dbUser.id]))[0];
         return res.json({ ok: true, reward, streak: newStreak, milestone: hitMilestone, newBalance: parseFloat(refreshed.balance_usd), newPoints: Number(refreshed.points) });
