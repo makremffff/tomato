@@ -676,6 +676,8 @@ module.exports = async function handler(req, res) {
           contest: contest ? { name: contest.name, end_at: contest.end_at, start_at: contest.start_at } : null,
           config: {
             ad_reward_usd: APP_CFG.AD_REWARD_USD, ad_daily_max: APP_CFG.AD_DAILY_MAX,
+            ad_batch_bonus_usd: APP_CFG.AD_BATCH_BONUS_USD,
+            daily_login_reward_usd: APP_CFG.DAILY_LOGIN_REWARD_USD,
             withdraw_min_usd: APP_CFG.WITHDRAW_MIN_USD, rewards_catalog: APP_CFG.REWARDS_CATALOG,
             channel_username: CHANNEL_USERNAME || null,
           },
