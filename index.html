@@ -1,831 +1,574 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr" id="htmlRoot">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>EarnBox — Watch. Play. Earn.</title>
-<meta name="description" content="EarnBox: earn real crypto by watching ads, playing games and inviting friends. Withdraw instantly to TON.">
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<title>RealCash</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=DynaPuff:wght@500;700;800&family=Tajawal:wght@400;500;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
-<style>
-:root{
-  --gold:#f5c840;
-  --gold-a15: rgba(245,200,64,.15);
-  --gold-a30: rgba(245,200,64,.30);
-  --gold-a45: rgba(245,200,64,.45);
-  --bg:#07090f;
-  --bg-2:#0c0f18;
-  --card:rgba(255,255,255,.035);
-  --card-b:rgba(255,255,255,.08);
-  --muted:rgba(180,190,210,.55);
-  --muted-dim:rgba(180,190,210,.35);
-  --text:#f3f4f8;
-  --green:#3ddc84;
-  --purple:#a78bfa;
-  --blue:#5eb8ff;
-  --max:1120px;
-}
-
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-
-html{scroll-behavior:smooth}
-
-html[lang="en"] body{font-family:'Inter',sans-serif}
-html[lang="ar"] body{font-family:'Tajawal',sans-serif}
-
-body{
-  background:var(--bg);
-  color:var(--text);
-  overflow-x:hidden;
-  position:relative;
-  min-height:100vh;
-}
-
-/* ambient background */
-.bg-glow{
-  position:fixed; inset:0; z-index:0; pointer-events:none;
-  background:
-    radial-gradient(600px 400px at 15% 8%, rgba(167,139,250,.10), transparent 60%),
-    radial-gradient(700px 500px at 85% 15%, var(--gold-a15), transparent 60%),
-    radial-gradient(800px 600px at 50% 100%, rgba(61,220,132,.06), transparent 60%),
-    var(--bg);
-}
-.bg-noise{
-  position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.035;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-.wrap{position:relative; z-index:1;}
-.container{max-width:var(--max); margin:0 auto; padding:0 22px;}
-
-/* ---------- Type scale ---------- */
-html[lang="en"] .display{font-family:'Permanent Marker',cursive; letter-spacing:1px;}
-html[lang="ar"] .display{font-family:'Tajawal',sans-serif; font-weight:900; letter-spacing:0;}
-.numeric{font-family:'DynaPuff',cursive; font-weight:800;}
-html[lang="ar"] .numeric{font-family:'Tajawal',sans-serif; font-weight:800;}
-
-.gold-text{
-  background:linear-gradient(135deg,#ffe87c 0%, var(--gold) 45%, #c8860a 100%);
-  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
-  filter:drop-shadow(0 0 18px var(--gold-a30));
-}
-
-/* ---------- Icon base ---------- */
-.icn{width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; display:block;}
-
-/* ---------- Language gate (first-visit splash) ---------- */
-.lang-gate{
-  position:fixed; inset:0; z-index:200;
-  display:flex; align-items:center; justify-content:center;
-  background:var(--bg);
-  padding:24px;
-  transition:opacity .5s ease, visibility .5s ease;
-}
-.lang-gate::before{
-  content:''; position:absolute; inset:0; z-index:-1;
-  background:
-    radial-gradient(600px 400px at 20% 15%, rgba(167,139,250,.14), transparent 60%),
-    radial-gradient(700px 500px at 80% 20%, var(--gold-a15), transparent 60%),
-    radial-gradient(800px 600px at 50% 100%, rgba(61,220,132,.08), transparent 60%);
-}
-.lang-gate.gate-hidden{opacity:0; visibility:hidden; pointer-events:none;}
-
-.gate-card{
-  width:100%; max-width:400px; text-align:center;
-}
-.gate-mark{
-  width:56px; height:56px; border-radius:16px; margin:0 auto 26px;
-  background:linear-gradient(135deg,#ffe87c, var(--gold) 60%, #c8860a);
-  display:flex; align-items:center; justify-content:center;
-  box-shadow:0 8px 28px var(--gold-a45);
-}
-.gate-mark svg{width:28px; height:28px; stroke:#1a1200; stroke-width:2.1;}
-
-.gate-title{
-  font-family:'Permanent Marker',cursive; letter-spacing:1px;
-  font-size:26px; margin-bottom:8px; color:var(--text);
-}
-.gate-sub{
-  font-family:'Inter',sans-serif; color:var(--muted); font-size:14px;
-  margin-bottom:34px; line-height:1.6;
-}
-
-.gate-options{display:flex; flex-direction:column; gap:14px;}
-.gate-btn{
-  display:flex; align-items:center; gap:16px;
-  width:100%; text-align:left;
-  background:var(--card); border:1px solid var(--card-b);
-  border-radius:18px; padding:18px 20px; cursor:pointer;
-  transition:transform .2s, border-color .2s, background .2s;
-  font-family:'Inter',sans-serif;
-}
-.gate-btn:hover{transform:translateY(-2px); border-color:var(--gold-a45); background:var(--gold-a15);}
-.gate-flag{
-  width:44px; height:44px; border-radius:12px; flex-shrink:0;
-  display:flex; align-items:center; justify-content:center;
-  font-size:18px; font-weight:800; font-family:'Inter',sans-serif;
-  background:rgba(255,255,255,.06); border:1px solid var(--card-b);
-}
-.gate-btn[data-lang="en"] .gate-flag{color:var(--blue);}
-.gate-btn[data-lang="ar"] .gate-flag{color:var(--green);}
-.gate-text{flex:1;}
-.gate-lang-name{font-size:16px; font-weight:700; color:var(--text); margin-bottom:2px;}
-.gate-lang-sub{font-size:12.5px; color:var(--muted-dim);}
-.gate-btn[data-lang="ar"] .gate-lang-name,
-.gate-btn[data-lang="ar"] .gate-lang-sub{font-family:'Tajawal',sans-serif;}
-.gate-arrow{width:18px; height:18px; stroke:var(--muted-dim); flex-shrink:0; transition:transform .2s, stroke .2s;}
-.gate-btn:hover .gate-arrow{transform:translateX(3px); stroke:var(--gold);}
-.gate-btn[data-lang="ar"] .gate-arrow{transform:scaleX(-1);}
-.gate-btn[data-lang="ar"]:hover .gate-arrow{transform:scaleX(-1) translateX(3px);}
-
-.top-spacer{height:26px;}
-@keyframes pulse{0%,100%{opacity:1} 50%{opacity:.35}}
-
-/* ---------- Section shared ---------- */
-.section{padding:70px 0;}
-.section-head{text-align:center; max-width:600px; margin:0 auto 48px;}
-.eyebrow{
-  display:inline-flex; align-items:center; gap:7px;
-  font-size:12.5px; font-weight:700; letter-spacing:2px;
-  color:var(--gold); text-transform:uppercase; margin-bottom:14px;
-  font-family:'Inter',sans-serif;
-}
-html[lang="ar"] .eyebrow{font-family:'Tajawal',sans-serif; letter-spacing:0;}
-.eyebrow svg{width:14px; height:14px; stroke:var(--gold);}
-.section-head h2{font-size:34px; margin-bottom:14px; line-height:1.22;}
-.section-head p{color:var(--muted); font-size:15.5px; line-height:1.6; font-family:'Inter',sans-serif;}
-html[lang="ar"] .section-head p{font-family:'Tajawal',sans-serif;}
-
-/* ---------- Screenshot showcase (real app screens) — copy stacked above phone ---------- */
-.showcase-section{
-  background:var(--bg-2);
-  border-top:1px solid var(--card-b); border-bottom:1px solid var(--card-b);
-}
-.showcase{
-  display:flex; flex-direction:column; align-items:center;
-  gap:36px; padding:64px 0;
-  text-align:center;
-  max-width:600px; margin:0 auto;
-}
-.showcase:not(:last-child){border-bottom:1px solid var(--card-b);}
-
-.showcase-phone{position:relative; display:flex; justify-content:center; width:100%;}
-.phone-frame{
-  width:100%; max-width:250px;
-  border-radius:32px; overflow:hidden;
-  border:1px solid var(--card-b);
-  box-shadow:0 30px 60px -20px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.02);
-  position:relative;
-}
-.phone-frame::after{
-  content:''; position:absolute; inset:0; border-radius:32px; pointer-events:none;
-  box-shadow: inset 0 0 0 8px #0a0c12;
-}
-.phone-frame img{display:block; width:100%; height:auto;}
-.showcase-glow{
-  position:absolute; width:280px; height:280px; border-radius:50%;
-  filter:blur(70px); opacity:.22; z-index:-1; top:50%; left:50%; transform:translate(-50%,-50%);
-}
-.showcase:nth-of-type(1) .showcase-glow{background:var(--gold);}
-.showcase:nth-of-type(2) .showcase-glow{background:var(--purple);}
-.showcase:nth-of-type(3) .showcase-glow{background:var(--green);}
-.showcase:nth-of-type(4) .showcase-glow{background:var(--blue);}
-.showcase:nth-of-type(5) .showcase-glow{background:#f97362;}
-
-.showcase-copy{width:100%; display:flex; flex-direction:column; align-items:center;}
-.showcase-copy .eyebrow{margin-bottom:16px;}
-.showcase-copy h3{font-size:28px; margin-bottom:16px; line-height:1.25;}
-.showcase-copy p.lead{
-  color:var(--muted); font-size:15px; line-height:1.7; margin-bottom:28px;
-  font-family:'Inter',sans-serif; max-width:440px;
-}
-html[lang="ar"] .showcase-copy p.lead{font-family:'Tajawal',sans-serif;}
-
-.showcase-points{display:flex; flex-direction:column; gap:14px; text-align:left; width:100%; max-width:440px;}
-html[dir="rtl"] .showcase-points{text-align:right;}
-.showcase-point{display:flex; align-items:flex-start; gap:12px;}
-.showcase-point .pt-icon{
-  width:32px; height:32px; border-radius:10px; flex-shrink:0;
-  display:flex; align-items:center; justify-content:center;
-  background:var(--gold-a15); border:1px solid var(--gold-a30);
-}
-.showcase-point .pt-icon svg{width:16px; height:16px; stroke:var(--gold);}
-.showcase-point .pt-text{font-size:14px; color:var(--text); line-height:1.55; padding-top:5px; font-family:'Inter',sans-serif;}
-html[lang="ar"] .showcase-point .pt-text{font-family:'Tajawal',sans-serif; padding-top:4px;}
-.showcase-point .pt-text b{color:var(--gold); font-weight:700;}
-
-@media (max-width:860px){
-  .showcase{gap:28px; padding:48px 0;}
-}
-
-/* ---------- Scroll reveal animation ---------- */
-.reveal{
-  opacity:0; transform:translateY(34px);
-  transition:opacity .8s cubic-bezier(.22,.7,.2,1), transform .8s cubic-bezier(.22,.7,.2,1);
-}
-.reveal.in-view{opacity:1; transform:translateY(0);}
-.reveal-1{transition-delay:.05s;}
-.reveal-2{transition-delay:.16s;}
-.reveal-3{transition-delay:.27s;}
-@media (prefers-reduced-motion: reduce){
-  .reveal{opacity:1; transform:none; transition:none;}
-}
-
-
-/* ---------- Ways to earn ---------- */
-.ways-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px;}
-.way-card{
-  background:var(--card); border:1px solid var(--card-b); border-radius:20px;
-  padding:26px 22px;
-  transition:transform .25s, border-color .25s;
-}
-.way-card:hover{transform:translateY(-3px); border-color:var(--gold-a30);}
-.way-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
-.way-icon{
-  width:44px; height:44px; border-radius:13px;
-  display:flex; align-items:center; justify-content:center;
-}
-.way-icon svg{width:22px; height:22px;}
-.way-card:nth-child(1) .way-icon{background:rgba(94,184,255,.12); border:1px solid rgba(94,184,255,.25);}
-.way-card:nth-child(1) .way-icon svg{stroke:var(--blue);}
-.way-card:nth-child(2) .way-icon{background:rgba(167,139,250,.12); border:1px solid rgba(167,139,250,.25);}
-.way-card:nth-child(2) .way-icon svg{stroke:var(--purple);}
-.way-card:nth-child(3) .way-icon{background:var(--gold-a15); border:1px solid var(--gold-a30);}
-.way-card:nth-child(3) .way-icon svg{stroke:var(--gold);}
-.way-tag{
-  font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:100px;
-  background:var(--gold-a15); color:var(--gold); font-family:'Inter',sans-serif;
-}
-html[lang="ar"] .way-tag{font-family:'Tajawal',sans-serif;}
-.way-card h3{font-size:17px; margin-bottom:8px; font-family:'Inter',sans-serif; font-weight:700;}
-html[lang="ar"] .way-card h3{font-family:'Tajawal',sans-serif; font-weight:800;}
-.way-card p{color:var(--muted); font-size:13.5px; line-height:1.6; font-family:'Inter',sans-serif;}
-html[lang="ar"] .way-card p{font-family:'Tajawal',sans-serif;}
-
-/* ---------- FAQ ---------- */
-.faq-list{max-width:680px; margin:0 auto; display:flex; flex-direction:column; gap:12px;}
-.faq-item{
-  background:var(--card); border:1px solid var(--card-b); border-radius:16px;
-  overflow:hidden; cursor:pointer;
-}
-.faq-q{
-  display:flex; align-items:center; justify-content:space-between; gap:12px;
-  padding:18px 22px; font-size:15px; font-weight:600;
-  font-family:'Inter',sans-serif;
-}
-html[lang="ar"] .faq-q{font-family:'Tajawal',sans-serif; font-weight:700;}
-.faq-q .faq-plus{
-  width:24px; height:24px; flex-shrink:0; border-radius:50%;
-  border:1px solid var(--card-b); display:flex; align-items:center; justify-content:center;
-  transition:transform .3s, border-color .3s;
-}
-.faq-q .faq-plus svg{width:12px; height:12px; stroke:var(--gold); transition:transform .3s;}
-.faq-item.open .faq-plus{transform:rotate(135deg); border-color:var(--gold-a45);}
-.faq-a{
-  max-height:0; overflow:hidden; transition:max-height .35s ease, padding .35s ease;
-  padding:0 22px; color:var(--muted); font-size:14px; line-height:1.65;
-  font-family:'Inter',sans-serif;
-}
-html[lang="ar"] .faq-a{font-family:'Tajawal',sans-serif;}
-.faq-item.open .faq-a{max-height:200px; padding:0 22px 20px;}
-
-/* ---------- Final CTA ---------- */
-.final-cta{text-align:center; padding:90px 0 100px; position:relative;}
-.final-cta h2{font-size:40px; margin-bottom:16px;}
-.final-cta p{color:var(--muted); font-size:16px; margin-bottom:36px; font-family:'Inter',sans-serif;}
-html[lang="ar"] .final-cta p{font-family:'Tajawal',sans-serif;}
-
-.btn-primary{
-  display:inline-flex; align-items:center; gap:10px;
-  background:linear-gradient(135deg,#ffe87c, var(--gold) 55%, #d9a521);
-  color:#1a1200; font-weight:800; font-size:16px;
-  padding:16px 34px; border-radius:100px; text-decoration:none;
-  box-shadow:0 8px 32px var(--gold-a45);
-  transition:transform .25s cubic-bezier(.25,.8,.25,1), box-shadow .25s;
-  font-family:'Inter',sans-serif;
-}
-html[lang="ar"] .btn-primary{font-family:'Tajawal',sans-serif;}
-.btn-primary:hover{transform:translateY(-3px) scale(1.02); box-shadow:0 12px 40px var(--gold-a45);}
-.btn-primary svg{width:19px; height:19px; stroke:#1a1200;}
-
-/* ---------- Footer ---------- */
-.footer{border-top:1px solid var(--card-b); padding:30px 0; text-align:center;}
-.footer p{color:var(--muted-dim); font-size:12.5px; font-family:'Inter',sans-serif;}
-html[lang="ar"] .footer p{font-family:'Tajawal',sans-serif;}
-
-/* ---------- Utility text direction swap ---------- */
-[data-ar]{display:none;}
-html[lang="ar"] [data-en]{display:none;}
-html[lang="ar"] [data-ar]{display:inline;}
-
-/* ---------- Responsive ---------- */
-@media (max-width:860px){
-  .ways-grid{grid-template-columns:1fr 1fr;}
-  .section-head h2{font-size:26px;}
-  .final-cta h2{font-size:28px;}
-}
-@media (max-width:520px){
-  .ways-grid{grid-template-columns:1fr;}
-  .container{padding:0 16px;}
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce){
-  *{animation-duration:.01ms !important; transition-duration:.01ms !important;}
-}
-
-/* Focus visibility */
-a:focus-visible, button:focus-visible{outline:2px solid var(--gold); outline-offset:3px; border-radius:8px;}
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Tajawal:wght@300;400;500;700&family=Pacifico&display=swap" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js"></script>
+<script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- LANGUAGE GATE — shown on first visit only -->
-<div class="lang-gate" id="langGate">
-  <div class="gate-card">
-    <div class="gate-mark">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4 6v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6l-8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<!-- ===== Sidebar ===== -->
+<nav class="sidebar" id="sidebar">
+  <div class="sb-head">
+    <div class="sb-brand">
+      <div class="mark">
+        <img src="asesst/icon.png" alt="RealCash">
+      </div>
+      <div>
+        <b>ريل كاش</b>
+        <small>RealCash</small>
+      </div>
     </div>
-    <div class="gate-title">EarnBox</div>
-    <div class="gate-sub">Choose your language to continue<br>اختر لغتك للمتابعة</div>
-    <div class="gate-options">
-      <button class="gate-btn" data-lang="en" onclick="chooseLang('en')">
-        <span class="gate-flag">EN</span>
-        <span class="gate-text">
-          <span class="gate-lang-name">English</span>
-          <span class="gate-lang-sub">Continue in English</span>
-        </span>
-        <svg class="gate-arrow" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    <div class="sb-close" onclick="closeSidebar()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </div>
+  </div>
+
+  <div class="sb-nav" id="sbNav">
+    <div class="sb-link active" data-page="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      الرئيسية
+    </div>
+    <div class="sb-link" data-page="tasks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l2.5 2.5L16 9"/></svg>
+      المهام
+    </div>
+    <div class="sb-link" data-page="rewards">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M8.5 13L6 21l6-3 6 3-2.5-8"/></svg>
+      المكافآت
+    </div>
+    <div class="sb-link" data-page="referral">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg>
+      الإحالات
+    </div>
+    <div class="sb-link" data-page="contest">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 01-10 0V4z"/><path d="M7 6H4a3 3 0 003 3"/><path d="M17 6h3a3 3 0 01-3 3"/></svg>
+      المسابقة
+    </div>
+    <div class="sb-link" data-page="wallet">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/><path d="M16 15h2"/></svg>
+      المحفظة
+    </div>
+    <div class="sb-link" data-page="history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/></svg>
+      السجل
+    </div>
+    <div class="sb-link" data-page="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
+      الإعدادات
+    </div>
+  </div>
+
+  <div class="sb-foot">
+    <div class="av">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+    </div>
+    <div class="info" id="sbUserInfo">
+      <b id="sbUserName">مستخدم</b>
+      <small id="sbUserMeta">عضو</small>
+    </div>
+  </div>
+</nav>
+
+<div class="app">
+
+  <!-- ============ HOME ============ -->
+  <div class="page active" id="page-home">
+    <div class="topbar">
+      <div style="width:44px"></div>
+      <div class="brand-mini">
+        <div class="mark"><img src="asesst/icon.png" alt="RealCash"></div>
+        <span>ريل كاش</span>
+      </div>
+      <div class="avatar-btn">
+        <div class="dot"></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
+      </div>
+    </div>
+
+    <div class="greeting">
+      <h1 id="greetingText">مرحباً 👋</h1>
+      <p>إليك ملخص أرباحك اليوم</p>
+    </div>
+
+    <div class="balance-zone">
+      <div class="balance-top">
+        <div class="balance-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg>
+          الرصيد الحالي
+        </div>
+        <div class="rank-ring">
+          <svg viewBox="0 0 60 60">
+            <circle class="track" cx="30" cy="30" r="25"/>
+            <circle class="prog" cx="30" cy="30" r="25"/>
+          </svg>
+          <div class="lvl"><b id="userRankBadge">-</b><small>ترتيب</small></div>
+        </div>
+      </div>
+
+      <div class="balance-amount">
+        <span class="num anim-num" id="homeBalance">0.00</span>
+        <span class="cur">USD</span>
+      </div>
+      <div class="balance-sub">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        <span id="todayEarnText">+٠.٠٠$ اليوم</span>
+      </div>
+
+      <div class="balance-actions">
+        <button class="btn-primary" onclick="goTo('wallet')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          سحب الرصيد
+        </button>
+        <button class="btn-ghost" onclick="goTo('history')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"/><path d="M3 3v5h5"/></svg>
+          السجل
+        </button>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <div class="v anim-num" id="statTodayEarn">0.00$</div>
+        <div class="l">أرباح اليوم</div>
+      </div>
+      <div class="stat-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg>
+        <div class="v anim-num" id="statReferrals">0</div>
+        <div class="l">إحالة</div>
+      </div>
+      <div class="stat-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l2.5 2.5L16 9"/></svg>
+        <div class="v" id="statTasks">0/4</div>
+        <div class="l">مهام</div>
+      </div>
+    </div>
+
+    <div class="sec-head">
+      <h3>إجراءات سريعة</h3>
+    </div>
+    <div class="quick-grid">
+      <div class="quick-item" onclick="goTo('tasks')">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+        <span>مشاهدة إعلان</span>
+      </div>
+      <div class="quick-item" onclick="goTo('tasks')">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l2.5 2.5L16 9"/></svg></div>
+        <span>إنجاز مهمة</span>
+      </div>
+      <div class="quick-item" onclick="goTo('referral')">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg></div>
+        <span>دعوة صديق</span>
+      </div>
+      <div class="quick-item" onclick="goTo('wallet')">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></div>
+        <span>سحب</span>
+      </div>
+    </div>
+
+    <div class="bottom-pad"></div>
+  </div>
+
+  <!-- ============ TASKS ============ -->
+  <div class="page" id="page-tasks">
+    <div class="topbar">
+      <div style="width:44px"></div>
+      <div class="brand-mini"><span>المهام</span></div>
+      <div style="width:44px"></div>
+    </div>
+
+    <div class="eyebrow" id="tasksEyebrow">مهامك اليوم</div>
+    <div class="page-title">أنجز مهام واربح</div>
+
+    <div class="task-card">
+      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+      <div class="task-mid">
+        <div class="tn">شاهد إعلانات</div>
+        <div class="td" id="watchAdsProgress">تحميل...</div>
+      </div>
+      <button class="task-btn" id="taskBtn-watch_ads_5" onclick="handleAdTask(this)">ابدأ</button>
+    </div>
+
+    <div class="task-card" id="taskCard-join_channel" style="display:none;">
+      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9"/></svg></div>
+      <div class="task-mid">
+        <div class="tn">انضم لقناة تيليجرام</div>
+        <div class="td">مكافأة فورية</div>
+        <div class="task-status" id="joinChannelStatus" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>مكتملة</div>
+      </div>
+      <button class="task-btn" id="taskBtn-join_channel" onclick="handleJoinChannel(this)">تحقق</button>
+    </div>
+
+    <div class="task-card">
+      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg></div>
+      <div class="task-mid">
+        <div class="tn">ادعُ 3 أصدقاء</div>
+        <div class="td" id="inviteFriendsProgress">تحميل...</div>
+      </div>
+      <button class="task-btn" onclick="shareReferralLink()">دعوة</button>
+    </div>
+
+    <div class="task-card">
+      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+      <div class="task-mid">
+        <div class="tn">تسجيل دخول يومي</div>
+        <div class="td" id="dailyLoginProgress">7 أيام متتالية = مكافأة كبرى</div>
+        <div class="task-status" id="dailyLoginStatus" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>مكتملة</div>
+      </div>
+      <button class="task-btn" id="taskBtn-daily_login" onclick="handleDailyLogin(this)">استلام</button>
+    </div>
+
+    <div class="bottom-pad"></div>
+  </div>
+
+  <!-- ============ REWARDS ============ -->
+  <div class="page" id="page-rewards">
+    <div class="topbar">
+      <div style="width:44px"></div>
+      <div class="brand-mini"><span>المكافآت</span></div>
+      <div style="width:44px"></div>
+    </div>
+
+    <div class="eyebrow">رصيدك من النقاط</div>
+    <div class="page-title"><span class="anim-num" id="pointsBalance">0</span> نقطة</div>
+
+    <div id="rewardsList"></div>
+
+    <div class="bottom-pad"></div>
+  </div>
+
+  <!-- ============ REFERRAL ============ -->
+  <div class="page" id="page-referral">
+    <div class="topbar">
+      <div style="width:44px"></div>
+      <div class="brand-mini"><span>الإحالات</span></div>
+      <div style="width:44px"></div>
+    </div>
+
+    <div class="ref-card">
+      <svg class="big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg>
+      <h3>ادعُ أصدقاءك واربح معًا</h3>
+      <p>احصل على مكافأة فورية لكل صديق ينضم ويُفعَّل حسابه، بالإضافة إلى نسبة من أرباحه مدى الحياة</p>
+      <div class="link-box">
+        <span id="refLinkText">تحميل...</span>
+        <button id="copyRefBtn" onclick="copyReferralLink()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="shareReferralLink()" style="margin-top:14px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+          مشاركة الرابط
+        </button>
+      </div>
+    </div>
+
+    <div class="ref-stats">
+      <div class="stat-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+        <div class="v anim-num" id="refActiveCount">0</div>
+        <div class="l">إحالات نشطة</div>
+      </div>
+      <div class="stat-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <div class="v anim-num" id="refPendingCount">0</div>
+        <div class="l">بانتظار التفعيل</div>
+      </div>
+    </div>
+
+    <div class="sec-head"><h3>سجل الإحالات</h3></div>
+    <div class="panel" style="padding:6px 14px;">
+      <div id="refHistoryList">
+        <div style="padding:16px 4px; color:var(--text-3); font-size:12.5px; text-align:center;">لا يوجد إحالات بعد</div>
+      </div>
+    </div>
+
+    <div class="bottom-pad"></div>
+  </div>
+
+  <!-- ============ CONTEST ============ -->
+  <div class="page" id="page-contest">
+    <div class="topbar">
+      <div style="width:44px"></div>
+      <div class="brand-mini"><span>المسابقة</span></div>
+      <div style="width:44px"></div>
+    </div>
+
+    <div class="eyebrow" id="contestName">المسابقة الأسبوعية</div>
+    <div class="page-title">سباق الصدارة</div>
+
+    <div class="contest-timer" id="contestTimer">
+      <div class="ct-box"><b id="ctDays">--</b><small>أيام</small></div>
+      <div class="ct-box"><b id="ctHours">--</b><small>ساعات</small></div>
+      <div class="ct-box"><b id="ctMinutes">--</b><small>دقيقة</small></div>
+    </div>
+
+    <div class="podium" id="contestPodium"></div>
+
+    <div class="sec-head"><h3>الترتيب الكامل</h3></div>
+    <div class="panel" style="padding:4px 14px;">
+      <div id="contestLeaderboard"></div>
+    </div>
+
+    <div class="bottom-pad"></div>
+  </div>
+
+  <!-- ============ WALLET ============ -->
+  <div class="page" id="page-wallet">
+    <div class="topbar">
+      <div style="width:44px"></div>
+      <div class="brand-mini"><span>المحفظة</span></div>
+      <div style="width:44px"></div>
+    </div>
+
+    <div class="wallet-hero">
+      <div class="lbl">إجمالي الرصيد</div>
+      <div class="amt"><span class="anim-num" id="walletBalance">0.00</span> <span class="cur2">USD</span></div>
+      <button class="withdraw-btn" id="withdrawBtn" onclick="openWithdrawModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        سحب إلى TON
       </button>
-      <button class="gate-btn" data-lang="ar" onclick="chooseLang('ar')">
-        <span class="gate-flag">AR</span>
-        <span class="gate-text">
-          <span class="gate-lang-name">العربية</span>
-          <span class="gate-lang-sub">تابع باللغة العربية</span>
-        </span>
-        <svg class="gate-arrow" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-      </button>
+      <div class="wallet-chip" id="walletChipWallet" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg>
+        <span id="walletAddrWallet"></span>
+      </div>
+    </div>
+
+    <div class="sec-head"><h3>آخر العمليات</h3></div>
+    <div class="panel" style="padding:4px 14px;">
+      <div id="walletTxList"></div>
+    </div>
+
+    <div class="bottom-pad"></div>
+  </div>
+
+  <!-- ============ HISTORY ============ -->
+  <div class="page" id="page-history">
+    <div class="topbar">
+      <div style="width:44px"></div>
+      <div class="brand-mini"><span>السجل</span></div>
+      <div style="width:44px"></div>
+    </div>
+
+    <div class="filter-tabs" id="historyFilterTabs">
+      <div class="f-tab active" data-filter="all">الكل</div>
+      <div class="f-tab" data-filter="earn">أرباح</div>
+      <div class="f-tab" data-filter="withdraw">سحوبات</div>
+      <div class="f-tab" data-filter="referral">إحالات</div>
+      <div class="f-tab" data-filter="task">مهام</div>
+    </div>
+
+    <div class="timeline" id="historyTimeline"></div>
+
+    <div class="bottom-pad"></div>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <div class="page" id="page-settings">
+    <div class="topbar">
+      <div style="width:44px"></div>
+      <div class="brand-mini"><span>الإعدادات</span></div>
+      <div style="width:44px"></div>
+    </div>
+
+    <div class="settings-profile">
+      <div class="av" id="settingsAvatarInitial">؟</div>
+      <div>
+        <div class="sn" id="settingsName">مستخدم</div>
+        <div class="sid" id="settingsHandle">@—</div>
+      </div>
+    </div>
+
+    <div class="set-group">
+      <div class="gl">الحساب</div>
+      <div class="panel" style="padding:0 14px;">
+        <div class="set-row" id="walletSettingRow" onclick="onWalletRowClick()">
+          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg></div>
+          <div class="sn2">
+            عنوان محفظة TON
+            <div id="walletSettingSub" style="font-size:10.5px; color:var(--text-3); font-weight:400; margin-top:2px; direction:ltr;">غير متصلة</div>
+          </div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="set-group">
+      <div class="gl">التنبيهات</div>
+      <div class="panel" style="padding:0 14px;">
+        <div class="set-row">
+          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg></div>
+          <div class="sn2">إشعارات المهام</div>
+          <div class="toggle" id="toggle-notify_tasks" onclick="saveSetting('notify_tasks', this)"></div>
+        </div>
+        <div class="set-row">
+          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+          <div class="sn2">تنبيهات الأرباح</div>
+          <div class="toggle" id="toggle-notify_earnings" onclick="saveSetting('notify_earnings', this)"></div>
+        </div>
+        <div class="set-row">
+          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 01-10 0V4z"/></svg></div>
+          <div class="sn2">تحديثات المسابقة</div>
+          <div class="toggle" id="toggle-notify_contest" onclick="saveSetting('notify_contest', this)"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="set-group">
+      <div class="gl">الدعم</div>
+      <div class="panel" style="padding:0 14px;">
+        <div class="set-row" onclick="openHelpChannel()">
+          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 015.8 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div class="sn2">مركز المساعدة</div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="set-row" onclick="openSupportChat()">
+          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+          <div class="sn2">تواصل معنا</div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="set-row" onclick="openModal('faqModalOverlay')">
+          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></div>
+          <div class="sn2">الأسئلة الشائعة</div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-pad"></div>
+  </div>
+
+</div>
+
+<div class="fab" onclick="openSidebar()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
+</div>
+
+<!-- ===== Toast container ===== -->
+<div class="toast-stack" id="toastStack"></div>
+
+<!-- ===== Withdraw modal ===== -->
+<div class="modal-overlay" id="withdrawModalOverlay" onclick="if(event.target===this) closeModal('withdrawModalOverlay')">
+  <div class="modal-sheet">
+    <div class="modal-close" onclick="closeModal('withdrawModalOverlay')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </div>
+    <div class="modal-handle"></div>
+    <div class="modal-title">سحب إلى TON</div>
+    <div class="modal-sub">الرصيد المتاح: <b id="withdrawAvailable">0.00$</b></div>
+
+    <div class="modal-field">
+      <label>عنوان محفظة TON</label>
+      <input type="text" id="withdrawAddress" placeholder="EQ..." readonly>
+    </div>
+    <div class="modal-field">
+      <label>المبلغ (USD)</label>
+      <input type="number" id="withdrawAmount" placeholder="0.00" min="1" step="0.01">
+    </div>
+
+    <div class="modal-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      لازم تربط محفظة TON أولًا قبل السحب
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal('withdrawModalOverlay')" style="flex:1;">إلغاء</button>
+      <button class="btn-primary" id="withdrawConfirmBtn" onclick="submitWithdraw()" style="flex:2;">تأكيد السحب</button>
     </div>
   </div>
 </div>
 
-<div class="bg-glow"></div>
-<div class="bg-noise"></div>
-
-<div class="wrap">
-
-  <div class="top-spacer"></div>
-
-  <!-- SCREENSHOT SHOWCASE — real app screens -->
-  <section class="showcase-section">
-    <div class="container">
-
-      <!-- 1. Deposit screen -->
-      <div class="showcase">
-        <div class="showcase-copy reveal">
-          <span class="eyebrow">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-            <span data-en>Screen 01 · Deposit</span>
-            <span data-ar>الشاشة 01 · الإيداع</span>
-          </span>
-          <h3 data-en>Load up on tickets, paid in TON</h3>
-          <h3 data-ar>اشحن رصيدك بالتذاكر، ادفع بعملة TON</h3>
-          <p class="lead" data-en>This is the Deposit tab inside EarnBox. Every package is paid directly in TON, and the bigger the package, the more bonus tickets you get per TON spent.</p>
-          <p class="lead" data-ar>هذه هي شاشة الإيداع داخل EarnBox. كل باقة تُدفع مباشرة بعملة TON، وكلما كبرت الباقة زادت التذاكر الإضافية مقابل كل TON تدفعه.</p>
-          <div class="showcase-points">
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
-              <span class="pt-text">
-                <span data-en><b>15,000 tickets</b> for 0.1 TON — the entry package, at a rate of 150K tickets per TON.</span>
-                <span data-ar><b>15,000 تذكرة</b> مقابل 0.1 TON — باقة البداية، بمعدل 150 ألف تذكرة لكل TON.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg></span>
-              <span class="pt-text">
-                <span data-en><b>40,000 tickets</b> for 0.25 TON, marked "Popular" — a better rate at 160K per TON.</span>
-                <span data-ar><b>40,000 تذكرة</b> مقابل 0.25 TON، موسومة بـ"الأكثر شيوعًا" — معدل أفضل بـ160 ألف لكل TON.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 100-8 4 4 0 000 8z"/><path d="M4.2 15a8 8 0 1115.6 0"/><path d="M12 3v2M12 19v2M3 12H1M23 12h-2"/></svg></span>
-              <span class="pt-text">
-                <span data-en><b>250,000 tickets</b> for 1 TON is the "Best Value" package — a +67% bonus at 250K per TON.</span>
-                <span data-ar><b>250,000 تذكرة</b> مقابل 1 TON هي باقة "الأفضل قيمة" — مكافأة +67% بمعدل 250 ألف لكل TON.</span>
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="showcase-phone reveal reveal-1">
-          <div class="showcase-glow" style="top:50%; left:50%;"></div>
-          <div class="phone-frame">
-            <img src="images/deposit.jpg" alt="EarnBox deposit screen showing four ticket packages paid in TON" loading="lazy">
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. Withdraw screen -->
-      <div class="showcase">
-        <div class="showcase-copy reveal">
-          <span class="eyebrow">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/></svg>
-            <span data-en>Screen 02 · Withdraw</span>
-            <span data-ar>الشاشة 02 · السحب</span>
-          </span>
-          <h3 data-en>Pick a tier, tap withdraw, done</h3>
-          <h3 data-ar>اختر الفئة، اضغط سحب، وانتهى الأمر</h3>
-          <p class="lead" data-en>This is the actual Withdraw tab inside EarnBox. Four instant tiers are always on screen — the more you cash out at once, the lower the fee percentage.</p>
-          <p class="lead" data-ar>هذه هي شاشة السحب الحقيقية داخل EarnBox. أربع فئات سحب فورية معروضة دائمًا — كلما سحبت مبلغًا أكبر دفعة واحدة قلّت نسبة العمولة.</p>
-          <div class="showcase-points">
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
-              <span class="pt-text">
-                <span data-en><b>$0.07</b> starter tier — 14% fee, net $0.06. Good for your very first withdrawal.</span>
-                <span data-ar><b>$0.07</b> فئة البداية — عمولة 14%، صافي $0.06. مناسبة لأول عملية سحب.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg></span>
-              <span class="pt-text">
-                <span data-en><b>$0.15</b> marked "Popular" — 10% fee, net $0.135. Most users' go-to amount.</span>
-                <span data-ar><b>$0.15</b> موسومة بـ"الأكثر شيوعًا" — عمولة 10%، صافي $0.135. الخيار المفضل لمعظم المستخدمين.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 100-8 4 4 0 000 8z"/><path d="M4.2 15a8 8 0 1115.6 0"/><path d="M12 3v2M12 19v2M3 12H1M23 12h-2"/></svg></span>
-              <span class="pt-text">
-                <span data-en><b>$0.60</b> is the "Best offer" — just 5% fee, net $0.57. The most efficient withdrawal on the board.</span>
-                <span data-ar><b>$0.60</b> هي "الأفضل" — عمولة 5% فقط، صافي $0.57. أكثر عملية سحب توفيرًا.</span>
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="showcase-phone reveal reveal-1">
-          <div class="showcase-glow" style="top:50%; left:50%;"></div>
-          <div class="phone-frame">
-            <img src="images/withdraw.jpg" alt="EarnBox withdraw screen showing four withdrawal tiers from $0.07 to $0.60" loading="lazy">
-          </div>
-        </div>
-      </div>
-
-      <!-- 3. Contest screen -->
-      <div class="showcase">
-        <div class="showcase-copy reveal">
-          <span class="eyebrow">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v6a5 5 0 01-10 0V4z"/><path d="M7 5H4a2 2 0 002 4M17 5h3a2 2 0 01-2 4"/></svg>
-            <span data-en>Screen 03 · Contest</span>
-            <span data-ar>الشاشة 03 · المسابقة</span>
-          </span>
-          <h3 data-en>A live leaderboard, real cash prizes</h3>
-          <h3 data-ar>ترتيب مباشر وجوائز نقدية حقيقية</h3>
-          <p class="lead" data-en>Straight from the Contest tab — this is what rank 23 sees. Every ticket you collect pushes you up the board, and each rank is worth real money at the end of the cycle.</p>
-          <p class="lead" data-ar>مباشرة من شاشة المسابقة — هذا ما يراه صاحب الترتيب 23. كل تذكرة تجمعها تدفعك للأعلى، وكل مرتبة تساوي مبلغًا حقيقيًا في نهاية الدورة.</p>
-          <div class="showcase-points">
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6 6 1-4.5 4.5L18 20l-6-3-6 3 1.5-6.5L3 9l6-1z"/></svg></span>
-              <span class="pt-text">
-                <span data-en><b>1st place</b> currently sits at 54,355 tickets, winning <b>$25</b> this cycle.</span>
-                <span data-ar><b>المركز الأول</b> حاليًا عند 54,355 تذكرة، يربح <b>$25</b> هذه الدورة.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="10" width="5" height="10"/><rect x="9.5" y="6" width="5" height="14"/><rect x="16" y="12" width="5" height="8"/></svg></span>
-              <span class="pt-text">
-                <span data-en>2nd and 3rd place take home <b>$10</b> and <b>$7</b> — and every rank down to #6 still earns <b>$1</b>.</span>
-                <span data-ar>المركزان الثاني والثالث يحصلان على <b>$10</b> و<b>$7</b> — وحتى المركز السادس يربح <b>$1</b>.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M9 5v14"/></svg></span>
-              <span class="pt-text">
-                <span data-en>Tickets from ads, tasks, and referrals all count toward the same ranking.</span>
-                <span data-ar>التذاكر من الإعلانات والمهام والإحالات كلها تُحسب لنفس الترتيب.</span>
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="showcase-phone reveal reveal-1">
-          <div class="showcase-glow" style="top:50%; left:50%;"></div>
-          <div class="phone-frame">
-            <img src="images/contest.jpg" alt="EarnBox contest leaderboard showing top 3 podium and ranked players" loading="lazy">
-          </div>
-        </div>
-      </div>
-
-      <!-- 4. Referral screen -->
-      <div class="showcase">
-        <div class="showcase-copy reveal">
-          <span class="eyebrow">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4"/></svg>
-            <span data-en>Screen 04 · Referral</span>
-            <span data-ar>الشاشة 04 · الإحالة</span>
-          </span>
-          <h3 data-en>Your link, shown exactly as it appears</h3>
-          <h3 data-ar>رابطك كما يظهر تمامًا داخل التطبيق</h3>
-          <p class="lead" data-en>This account has already earned 50,000 tickets purely from invites. Your personal link sits at the top of the Referral tab, ready to share to Telegram, X, or Facebook in one tap.</p>
-          <p class="lead" data-ar>هذا الحساب ربح بالفعل 50,000 تذكرة من الإحالات فقط. رابطك الخاص موجود أعلى شاشة الإحالة، جاهز للمشاركة على تيليجرام أو X أو فيسبوك بضغطة واحدة.</p>
-          <div class="showcase-points">
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M10.5 6.5H7a4 4 0 000 8h3.5M13.5 17.5H17a4 4 0 000-8h-3.5"/></svg></span>
-              <span class="pt-text">
-                <span data-en>Copy your link with one tap, or share directly through the built-in icons.</span>
-                <span data-ar>انسخ رابطك بضغطة واحدة، أو شاركه مباشرة عبر الأيقونات المدمجة.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8V6a2.5 2.5 0 10-2.5 2.5H12zM12 8V6a2.5 2.5 0 112.5 2.5H12z"/></svg></span>
-              <span class="pt-text">
-                <span data-en><b>5,000 tickets + $0.010</b> credited per friend who joins through your link.</span>
-                <span data-ar><b>5,000 تذكرة + $0.010</b> تُضاف عن كل صديق ينضم عبر رابطك.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg></span>
-              <span class="pt-text">
-                <span data-en>The same screen also lets you watch a quick ad for an extra $0.001, right below your link.</span>
-                <span data-ar>نفس الشاشة تتيح لك أيضًا مشاهدة إعلان سريع مقابل $0.001 إضافية، أسفل رابطك مباشرة.</span>
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="showcase-phone reveal reveal-1">
-          <div class="showcase-glow" style="top:50%; left:50%;"></div>
-          <div class="phone-frame">
-            <img src="images/referral.jpg" alt="EarnBox referral screen showing invite link, tickets earned and watch-ad button" loading="lazy">
-          </div>
-        </div>
-      </div>
-
-      <!-- 5. Game screen -->
-      <div class="showcase">
-        <div class="showcase-copy reveal">
-          <span class="eyebrow">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="6"/><path d="M7 11v4M5 13h4"/><circle cx="16" cy="12" r="1"/><circle cx="18.5" cy="14.5" r="1"/></svg>
-            <span data-en>Screen 05 · Game</span>
-            <span data-ar>الشاشة 05 · اللعبة</span>
-          </span>
-          <h3 data-en>Tap to earn, chain combos for more</h3>
-          <h3 data-ar>اضغط لتربح، واصنع كومبو لمكافآت أكبر</h3>
-          <p class="lead" data-en>The Game tab drops falling bombs across the screen — tap them into the trash before time runs out. Every hit earns tickets, and chaining hits back-to-back builds a combo multiplier.</p>
-          <p class="lead" data-ar>شاشة اللعبة تُسقط قنابل عبر الشاشة — اضغط عليها لترميها بسلة المهملات قبل نفاد الوقت. كل ضربة تربحك تذاكر، وتوالي الضربات يبني مضاعف كومبو.</p>
-          <div class="showcase-points">
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
-              <span class="pt-text">
-                <span data-en>A visible countdown keeps every round short and focused — this run has <b>32 seconds</b> left.</span>
-                <span data-ar>عداد تنازلي واضح يخلي كل جولة قصيرة ومركزة — هذه الجولة متبقٍ لها <b>32 ثانية</b>.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
-              <span class="pt-text">
-                <span data-en>Landing hits without missing builds a combo — <b>x4</b> shown here — that multiplies every ticket earned.</span>
-                <span data-ar>ضرب الأهداف دون تفويت يبني كومبو — <b>x4</b> ظاهر هنا — يضاعف كل تذكرة تربحها.</span>
-              </span>
-            </div>
-            <div class="showcase-point">
-              <span class="pt-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4L12 2z"/></svg></span>
-              <span class="pt-text">
-                <span data-en>Your ticket total and personal best are always pinned at the top — this player's best run is <b>361</b>.</span>
-                <span data-ar>إجمالي تذاكرك وأفضل رقم لك مثبّتان دائمًا بالأعلى — أفضل جولة لهذا اللاعب <b>361</b>.</span>
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="showcase-phone reveal reveal-1">
-          <div class="showcase-glow" style="top:50%; left:50%;"></div>
-          <div class="phone-frame">
-            <img src="images/game.jpg" alt="EarnBox game screen showing falling targets, a 32 second timer and x4 combo" loading="lazy">
-          </div>
-        </div>
-      </div>
-
+<!-- ===== Generic confirm modal (rewards / tasks) ===== -->
+<div class="modal-overlay" id="confirmModalOverlay" onclick="if(event.target===this) closeModal('confirmModalOverlay')">
+  <div class="modal-sheet">
+    <div class="modal-close" onclick="closeModal('confirmModalOverlay')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </div>
-  </section>
-
-  <!-- WAYS TO EARN -->
-  <section class="section">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
-          <span data-en>Earning methods</span>
-          <span data-ar>طرق الربح</span>
-        </span>
-        <h2 data-en>Every corner of the app pays</h2>
-        <h2 data-ar>كل جزء من التطبيق يربحك</h2>
-        <p data-en>Mix and match — most users combine all three for the fastest balance growth.</p>
-        <p data-ar>يمكنك الجمع بينها — أغلب المستخدمين يستخدمون الثلاث طرق معًا لأسرع نمو للرصيد.</p>
-      </div>
-
-      <div class="ways-grid">
-        <div class="way-card">
-          <div class="way-top">
-            <span class="way-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg></span>
-            <span class="way-tag" data-en>Passive</span>
-            <span class="way-tag" data-ar>سهل</span>
-          </div>
-          <h3 data-en>Watch ads</h3>
-          <h3 data-ar>شاهد الإعلانات</h3>
-          <p data-en>Short video ads pay per view. Watch a full session for the full reward, or a partial one for half.</p>
-          <p data-ar>إعلانات فيديو قصيرة تدفع لكل مشاهدة. أكمل المشاهدة للحصول على المكافأة كاملة، أو نصفها إن قاطعتها.</p>
-        </div>
-        <div class="way-card">
-          <div class="way-top">
-            <span class="way-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg></span>
-            <span class="way-tag" data-en>Bonus</span>
-            <span class="way-tag" data-ar>مكافأة</span>
-          </div>
-          <h3 data-en>Play & complete tasks</h3>
-          <h3 data-ar>العب وأنجز المهام</h3>
-          <p data-en>Daily missions and simple social tasks hand out extra tickets on top of your ad earnings.</p>
-          <p data-ar>مهام يومية ومهام تواصل اجتماعي بسيطة تمنحك تذاكر إضافية فوق أرباح الإعلانات.</p>
-        </div>
-        <div class="way-card">
-          <div class="way-top">
-            <span class="way-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><circle cx="17.5" cy="8.5" r="2.6"/><path d="M15.8 12.5a5.2 5.2 0 016.7 5"/></svg></span>
-            <span class="way-tag" data-en>Forever</span>
-            <span class="way-tag" data-ar>مستمر</span>
-          </div>
-          <h3 data-en>Recruit friends</h3>
-          <h3 data-ar>ادعُ أصدقاءك</h3>
-          <p data-en>Earn a share of everything your invited friends make, automatically, for as long as they play.</p>
-          <p data-ar>احصل على نسبة من أرباح أصدقائك الذين تدعوهم تلقائيًا وباستمرار طوال فترة لعبهم.</p>
-        </div>
-      </div>
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="confirmModalTitle">تأكيد</div>
+    <div class="modal-sub" id="confirmModalSub"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal('confirmModalOverlay')" style="flex:1;">إلغاء</button>
+      <button class="btn-primary" id="confirmModalBtn" style="flex:2;">تأكيد</button>
     </div>
-  </section>
-
-  <!-- FAQ -->
-  <section class="section">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 114 2c-.8.7-1.5 1.2-1.5 2.5M12 17h.01"/></svg>
-          <span data-en>Good to know</span>
-          <span data-ar>معلومات مفيدة</span>
-        </span>
-        <h2 data-en>Frequently asked questions</h2>
-        <h2 data-ar>الأسئلة الشائعة</h2>
-      </div>
-
-      <div class="faq-list" id="faqList">
-        <div class="faq-item">
-          <div class="faq-q">
-            <span data-en>Do I need to install anything?</span>
-            <span data-ar>هل أحتاج لتثبيت أي شيء؟</span>
-            <span class="faq-plus"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-          </div>
-          <div class="faq-a">
-            <span data-en>No. EarnBox runs entirely inside Telegram as a Mini App — just tap the bot link and it opens instantly.</span>
-            <span data-ar>لا. يعمل EarnBox بالكامل داخل تيليجرام كتطبيق مصغّر — فقط اضغط رابط البوت ويفتح فورًا.</span>
-          </div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">
-            <span data-en>Where do withdrawals go?</span>
-            <span data-ar>إلى أين تذهب الأموال المسحوبة؟</span>
-            <span class="faq-plus"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-          </div>
-          <div class="faq-a">
-            <span data-en>Directly on-chain to your connected TON wallet. Connect it once inside the app and every withdrawal after that is instant.</span>
-            <span data-ar>مباشرة على البلوكشين إلى محفظة TON المرتبطة بحسابك. اربطها مرة واحدة داخل التطبيق وكل عملية سحب بعدها تكون فورية.</span>
-          </div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">
-            <span data-en>Is there a minimum to withdraw?</span>
-            <span data-ar>هل يوجد حد أدنى للسحب؟</span>
-            <span class="faq-plus"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-          </div>
-          <div class="faq-a">
-            <span data-en>The smallest tier starts at just $0.07, so you don't need to grind for weeks before your first payout.</span>
-            <span data-ar>أصغر فئة سحب تبدأ من $0.07 فقط، فلا تحتاج للانتظار أسابيع قبل أول عملية سحب.</span>
-          </div>
-        </div>
-        <div class="faq-item">
-          <div class="faq-q">
-            <span data-en>How does the referral commission work?</span>
-            <span data-ar>كيف تعمل عمولة الإحالة؟</span>
-            <span class="faq-plus"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-          </div>
-          <div class="faq-a">
-            <span data-en>You earn a welcome bonus the moment a friend joins through your link, plus an ongoing percentage of their ad earnings for as long as they stay active.</span>
-            <span data-ar>تحصل على مكافأة ترحيبية فور انضمام صديقك عبر رابطك، بالإضافة إلى نسبة مستمرة من أرباحه من الإعلانات طالما بقي نشطًا.</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- FINAL CTA -->
-  <section class="final-cta">
-    <div class="container">
-      <h2 class="display gold-text" data-en>Your balance is waiting.</h2>
-      <h2 class="display gold-text" data-ar>رصيدك بانتظارك.</h2>
-      <p data-en>Open the bot, watch your first ad, and see your first tickets land in seconds.</p>
-      <p data-ar>افتح البوت، شاهد أول إعلان، وشاهد أول تذاكرك تصل خلال ثوانٍ.</p>
-      <a class="btn-primary" href="https://t.me/EarnlixBot/play?startapp=ref_7741750541" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-        <span data-en>Open Telegram Bot</span>
-        <span data-ar>افتح بوت تيليجرام</span>
-      </a>
-    </div>
-  </section>
-
-  <!-- FOOTER -->
-  <footer class="footer">
-    <div class="container">
-      <p data-en>EarnBox — earn, invite, withdraw. Not affiliated with Telegram.</p>
-      <p data-ar>EarnBox — اربح، ادعُ، اسحب. غير تابع لتيليجرام.</p>
-    </div>
-  </footer>
-
+  </div>
 </div>
 
-<script>
-function applyLang(lang){
-  const html = document.getElementById('htmlRoot');
-  html.setAttribute('lang', lang);
-  html.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
-}
+<!-- ===== FAQ modal ===== -->
+<div class="modal-overlay" id="faqModalOverlay" onclick="if(event.target===this) closeModal('faqModalOverlay')">
+  <div class="modal-sheet" style="max-height:80vh; overflow-y:auto;">
+    <div class="modal-close" onclick="closeModal('faqModalOverlay')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </div>
+    <div class="modal-handle"></div>
+    <div class="modal-title">الأسئلة الشائعة</div>
+    <div class="modal-sub">كل اللي بدك تعرفه عن ريل كاش</div>
 
-function chooseLang(lang){
-  applyLang(lang);
-  localStorage.setItem('earnbox_lang', lang);
-  const gate = document.getElementById('langGate');
-  gate.classList.add('gate-hidden');
-  document.body.style.overflow = '';
-}
+    <div class="faq-list">
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>من نحن؟</span>
+          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="faq-a">
+          <p>ريل كاش منصة داخل تيليجرام بتخليك تربح مال حقيقي أو نقاط من خلال مشاهدة الإعلانات، إنجاز المهام، ودعوة أصدقائك. أرباحك بتتجمع برصيدك وتقدر تسحبها لمحفظة TON.</p>
+        </div>
+      </div>
 
-(function initLangGate(){
-  const saved = localStorage.getItem('earnbox_lang');
-  const gate = document.getElementById('langGate');
-  if(saved === 'en' || saved === 'ar'){
-    applyLang(saved);
-    gate.classList.add('gate-hidden');
-  } else {
-    document.body.style.overflow = 'hidden';
-  }
-})();
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>كيف أربح رصيد؟</span>
+          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="faq-a">
+          <p>من صفحة "المهام" — شاهد إعلانات، أنجز مهام يومية، أو ادعُ أصدقاء عبر رابط الإحالة الخاص فيك من صفحة "الإحالات". كل مهمة موضح جنبها المبلغ اللي بتربحه.</p>
+        </div>
+      </div>
 
-// FAQ accordion
-document.querySelectorAll('.faq-item').forEach(item=>{
-  item.querySelector('.faq-q').addEventListener('click', ()=>{
-    const wasOpen = item.classList.contains('open');
-    document.querySelectorAll('.faq-item').forEach(i=>i.classList.remove('open'));
-    if(!wasOpen) item.classList.add('open');
-  });
-});
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>كيف أسحب رصيدي؟</span>
+          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="faq-a">
+          <p>اربط محفظة TON من صفحة "الإعدادات"، بعدها روح لصفحة "المحفظة" واضغط "سحب إلى TON"، حدد المبلغ وأكّد. الطلب بينعالج ويوصلك إشعار لما ينرسل.</p>
+        </div>
+      </div>
 
-// Scroll reveal — each showcase copy/phone animates in as it enters view
-(function revealOnScroll(){
-  const targets = document.querySelectorAll('.reveal');
-  if(!('IntersectionObserver' in window)){
-    targets.forEach(t=>t.classList.add('in-view'));
-    return;
-  }
-  const io = new IntersectionObserver((entries)=>{
-    entries.forEach(entry=>{
-      if(entry.isIntersecting){
-        entry.target.classList.add('in-view');
-        io.unobserve(entry.target);
-      }
-    });
-  }, {threshold:0.18, rootMargin:'0px 0px -40px 0px'});
-  targets.forEach(t=>io.observe(t));
-})();
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>هل بياناتي وأموالي آمنة؟</span>
+          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="faq-a">
+          <p>نعم — التطبيق بيتحقق من هويتك عبر بيانات تيليجرام الرسمية، وكل عمليات السحب بتنربط بمحفظة TON اللي تربطها إنت بنفسك. ما منطلب أي معلومات حساسة زي كلمات مرور المحفظة.</p>
+        </div>
+      </div>
 
-// Gentle, slow auto-scroll (pauses on any user interaction)
-(function autoScroll(){
-  let paused = false;
-  let resumeTimer = null;
-  const SPEED = 0.35; // px per frame, slow and light
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>عندي سؤال ثاني، كيف أتواصل معكم؟</span>
+          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="faq-a">
+          <p>تقدر تتواصل معنا مباشرة من زر "تواصل معنا" بصفحة الإعدادات، أو تنضم لقناة "مركز المساعدة" لآخر التحديثات والدعم.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-  function pause(){
-    paused = true;
-    clearTimeout(resumeTimer);
-    resumeTimer = setTimeout(()=>{ paused = false; }, 2600);
-  }
-  ['wheel','touchstart','keydown','pointerdown'].forEach(evt=>{
-    window.addEventListener(evt, pause, {passive:true});
-  });
-
-  function step(){
-    if(!paused){
-      const atBottom = (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 2);
-      if(!atBottom){
-        window.scrollBy(0, SPEED);
-      }
-    }
-    requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
-})();
-</script>
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script src="ui.js"></script>
+<script src="app.js"></script>
 
 </body>
 </html>
