@@ -375,6 +375,23 @@
     document.getElementById('refLinkText').textContent = `${REFERRAL_LINK_BASE}${s.user.referral_code}`;
     document.getElementById('refActiveCount').textContent = s.referral.active;
     document.getElementById('refPendingCount').textContent = s.referral.pending;
+
+    const list = s.referral.list || [];
+    const container = document.getElementById('refHistoryList');
+    if (!list.length){
+      container.innerHTML = `<div style="padding:16px 4px; color:var(--text-3); font-size:12.5px; text-align:center;">لا يوجد إحالات بعد</div>`;
+      return;
+    }
+    container.innerHTML = list.map(f => {
+      const statusText = f.activated
+        ? 'نشط — تكسب 10% من أرباحه'
+        : `بانتظار التفعيل (${f.ads_watched}/${f.activation_required} إعلانات)`;
+      return `<div class="ref-list-item">
+        <div class="ref-avatar">${avatarHtml(f.name, f.photo_url)}</div>
+        <div class="ri"><div class="rn">${f.name}</div><div class="rd">${statusText}</div></div>
+        <div class="rv">${f.activated ? '✅' : '⏳'}</div>
+      </div>`;
+    }).join('');
   }
 
   function renderContest(){
@@ -451,7 +468,7 @@
 
   async function loadHistory(filter){
     try{
-      const res = await apiCall('history.list', { filter: filter === 'all' ? undefined : filter, limit: 50 });
+      const res = await apiCall('history.list', { filter: filter === 'all' ? undefined : filter, limit: 6 });
       const container = document.getElementById('historyTimeline');
       renderTransactionsInto(container, res.transactions, 'لا توجد عمليات بعد');
       // العناصر الجديدة تحتاج فئة timeline بدل tx-row لتنسيق مطابق للتصميم الأصلي
