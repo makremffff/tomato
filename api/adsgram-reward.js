@@ -6,7 +6,7 @@
 //  وبالتالي لا يمكن لأي مستخدم أو سكربت تزويره أو رؤيته.
 //
 //  اضبط في partner.adsgram.ai → Ad unit → Reward URL:
-//    https://<your-domain>/api/adsgram-reward?secret=<ADSGRAM_REWARD_SECRET>&userid=[userId]
+//    https://tomato-v3.vercel.app/api/adsgram-reward?secret=<ADSGRAM_REWARD_SECRET>&userid=[userId]
 //
 //  [userId] هو placeholder حرفي — Adsgram تستبدله بـ Telegram ID الخاص بالمستخدم.
 //  ADSGRAM_REWARD_SECRET سرّ عشوائي طويل تضبطه في Vercel env vars وتستخدم نفس

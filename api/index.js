@@ -39,8 +39,8 @@ const APP_CFG = {
   // 🎬 مهمة "شاهد إعلانات"
   AD_REWARD_USD:        0.02,   // مكافأة كل إعلان بالدولار
   AD_REWARD_POINTS:     10,     // نقاط المكافآت لكل إعلان
-  AD_BATCH_REQUIRED:    5,      // عدد الإعلانات في المهمة اليومية "شاهد 5 إعلانات"
-  AD_BATCH_BONUS_USD:   0.10,   // مكافأة إضافية عند إكمال الدفعة كاملة
+  AD_BATCH_REQUIRED:    15,     // عدد الإعلانات في المهمة اليومية "شاهد 15 إعلان"
+  AD_BATCH_BONUS_USD:   0.02,   // مكافأة إضافية عند إكمال الدفعة كاملة
   AD_DAILY_MAX:         40,     // أقصى عدد إعلانات مسموح بها باليوم لكل مستخدم
   AD_COOLDOWN_SEC:      15,     // أقل فاصل زمني بين مشاهدتين
   AD_TOKEN_GRACE_SEC:   90,     // صلاحية الـ token بعد اكتمال مدة المشاهدة المطلوبة
@@ -54,21 +54,21 @@ const APP_CFG = {
   JOIN_CHANNEL_REWARD_POINTS: 50,
 
   // 📅 تسجيل الدخول اليومي
-  DAILY_LOGIN_REWARD_USD:      0.05,
+  DAILY_LOGIN_REWARD_USD:      0.002857, // 0.02$ مقسّمة على 7 أيام
   DAILY_LOGIN_REWARD_POINTS:   20,
   DAILY_LOGIN_STREAK_DAYS:     7,
-  DAILY_LOGIN_STREAK_BONUS_USD: 1.00,  // مكافأة كبرى عند إكمال 7 أيام متتالية
+  DAILY_LOGIN_STREAK_BONUS_USD: 0,     // لا مكافأة إضافية — المجموع 0.02$ موزّع على الأيام السبعة فقط
 
   // 👥 الإحالات
-  REFERRAL_REWARD_USD:          0.50,  // فوري عند تفعيل إحالة صديق
+  REFERRAL_REWARD_USD:          0,     // لا جائزة فورية — فقط نسبة 10% مدى الحياة (تحت)
   REFERRAL_REWARD_POINTS:       100,
   REFERRAL_ACTIVATION_ADS:      5,     // عدد الإعلانات المطلوبة من المُحال حتى تُفعَّل إحالته
   REFERRAL_LIFETIME_PERCENT:    0.10,  // نسبة تُضاف للمُحيل من كل أرباح إعلانات المُحال، مدى الحياة
   REFERRAL_MILESTONE_FRIENDS:   3,     // عدد الأصدقاء المطلوب لمهمة "ادعُ 3 أصدقاء"
-  REFERRAL_MILESTONE_REWARD_USD: 0.50,
+  REFERRAL_MILESTONE_REWARD_USD: 0.005,
 
   // 💰 السحب
-  WITHDRAW_MIN_USD:              5,
+  WITHDRAW_MIN_USD:              0.025,
   WITHDRAW_MIN_ACTIVE_REFERRALS: 0,    // 0 = الشرط معطّل، غيّرها لأي رقم لتفعيل شرط الإحالات قبل السحب
   WITHDRAW_REQUIRE_CHANNEL:      false,// true لتفعيل اشتراط الانضمام للقناة قبل السحب
 
