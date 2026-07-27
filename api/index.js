@@ -62,7 +62,7 @@ const APP_CFG = {
   // 👥 الإحالات
   REFERRAL_REWARD_USD:          0,     // لا جائزة فورية — فقط نسبة 10% مدى الحياة (تحت)
   REFERRAL_REWARD_POINTS:       500,
-  REFERRAL_ACTIVATION_ADS:      5,     // عدد الإعلانات المطلوبة من المُحال حتى تُفعَّل إحالته
+  REFERRAL_ACTIVATION_ADS:      0,     // عدد الإعلانات المطلوبة من المُحال حتى تُفعَّل إحالته
   REFERRAL_LIFETIME_PERCENT:    0.10,  // نسبة تُضاف للمُحيل من كل أرباح إعلانات المُحال، مدى الحياة
   REFERRAL_MILESTONE_FRIENDS:   3,     // عدد الأصدقاء المطلوب لمهمة "ادعُ 3 أصدقاء"
   REFERRAL_MILESTONE_REWARD_USD: 0.005,
