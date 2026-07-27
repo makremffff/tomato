@@ -12,7 +12,8 @@
     tonConnectUI = new window.TON_CONNECT_UI.TonConnectUI({ manifestUrl: TON_MANIFEST_URL });
     tonConnectUI.onStatusChange(async (wallet) => {
       if (wallet){
-        connectedWallet = wallet.account.address;
+        const toFriendly = window.TON_CONNECT_UI.toUserFriendlyAddress;
+        connectedWallet = toFriendly ? toFriendly(wallet.account.address) : wallet.account.address;
         renderWalletConnected(connectedWallet);
         try{ await apiCall('wallet.connect', { walletAddress: connectedWallet }); }
         catch(err){ showToast(friendlyError(err), 'error'); }
@@ -60,7 +61,7 @@
     const min = appState?.config?.withdraw_min_usd ?? 0;
     document.getElementById('withdrawAmount').value = '';
     document.getElementById('withdrawAmount').min = min;
-    document.getElementById('withdrawAvailable').textContent = (appState?.user.balance_usd ?? 0).toFixed(2) + '$';
+    document.getElementById('withdrawAvailable').textContent = (appState?.user.balance_usd ?? 0).toFixed(3) + '$';
     document.getElementById('withdrawMinNote').textContent = min.toFixed(3) + '$';
     openModal('withdrawModalOverlay');
   }
@@ -91,7 +92,7 @@
   function updateBalanceDisplay(newBalance){
     if (appState) appState.user.balance_usd = newBalance;
     document.querySelectorAll('#homeBalance, #walletBalance').forEach(el => {
-      el.textContent = newBalance.toFixed(2);
+      el.textContent = newBalance.toFixed(3);
       animateCountUp(el, 700);
     });
   }
@@ -150,7 +151,7 @@
       }
       if (claim?.error) throw new Error(claim.error);
 
-      showToast('تم رصد المشاهدة +' + claim.reward.toFixed(2) + '$' + (claim.batchBonus ? ' + مكافأة الدفعة' : ''), 'success');
+      showToast('تم رصد المشاهدة +' + claim.reward.toFixed(3) + '$' + (claim.batchBonus ? ' + مكافأة الدفعة' : ''), 'success');
       updateBalanceDisplay(claim.newBalance);
       loadHome();
     } catch(err){
@@ -169,7 +170,7 @@
         if (res.channel && tg?.openTelegramLink) tg.openTelegramLink('https://t.me/' + res.channel);
         return;
       }
-      showToast(res.alreadyDone ? 'المهمة مكتملة بالفعل' : 'تم رصد الانضمام +' + (res.reward || 0).toFixed(2) + '$', 'success');
+      showToast(res.alreadyDone ? 'المهمة مكتملة بالفعل' : 'تم رصد الانضمام +' + (res.reward || 0).toFixed(3) + '$', 'success');
       if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
       loadHome();
     } catch(err){
@@ -186,7 +187,7 @@
       if (res.alreadyDone){
         showToast('رجع بكرة تاخد مكافأة تسجيل الدخول', 'info');
       } else {
-        showToast('تم استلام مكافأة اليوم +' + res.reward.toFixed(2) + '$' + (res.milestone ? ' 🎉 سلسلة كاملة!' : ''), 'success');
+        showToast('تم استلام مكافأة اليوم +' + res.reward.toFixed(3) + '$' + (res.milestone ? ' 🎉 سلسلة كاملة!' : ''), 'success');
         updateBalanceDisplay(res.newBalance);
       }
       loadHome();
@@ -328,10 +329,10 @@
   function renderHome(){
     const s = appState;
     document.getElementById('greetingText').textContent = `مرحباً، ${s.user.name} 👋`;
-    document.getElementById('homeBalance').textContent = s.user.balance_usd.toFixed(2);
+    document.getElementById('homeBalance').textContent = s.user.balance_usd.toFixed(3);
     document.getElementById('userRankBadge').textContent = s.user.rank ?? '-';
-    document.getElementById('todayEarnText').textContent = `+${s.stats.today_earn_usd.toFixed(2)}$ اليوم`;
-    document.getElementById('statTodayEarn').textContent = s.stats.today_earn_usd.toFixed(2) + '$';
+    document.getElementById('todayEarnText').textContent = `+${s.stats.today_earn_usd.toFixed(3)}$ اليوم`;
+    document.getElementById('statTodayEarn').textContent = s.stats.today_earn_usd.toFixed(3) + '$';
     document.getElementById('statReferrals').textContent = s.stats.referrals_count;
     document.getElementById('statTasks').textContent = `${s.stats.tasks_done_today}/${s.stats.tasks_total}`;
     document.getElementById('sbUserName').textContent = s.user.name;
@@ -341,9 +342,9 @@
   function renderTasks(){
     const s = appState;
     const w = s.tasks.watch_ads_5;
-    document.getElementById('watchAdsProgress').textContent = `${w.progress}/${w.required} — اربح ${s.config.ad_reward_usd.toFixed(2)}$ لكل مشاهدة`;
+    document.getElementById('watchAdsProgress').textContent = `أكمل الإعلانات اليومية للحصول على ${s.config.ad_batch_bonus_usd.toFixed(3)}$ (${w.progress}/${w.required})`;
     const watchBtn = document.getElementById('taskBtn-watch_ads_5');
-    if (w.done){ watchBtn.textContent = 'تم اليوم'; watchBtn.classList.add('done'); watchBtn.disabled = true; }
+    if (w.done){ watchBtn.textContent = 'مكتمل'; watchBtn.classList.add('done'); watchBtn.disabled = true; }
     else { watchBtn.textContent = 'شاهد'; watchBtn.classList.remove('done'); watchBtn.disabled = false; }
 
     const channelCard = document.getElementById('taskCard-join_channel');
@@ -363,7 +364,7 @@
     const dl = s.tasks.daily_login;
     const dlBtn = document.getElementById('taskBtn-daily_login');
     const dlStatus = document.getElementById('dailyLoginStatus');
-    document.getElementById('dailyLoginProgress').textContent = `سلسلة ${dl.streak} يوم — ${dl.required} أيام متتالية = مكافأة كبرى`;
+    document.getElementById('dailyLoginProgress').textContent = `سلسلة ${dl.streak}/${dl.required} يوم — احصل على ${s.config.daily_login_reward_usd.toFixed(3)}$ اليوم`;
     if (dl.done){ dlBtn.style.display='none'; dlStatus.style.display='flex'; } else { dlBtn.style.display='inline-flex'; dlStatus.style.display='none'; }
   }
 
@@ -410,7 +411,7 @@
 
   function renderWallet(){
     const s = appState;
-    document.getElementById('walletBalance').textContent = s.user.balance_usd.toFixed(2);
+    document.getElementById('walletBalance').textContent = s.user.balance_usd.toFixed(3);
     if (s.user.wallet_address) renderWalletConnected(s.user.wallet_address); else renderWalletDisconnected();
   }
 
@@ -434,7 +435,7 @@
       return `<div class="tx-row">
         <div class="tx-ic"><svg viewBox="0 0 24 24" fill="none" stroke="${up ? 'var(--mint)' : 'var(--danger)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${up ? '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>' : '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'}</svg></div>
         <div class="tx-info"><div class="tn">${tx.title}</div><div class="td">${timeAgo(tx.created_at)}</div></div>
-        <div class="tx-v anim-num" style="color:${up ? 'var(--mint)' : 'var(--danger)'}">${up ? '+' : ''}${tx.amount_usd.toFixed(2)}$</div>
+        <div class="tx-v anim-num" style="color:${up ? 'var(--mint)' : 'var(--danger)'}">${up ? '+' : ''}${tx.amount_usd.toFixed(3)}$</div>
       </div>`;
     }).join('');
   }
