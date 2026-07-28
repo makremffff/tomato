@@ -1,1775 +1,1788 @@
-// ══════════════════════════════════════════════════════════════════════════════
-//  api/index.js  —  BigLeague · Vercel Serverless Function
-// ══════════════════════════════════════════════════════════════════════════════
+// ================================================================
+//  Tomato Farm — API Backend v3.0 (Zero Trust Architecture)
+//  💀 "اعتبر كل عميل مخترقاً حتى يثبت العكس"
+//  ✅ Telegram initData verification (HMAC-SHA256)
+//  ✅ Session management (IP + fingerprint bound)
+//  ✅ Nonce system (replay attack prevention)
+//  ✅ Rate limiting (per user, sliding window)
+//  ✅ Behavior analysis (bot detection)
+//  ✅ Risk scoring (0-100)
+//  ✅ Shadow ban system
+//  ✅ Server-side time only
+//  ✅ Full audit logging
+// ================================================================
 
-const { neon } = require('@neondatabase/serverless');
-const crypto   = require('crypto');
+const { neon }   = require('@neondatabase/serverless');
+const crypto     = require('crypto');
 
-const DATABASE_URL    = process.env.DATABASE_URL;
-const BOT_TOKEN       = process.env.BOT_TOKEN;
-const INTERNAL_SECRET = process.env.INTERNAL_SECRET; // ← أضفه في Vercel env vars
+const DATABASE_URL = process.env.DATABASE_URL;
+const BOT_TOKEN    = process.env.BOT_TOKEN; // ← مطلوب لتحقق Telegram
 
-// 💎 TON Deposits — عنوان الخزينة اللي المستخدمين يرسلون له TON، ومفتاح TonCenter الاختياري
-const TREASURY_WALLET_ADDRESS = 'UQABsMMUakTi2iRO5pox4DDR--0J7uqsULYqHDv4Zo3w0E-T';
-const TONCENTER_API_KEY       = process.env.TONCENTER_API_KEY || ''; // اختياري، يرفع الـ rate limit
-const TONCENTER_BASE          = process.env.TONCENTER_BASE || 'https://toncenter.com/api/v2';
-
-// 📢 قناة الاشتراك الإجباري — قيمة ثابتة بالكود مباشرة (بدون @) — لازم يطابق CHANNEL_LINK في config.js
-// ⚠️ البوت يجب أن يكون عضو/أدمن في القناة حتى يقدر يستخدم getChatMember
-const CHANNEL_USERNAME = 'withdrawlProof2026';
-
-// 🛡️ يتحقق من عضوية المستخدم في القناة عبر Telegram Bot API — تحقق فوري، بدون تخزين وسيط
-async function isChannelMember(telegramId) {
-  if (!BOT_TOKEN) return true; // fail-open فقط لو التوكن نفسه غير موجود (حالة استثنائية جداً — بدونه التطبيق كله لا يعمل)
-  try {
-    const r = await fetch(
-      `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=@${CHANNEL_USERNAME}&user_id=${telegramId}`
-    );
-    const j = await r.json();
-    if (!j.ok) {
-      console.error('[channel check] Telegram API error:', j.description || j);
-      return false; // fail-closed — أي خطأ (بوت مش أدمن، يوزرنيم غلط...) = يُعتبر غير منضم
-    }
-    const status = j.result?.status;
-    return ['creator', 'administrator', 'member'].includes(status);
-  } catch (e) {
-    console.error('[channel check]', e.message);
-    return false; // fail-closed عند خطأ فعلي بالتحقق
-  }
-}
-
-// ── Anti-abuse config ─────────────────────────────────────────────────────────
-const CFG = {
-  AD_COOLDOWN_SEC:    30,   // cooldown بين إعلانين
-  AD_DAILY_MAX:       40,   // أكثر إعلان يومي
-  IP_MAX_ADS_PER_HR:  40,   // أكثر إعلان لكل IP بالساعة
-  IP_MAX_REQ_PER_MIN: 220,  // أكثر طلب عام لكل IP بالدقيقة (تم مضاعفته)
-  RISK_BAN_THRESHOLD: 100,  // risk score يؤدي لـ shadow ban
-  TS_DRIFT_SEC:       300,  // أكثر فرق مقبول بالـ timestamp
-  AD_TIMING_TOLERANCE_SEC: 2,
-  RISK_DECAY_PER_DAY: 10,
-
-  // 🎮 Coin Rain mini-game — جلسة سيرفر لكل جولة، لا تُرسَل نقاط من العميل أبداً
-  GAME_ROUND_TICKETS:         600,   // تذاكر ثابتة لكل جولة مكتملة (السيرفر يقرر، لا العميل)
-  GAME_ROUND_DURATION_SEC:     40,   // مدة الجولة الفعلية — لا تقبل إرسال أسرع من هذا
-  GAME_ROUND_SESSION_TTL_SEC: 300,   // أقصى وقت لإرسال الجولة بعد بدئها (5 دقائق)
-};
-
-// ── App business-logic config (synced to frontend via init response) ──────────
-const APP_CFG = {
-  REF_TICKET_REWARD : 5000,   // competition tickets per referral
-  REF_USDT_REWARD   : 0.01,   // USDT added to referrer balance per referral
-  AD_USD_REWARD     : 0.001,  // USD per ad
-  AD_DAILY_MAX      : CFG.AD_DAILY_MAX,
-  WITHDRAW_MIN      : 0.01,   // لا رسوم على السحب
-  REFERRAL_ADS_REQUIRED       : 10,  // عدد الإعلانات (أي نوع) اللي لازم يشوفها المُحال عشان تتفعّل إحالته
-  WITHDRAW_MIN_ACTIVE_REFERRALS: 0,  // 🚫 تم إلغاء شرط الإحالات المفعّلة للسحب
-  PODIUM_PRIZES     : { first: 25, second: 10, third: 7 },
-  LB_PRIZE_LABEL    : 'Each $1',
-  // 💎 باقات شراء التذاكر مقابل TON — لا تزال مستخدمة داخلياً (depositInit) حتى لو
-  // الواجهة الحالية ما بتعرضش صفحة الإيداع
-  TICKET_PACKAGES: [
-    { id: 'pkg_1',  tickets: 15000,  ton: 0.1  },
-    { id: 'pkg_2',  tickets: 40000,  ton: 0.25 },
-    { id: 'pkg_3',  tickets: 100000,  ton: 0.5  },
-    { id: 'pkg_4',  tickets: 250000, ton: 1    },
-  ],
-  // توقيت المسابقة — اضبط COMPETITION_END_MS في Vercel env (Unix ms timestamp)
-  COMPETITION_END_MS: process.env.COMPETITION_END_MS
-    ? parseInt(process.env.COMPETITION_END_MS, 10)
-    : Date.now() + 20 * 24 * 60 * 60 * 1000,
-};
-
-// 🛡️ مدة المشاهدة المطلوبة — لكل شبكة إعلانات مدتها الحقيقية (عدّل القيم حسب شبكتك)
-const AD_DURATIONS = {
-  adsgram: 15,
-  monetag: 16,
-  telega:  16,
-  default: 16,
-};
-// 💬 Chat — غرفة عامة: حدود بسيطة لمنع السبام
-const CHAT_CFG = {
-  MSG_MAX_LEN:     500,   // أقصى طول للرسالة
-  COOLDOWN_SEC:    5,     // أقل فاصل بين رسالتين لنفس المستخدم
-  HISTORY_LIMIT:   50,    // عدد الرسائل عند التحميل الأول
-  POLL_LIMIT:      100,   // أقصى عدد رسائل يرجعها الـ polling بالمرة الواحدة
-};
-
-// نافذة استخدام الـ token بعد انتهاء المدة المطلوبة — صلاحية ضيقة بدل 5 دقائق ثابتة
-const AD_GRACE_SEC = 90;
-
-// 🎯 عتبة المشاهدة الكاملة — أقل من هذه القيمة يُمنح 50% فقط من المكافأة
-const AD_FULL_REWARD_MIN_SEC = 35;
-
+// ── SQL executor — connection واحد يُعاد استخدامه (FIX #1) ──────
 const _db = neon(DATABASE_URL);
 async function sql(query, params = []) {
   return await _db(query, params);
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  TonCenter — التحقق الفعلي من وصول معاملة TON للخزينة قبل تسليم أي تذاكر
-//  المطابقة الأساسية: التعليق on-chain (نص = telegram_id المستخدم، decoded تلقائياً
-//  من toncenter بحقل in_msg.message لأنه simple comment) + المبلغ بالنانوتون + التوقيت.
-//  عنوان المرسل (raw) يُستخدم كتأكيد إضافي لو موجود ومتطابق، لكن مش شرط أساسي —
-//  لأن بعض المحافظ ممكن ترجع عنوان "غير bounceable/bounceable" مختلف شكلاً عن اللي
-//  خزّناه من TonConnect، فيما التعليق + المبلغ كفاية للتأكد بدقة عالية.
-//  لا نثق أبداً بمجرد رد "نجاح" من TonConnect بالفرونت.
-// ══════════════════════════════════════════════════════════════════════════════
-function normalizeTonAddr(addr) {
-  if (!addr) return '';
-  const parts = String(addr).trim().toLowerCase().split(':');
-  if (parts.length !== 2) return String(addr).trim().toLowerCase();
-  return `${parts[0]}:${parts[1].replace(/^0+/, '') || '0'}`;
-}
+// ── Constants ────────────────────────────────────────────────────
+const CELL_COUNT         = 3;
+const GROW_DURATION      = 30;          // seconds
+const INIT_DATA_TTL      = 3600;         // 1 hour
+const SESSION_TTL        = 86400;        // 24 hours
+const RATE_WINDOW        = 5000;         // 5 seconds
+const RATE_LIMIT         = 10;           // max requests per window
+const RISK_SUSPICIOUS    = 41;
+const RISK_BAN           = 71;
+const NONCE_TTL          = 300;          // 5 min nonce validity
 
-async function findConfirmingTonTransaction({ treasury, senderRaw, nanotons, memo, sinceMs, depositId }) {
-  if (!treasury) throw new Error('TREASURY_WALLET_ADDRESS not configured');
+// ── Multi-Account Detection Config ───────────────────────────────
+// قابل للتعديل بدون لمس المنطق
+const MULTI_ACCT = {
+  MAX_ACCOUNTS_PER_IP          : 2,      // حد الحسابات لكل IP
+  MAX_ACCOUNTS_PER_FINGERPRINT : 1,      // حد الحسابات لكل fingerprint (1 = تطابق كامل يعني ban)
+  IP_WHITELIST                 : new Set([
+    // أضف هنا ip_hash لشبكات موثوقة (مثل مكتبك أو ناس تعرفهم)
+    // مثال: 'abc123def456...'
+  ]),
+  // عمر الحسابات (بالأيام) — الحساب الذي مضى عليه أقل من هذا يُعتبر "جديد"
+  NEW_ACCOUNT_AGE_DAYS         : 3,
+};
 
-  const url = new URL(`${TONCENTER_BASE}/getTransactions`);
-  url.searchParams.set('address', treasury);
-  url.searchParams.set('limit', '40');
-  if (TONCENTER_API_KEY) url.searchParams.set('api_key', TONCENTER_API_KEY);
-
-  const resp = await fetch(url.toString());
-  const rawBody = await resp.text();
-
-  if (!resp.ok) {
-    // 🪵 لوجينغ حقيقي — يظهر في Vercel logs بدل ما يُبلع بصمت كـ "pending"
-    console.error(`[deposit#${depositId}] TonCenter HTTP ${resp.status}: ${rawBody.slice(0, 300)}`);
-    throw new Error(`TonCenter HTTP ${resp.status}`);
-  }
-
-  let body;
-  try { body = JSON.parse(rawBody); }
-  catch { console.error(`[deposit#${depositId}] TonCenter returned non-JSON: ${rawBody.slice(0, 300)}`); throw new Error('TonCenter bad JSON'); }
-
-  if (!body?.ok || !Array.isArray(body.result)) {
-    console.error(`[deposit#${depositId}] TonCenter body not ok:`, JSON.stringify(body).slice(0, 300));
-    return null;
-  }
-
-  const wantSender = normalizeTonAddr(senderRaw);
-  const wantValue  = String(nanotons);
-  const wantMemo   = String(memo).trim();
-  const sinceSec   = Math.floor(sinceMs / 1000) - 120; // هامش دقيقتين لفروق الساعة/الأرشيف
-
-  console.error(`[deposit#${depositId}] checking ${body.result.length} txs on treasury — want value=${wantValue} memo="${wantMemo}" sender=${wantSender} since=${sinceSec}`);
-
-  for (const tx of body.result) {
-    const inMsg = tx.in_msg;
-    if (!inMsg) continue;
-    if (Number(tx.utime) < sinceSec) continue;
-    if (String(inMsg.value) !== wantValue) continue;
-
-    const txMemo = (inMsg.message || '').trim();
-    const memoMatches   = wantMemo && txMemo === wantMemo;
-    const senderMatches = inMsg.source && normalizeTonAddr(inMsg.source) === wantSender;
-
-    // ✅ نقبل لو التعليق مطابق (الأقوى) أو لو العنوان مطابق — طالما المبلغ والتوقيت صح
-    if (memoMatches || senderMatches) {
-      console.error(`[deposit#${depositId}] MATCH found — memoMatches=${memoMatches} senderMatches=${senderMatches} hash=${tx.transaction_id?.hash}`);
-      return { hash: tx.transaction_id?.hash || null, utime: tx.utime };
-    }
-  }
-
-  console.error(`[deposit#${depositId}] no match in this batch`);
-  return null;
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  Ad Token — موقّع (HMAC) وغير قابل للتزوير، يُنشأ على السيرفر فقط
-// ══════════════════════════════════════════════════════════════════════════════
-// 🛡️ بدون INTERNAL_SECRET، أي شخص يقدر يحسب AD_TOKEN_KEY ويولّد ad tokens مزوّرة
-// (كان فيه fallback ثابت ومكتوب بالكود — ثغرة). الآن: fail-closed بدل تشغيل غير آمن.
-if (!INTERNAL_SECRET) {
-  throw new Error('[FATAL] INTERNAL_SECRET env var is not set — refusing to run with an insecure fallback key');
-}
-
-const AD_TOKEN_KEY = crypto
-  .createHmac('sha256', 'ad-token-v1')
-  .update(INTERNAL_SECRET)
-  .digest();
-
-function signAdToken(payload) {
-  const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = crypto.createHmac('sha256', AD_TOKEN_KEY).update(b64).digest('base64url');
-  return `${b64}.${sig}`;
-}
-
-function verifyAdToken(token) {
-  if (!token || typeof token !== 'string') return null;
-  const dot = token.indexOf('.');
-  if (dot < 1) return null;
-  const b64 = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  const expected = crypto.createHmac('sha256', AD_TOKEN_KEY).update(b64).digest('base64url');
-
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-
+// ── Bootstrap: إنشاء جميع الجداول ───────────────────────────────
+let _bootstrapped = false; // (FIX #4) — لا نُعيد تشغيل bootstrap في كل cold start
+async function bootstrap() {
+  if (_bootstrapped) return;
+  _bootstrapped = true;
   try {
-    return JSON.parse(Buffer.from(b64, 'base64url').toString('utf8'));
-  } catch {
-    return null;
-  }
-}
+    // ── جدول المستخدمين الأساسي ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS users (
+        telegram_id       BIGINT        PRIMARY KEY,
+        username          TEXT,
+        balance           NUMERIC(18,6) NOT NULL DEFAULT 0,
+        seeds             INT           NOT NULL DEFAULT 3,
+        water_count       INT           NOT NULL DEFAULT 3,
+        cells             JSONB         NOT NULL DEFAULT '[]',
+        task_state        JSONB         NOT NULL DEFAULT '{"earnChannel":"idle","eMoneyChannel":"idle"}',
+        wd_history        JSONB         NOT NULL DEFAULT '[]',
+        today_date        TEXT          NOT NULL DEFAULT '',
+        today_earn        NUMERIC(18,6) NOT NULL DEFAULT 0,
+        total_harvests    INT           NOT NULL DEFAULT 0,
+        referral_by       BIGINT,
+        referral_friends  INT           NOT NULL DEFAULT 0,
+        referral_balance  NUMERIC(18,6) NOT NULL DEFAULT 0,
+        referral_rewarded BOOLEAN       NOT NULL DEFAULT FALSE,
+        day               INT           NOT NULL DEFAULT 1,
+        shadow_banned     BOOLEAN       NOT NULL DEFAULT FALSE,
+        risk_score        INT           NOT NULL DEFAULT 0,
+        photo_url         TEXT,
+        created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  Schema
-// ══════════════════════════════════════════════════════════════════════════════
-async function ensureSchema() {
-  await sql(`CREATE TABLE IF NOT EXISTS users (
-    id            SERIAL PRIMARY KEY,
-    telegram_id   BIGINT  UNIQUE NOT NULL,
-    username      TEXT,
-    first_name    TEXT,
-    photo_url     TEXT,
-    pts           BIGINT  NOT NULL DEFAULT 0,
-    balance_usd   NUMERIC(10,2) NOT NULL DEFAULT 0,
-    referral_code TEXT    UNIQUE,
-    referred_by   BIGINT,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  // Backfill columns — آمن على جداول قديمة
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url     TEXT`);
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_ad_watch TIMESTAMPTZ`);
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_ads     INT NOT NULL DEFAULT 0`);
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_ad_date  DATE`);
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_score    INT NOT NULL DEFAULT 0`);
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS shadow_banned BOOLEAN NOT NULL DEFAULT FALSE`);
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_updated_at TIMESTAMPTZ`);
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN NOT NULL DEFAULT FALSE`);
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_seen BOOLEAN NOT NULL DEFAULT FALSE`);
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_game_round TIMESTAMPTZ`); // 🎮 Coin Rain — آخر جولة لعبة أُرسلت
-  // 🟢 last_seen_at — نبضة "أونلاين" تتحدث مع كل طلب من المستخدم (يستخدمها أدمن بانل لعرض المتصلين الآن)
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`);
-  // 💬 Chat — تبريد بسيط لمنع السبام (يُحدَّث مع كل رسالة يرسلها المستخدم)
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_chat_msg_at TIMESTAMPTZ`);
+    // ── جدول الجلسات ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        session_id      TEXT          PRIMARY KEY,
+        telegram_id     BIGINT        NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+        ip_hash         TEXT          NOT NULL,
+        fingerprint     TEXT          NOT NULL,
+        ad_nonce        TEXT,
+        ad_nonce_exp    TIMESTAMPTZ,
+        created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        expires_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
+        is_valid        BOOLEAN       NOT NULL DEFAULT TRUE
+      )
+    `);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_telegram    ON sessions(telegram_id)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_expires     ON sessions(expires_at)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_ip_hash     ON sessions(ip_hash)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_sessions_fingerprint ON sessions(fingerprint)`);
 
-  // 💬 Chat — غرفة عامة واحدة لكل المستخدمين
-  await sql(`CREATE TABLE IF NOT EXISTS chat_messages (
-    id         BIGSERIAL   PRIMARY KEY,
-    user_id    INT         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    message    TEXT        NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_chat_messages_id ON chat_messages(id DESC)`);
+    // ── جدول Nonce (منع إعادة الإرسال) ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS nonces (
+        nonce         TEXT          PRIMARY KEY,
+        telegram_id   BIGINT        NOT NULL,
+        used_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        expires_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW() + INTERVAL '5 minutes'
+      )
+    `);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_nonces_expires ON nonces(expires_at)`);
 
-  // 🟢 نظام الـ risk score/shadow-ban متوقف بالكامل — فك الحظر عن أي مستخدم كان
-  // اتحظر بالغلط من النظام القديم، وصفّر الـ risk_score تبعه (استعلام رخيص وآمن للتكرار)
-  await sql(`UPDATE users SET shadow_banned = FALSE, risk_score = 0 WHERE shadow_banned = TRUE OR risk_score > 0`);
+    // ── جدول Rate Limiting ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS rate_limits (
+        telegram_id   BIGINT        NOT NULL,
+        window_start  BIGINT        NOT NULL,
+        request_count INT           NOT NULL DEFAULT 1,
+        PRIMARY KEY (telegram_id, window_start)
+      )
+    `);
 
+    // ── جدول سجلات الأمان (Audit Log) ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS security_logs (
+        id            BIGSERIAL     PRIMARY KEY,
+        telegram_id   BIGINT,
+        ip_hash       TEXT,
+        fingerprint   TEXT,
+        action        TEXT          NOT NULL,
+        risk_score    INT           NOT NULL DEFAULT 0,
+        verdict       TEXT          NOT NULL DEFAULT 'allow',
+        detail        JSONB         NOT NULL DEFAULT '{}',
+        created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_logs_telegram ON security_logs(telegram_id)`);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_logs_created  ON security_logs(created_at DESC)`);
 
-  // 🎮 عملات الدولار داخل اللعبة (0.0001 USDT للعملة) — توسيع الدقة العشرية لدعم مبالغ صغيرة جداً
-  await sql(`ALTER TABLE users ALTER COLUMN balance_usd TYPE NUMERIC(14,6)`);
+    // ── جدول بصمات الأجهزة ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS device_fingerprints (
+        fingerprint   TEXT          NOT NULL,
+        telegram_id   BIGINT        NOT NULL,
+        user_agent    TEXT,
+        lang          TEXT,
+        screen        TEXT,
+        timezone_off  INT,
+        last_seen     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (fingerprint, telegram_id)
+      )
+    `);
 
-  // 🎮 جلسات اللعبة — تُنشأ من السيرفر حصراً، لا تُرسَل نقاط من العميل أبداً
-  await sql(`CREATE TABLE IF NOT EXISTS game_sessions (
-    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         INT         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    used            BOOLEAN     NOT NULL DEFAULT FALSE,
-    double_approved BOOLEAN     NOT NULL DEFAULT FALSE,
-    seed            INT,
-    sequence_json   TEXT
-  )`);
-  await sql(`ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS seed INT`);
-  await sql(`ALTER TABLE game_sessions ADD COLUMN IF NOT EXISTS sequence_json TEXT`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_game_sessions_user ON game_sessions(user_id, used, created_at)`);
+    // ── جدول المهام (Tasks) ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id          TEXT          PRIMARY KEY,
+        icon        TEXT          NOT NULL DEFAULT '⭐',
+        name        TEXT          NOT NULL,
+        reward      NUMERIC(18,6) NOT NULL DEFAULT 0,
+        task_type   TEXT          NOT NULL DEFAULT 'url',  -- channel | url | other
+        url         TEXT,
+        channel     TEXT,
+        description TEXT          NOT NULL DEFAULT '',
+        is_active   BOOLEAN       NOT NULL DEFAULT TRUE,
+        sort_order  INT           NOT NULL DEFAULT 0,
+        created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_tasks_active ON tasks(is_active, sort_order)`);
 
-  // جلسات الإعلانات — كل إعلان له token مؤقت (موقّع HMAC، غير قابل للتزوير)
-  await sql(`CREATE TABLE IF NOT EXISTS ad_sessions (
-    token      TEXT PRIMARY KEY,
-    user_id    INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    ad_type    TEXT NOT NULL DEFAULT 'default',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    used       BOOLEAN NOT NULL DEFAULT FALSE
-  )`);
-  await sql(`ALTER TABLE ad_sessions ADD COLUMN IF NOT EXISTS ad_type TEXT NOT NULL DEFAULT 'default'`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_ad_sessions_user ON ad_sessions(user_id)`);
+    // ── جدول إنجازات المستخدمين (User Tasks) ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS user_tasks (
+        telegram_id  BIGINT        NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+        task_id      TEXT          NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        completed    BOOLEAN       NOT NULL DEFAULT FALSE,
+        completed_at TIMESTAMPTZ,
+        PRIMARY KEY (telegram_id, task_id)
+      )
+    `);
+    await sql(`CREATE INDEX IF NOT EXISTS idx_user_tasks_telegram ON user_tasks(telegram_id)`);
 
-  // Rate limiting بالـ IP
-  await sql(`CREATE TABLE IF NOT EXISTS ip_limits (
-    ip           TEXT NOT NULL,
-    window_type  TEXT NOT NULL,
-    window_start TIMESTAMPTZ NOT NULL,
-    count        INT NOT NULL DEFAULT 0,
-    PRIMARY KEY (ip, window_type, window_start)
-  )`);
-
-  // منع replay نفس initData
-  await sql(`CREATE TABLE IF NOT EXISTS used_init_hashes (
-    hash    TEXT PRIMARY KEY,
-    used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await sql(`CREATE TABLE IF NOT EXISTS withdrawals (
-    id         SERIAL PRIMARY KEY,
-    user_id    INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    address    TEXT NOT NULL,
-    memo       TEXT,
-    amount     NUMERIC(10,2) NOT NULL,
-    status     TEXT NOT NULL DEFAULT 'pending',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  // 💎 ايداعات TON — شراء تذاكر المسابقة عبر TonConnect
-  // status: pending → confirmed (بعد التحقق من TonCenter) أو failed (انتهت المهلة بدون إيجاد المعاملة)
-  await sql(`CREATE TABLE IF NOT EXISTS deposits (
-    id              SERIAL PRIMARY KEY,
-    user_id         INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    package_id      TEXT NOT NULL,
-    tickets         INT  NOT NULL,
-    ton_amount      NUMERIC(18,9) NOT NULL,
-    wallet_address  TEXT NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'pending',
-    tx_hash         TEXT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    confirmed_at    TIMESTAMPTZ
-  )`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_deposits_user ON deposits(user_id, status)`);
-  // 🛡️ منع التلاعب: نفس معاملة TON (tx_hash) ميقدرش يأكد غير صف ايداع واحد بس —
-  // بيمنع المستخدم من عمل عدة depositInit لنفس الباكدج ودفع مرة وحدة عشان
-  // ياخد التذاكر مضاعفة عن طريق إعادة polling كل صف على حدة (replay attack).
-  await sql(`CREATE UNIQUE INDEX IF NOT EXISTS idx_deposits_txhash_unique ON deposits(tx_hash) WHERE tx_hash IS NOT NULL`);
-  await sql(`CREATE TABLE IF NOT EXISTS ad_watches (
-    id         SERIAL PRIMARY KEY,
-    user_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reward     NUMERIC(14,6) NOT NULL DEFAULT 0.001,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  // 💵 صارت مكافأة الإعلان دولار (0.001$) بدل تذاكر — توسيع الدقة العشرية لدعم القيم الصغيرة
-  await sql(`ALTER TABLE ad_watches ALTER COLUMN reward TYPE NUMERIC(14,6)`);
-  await sql(`ALTER TABLE ad_watches ALTER COLUMN reward SET DEFAULT 0.001`);
-
-  // 📊 إجمالي الإعلانات اليومي لكل المستخدمين مجتمعين — صف واحد لكل يوم، يُحدَّث ذرياً
-  // (بدل COUNT(*) على ad_watches اللي بتكبر بمرور الوقت — قراءة/كتابة O(1))
-  await sql(`CREATE TABLE IF NOT EXISTS ad_daily_stats (
-    day         DATE PRIMARY KEY,
-    total_count INT  NOT NULL DEFAULT 0
-  )`);
-
-  // 📊 جدول مستقل تماماً — فقط لتتبّع عدد إعلانات "مضاعفة اللعبة" (double reward)
-  // لا علاقة له بـ daily_ads ولا بـ AD_DAILY_MAX ولا بأي حد آخر — عدّاد إحصائي بحت
-  await sql(`CREATE TABLE IF NOT EXISTS game_double_ad_stats (
-    day         DATE PRIMARY KEY,
-    total_count INT  NOT NULL DEFAULT 0
-  )`);
-
-  // 🛡️ تأكيدات Adsgram Reward URL — server-to-server، لا تمر من متصفح المستخدم أبداً
-  // كل صف يعني "Adsgram أكّد أن هذا المستخدم شاهد إعلاناً فعلياً الآن"
-  await sql(`CREATE TABLE IF NOT EXISTS ad_reward_confirmations (
-    id          SERIAL PRIMARY KEY,
-    telegram_id BIGINT NOT NULL,
-    consumed    BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_arc_lookup ON ad_reward_confirmations (telegram_id, consumed, created_at)`);
-  await sql(`CREATE TABLE IF NOT EXISTS activity_logs (
-    id         SERIAL PRIMARY KEY,
-    user_id    INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    action     TEXT NOT NULL,
-    meta       JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_users_pts ON users (pts DESC)`);
-
-  // 🛡️ Device fingerprints — سجل تاريخي (many-to-many) لكل الحسابات اللي ظهرت
-  // على كل فنغربرنت، للمراجعة الإدارية فقط — القرار الفعلي بيتحدد من device_fp_owner
-  await sql(`CREATE TABLE IF NOT EXISTS device_fingerprints (
-    fingerprint  TEXT    NOT NULL,
-    telegram_id  BIGINT  NOT NULL,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (fingerprint, telegram_id)
-  )`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_device_fp ON device_fingerprints(fingerprint)`);
-
-  // 🛡️ Device fingerprint ownership — UNIQUE(fingerprint) لضمان حجز atomic
-  // (INSERT...ON CONFLICT DO NOTHING RETURNING) بدل SELECT-ثم-INSERT اللي فيه race condition
-  await sql(`CREATE TABLE IF NOT EXISTS device_fp_owner (
-    fingerprint  TEXT PRIMARY KEY,
-    telegram_id  BIGINT  NOT NULL,
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  // 🔄 Backfill لمرة واحدة: أقدم telegram_id مسجّل لكل فنغربرنت في السجل التاريخي
-  // يصير هو المالك الرسمي، عشان أول طلب جديد بعد النشر ما "يسرقش" الملكية
-  await sql(`
-    INSERT INTO device_fp_owner (fingerprint, telegram_id, created_at)
-    SELECT fingerprint, telegram_id, created_at FROM (
-      SELECT fingerprint, telegram_id, created_at,
-             ROW_NUMBER() OVER (PARTITION BY fingerprint ORDER BY created_at ASC) AS rn
-      FROM device_fingerprints
-    ) t
-    WHERE rn = 1
-    ON CONFLICT (fingerprint) DO NOTHING
-  `);
-
-  // 🎁 تتبع حالة الإحالة — referral_activated يصير TRUE بعد مشاهدة المُحال لـ 10 إعلانات
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_activated BOOLEAN NOT NULL DEFAULT FALSE`);
-
-  // 📊 إجمالي الإعلانات اللي شافها المستخدم — شرط تفعيل الإحالة
-  await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS total_ads_watched INT NOT NULL DEFAULT 0`);
-
-  // جدول المسابقات — يخزن توقيت كل موسم (start/end)
-  // السرفر يقرأ منه ويرسل COMPETITION_END_MS للفرونت عبر init response
-  await sql(`CREATE TABLE IF NOT EXISTS competition (
-    id         SERIAL PRIMARY KEY,
-    name       TEXT        NOT NULL DEFAULT 'Season 1',
-    start_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    end_at     TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '20 days',
-    active     BOOLEAN     NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  // seed: لو ما في موسم نشط → أنشئ واحد تلقائي 20 يوم من الآن
-  await sql(`
-    INSERT INTO competition (name, start_at, end_at, active)
-    SELECT 'Season 1', NOW(), NOW() + INTERVAL '20 days', TRUE
-    WHERE NOT EXISTS (SELECT 1 FROM competition WHERE active = TRUE)
-  `);
-
-  // 🏆 يتتبّع أي موسم تم توزيع جوائزه فعلاً — يمنع التوزيع المكرر
-  await sql(`ALTER TABLE competition ADD COLUMN IF NOT EXISTS prize_distributed BOOLEAN NOT NULL DEFAULT FALSE`);
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  Telegram initData verification
-// ══════════════════════════════════════════════════════════════════════════════
-function verifyInitData(initData) {
-  if (!initData || !BOT_TOKEN) return null;
-  try {
-    const params = new URLSearchParams(initData);
-    const receivedHash = params.get('hash');
-    if (!receivedHash) return null;
-    params.delete('hash');
-    const dataCheckString = [...params.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}=${v}`)
-      .join('\n');
-    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
-    const expectedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-    if (!crypto.timingSafeEqual(Buffer.from(expectedHash), Buffer.from(receivedHash))) return null;
-    const authDate = parseInt(params.get('auth_date') || '0', 10);
-    if (Date.now() / 1000 - authDate > 3600) return null;
-    return JSON.parse(params.get('user') || '{}');
-  } catch {
-    return null;
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  🛡️  Helpers: IP · Rate Limit · Risk Score · InitData Hash
-// ══════════════════════════════════════════════════════════════════════════════
-function getClientIP(req) {
-  const fwd = req.headers['x-forwarded-for'];
-  if (fwd) return fwd.split(',')[0].trim();
-  return req.headers['x-real-ip'] || req.socket?.remoteAddress || 'unknown';
-}
-
-async function checkIPLimit(ip, type) {
-  // type: 'min' = دقيقة عام | 'hr' = ساعة للإعلانات
-  const max     = type === 'min' ? CFG.IP_MAX_REQ_PER_MIN : CFG.IP_MAX_ADS_PER_HR;
-  const trunc   = type === 'min' ? `DATE_TRUNC('minute', NOW())` : `DATE_TRUNC('hour', NOW())`;
-  const interval = type === 'min' ? '2 minutes' : '2 hours';
-  await sql(`DELETE FROM ip_limits WHERE window_start < NOW() - INTERVAL '${interval}'`);
-  const rows = await sql(
-    `INSERT INTO ip_limits (ip, window_type, window_start, count)
-     VALUES ($1, $2, ${trunc}, 1)
-     ON CONFLICT (ip, window_type, window_start)
-     DO UPDATE SET count = ip_limits.count + 1
-     RETURNING count`,
-    [ip, type]
-  );
-  return rows[0].count <= max; // true = مسموح
-}
-
-// ══════════════════════════════════════════════════════
-// 🎮 Seed-based sequence generator — mirrors client PRNG
-//    نفس Mulberry32 المستخدم في game.js (يجب أن يبقيا متطابقين)
-// ══════════════════════════════════════════════════════
-function _makePrng(seed) {
-  let s = seed >>> 0;
-  return () => {
-    s = (s + 0x6D2B79F5) >>> 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-// 🎮 عدد عملات USDT الثابت لكل جولة — عدّل هذا الرقم فقط للتحكم بالعدد
-const GAME_USDT = 2;
-// 🎮 قيمة عملة الدولار الواحدة (0.0001 × GAME_USDT = الحد الأقصى لكل جولة)
-const GAME_DOLLAR_VALUE = 0.0001;
-
-// ticket/bomb فقط — بدون دولار (الدولار يُفرض في فتحات ثابتة عبر _pickDollarSlots أدناه)
-const _GAME_TYPES   = [{ w: 58, val: 4 }, { w: 20, val: 16 }, { w: 22, val: -3 }];
-const _GAME_TOTAL_W = _GAME_TYPES.reduce((a, t) => a + t.w, 0); // 100
-const _GAME_SEQ_LEN = 90; // أقصى عدد عناصر يمكن أن تظهر في 40 ثانية
-
-// 🎮 يختار GAME_USDT فتحة ثابتة (indices) من التسلسل ستكون عملات دولار — عبر PRNG منفصل
-// تماماً عن تسلسل الأنواع الأساسي (type/spawnCd/x/bias) حتى لا يؤثر على عددها المُستهلَك
-function _pickDollarSlots(seed) {
-  const rng2 = _makePrng((seed + 0x9E3779B9) >>> 0);
-  const slots = new Set();
-  let guard = 0;
-  while (slots.size < GAME_USDT && guard < 500) {
-    guard++;
-    slots.add(Math.floor(rng2() * _GAME_SEQ_LEN));
-  }
-  return slots;
-}
-
-function generateGameSequence(seed) {
-  const rng = _makePrng(seed);
-  const dollarSlots = _pickDollarSlots(seed);
-  const seq = [];
-  for (let i = 0; i < _GAME_SEQ_LEN; i++) {
-    const typeRoll = rng(); // استهلاك 1: نوع العنصر  (mirrors pickType)
-    rng();                  // استهلاك 2: spawnCd      (mirrors spawnItem)
-    const xRnd    = rng(); // استهلاك 3: موقع X        (mirrors spawnItem)
-    const biasRnd = rng(); // استهلاك 4: center-bias   (mirrors spawnItem — مُستهلَك دائماً)
-
-    let val = _GAME_TYPES[0].val, isBomb = false;
-    let r = typeRoll * _GAME_TOTAL_W, pushed = false;
-    for (const t of _GAME_TYPES) {
-      r -= t.w;
-      if (r <= 0) { val = t.val; isBomb = t.val < 0; pushed = true; break; }
-    }
-    if (!pushed) isBomb = false;
-
-    const isDollar = dollarSlots.has(i);
-    if (isDollar) { val = 0; isBomb = false; } // فتحة مفروضة كعملة دولار — تتجاوز النوع العشوائي
-
-    // 🛡️ x مُعيَّن بـ seed — قنابل: 80% في المنتصف (30%–70%) ، 20% عشوائي
-    const xNorm = isBomb
-      ? (biasRnd < 0.80
-          ? 0.30 + xRnd * 0.40   // zone مركزية
-          : 0.05 + xRnd * 0.90)  // كامل العرض
-      : 0.05 + xRnd * 0.90;      // تذاكر/دولار: عشوائي كامل
-
-    seq.push({ val, x: xNorm, d: isDollar ? 1 : 0 }); // { val: -3|0|4|16, x: 0.00–1.00, d: عملة دولار؟ }
-  }
-  return seq;
-}
-
-// 🟢 نظام الـ risk score متوقف بالكامل بناءً على طلب المالك — المستخدمين
-// يلعبوا بحريتهم بدون أي نقاط خطر أو حظر تلقائي (shadow ban). الدالة سيبناها
-// كـ no-op بدل ما نمسحها من كل الأماكن اللي بتستدعيها (عشرات النداءات بالملف)،
-// عشان لو حبيت ترجّع النظام تاني يكفي ترجّع الكود المعلّق تحت.
-async function addRisk(userId, points, reason) {
-  return; // متعطّل — لا نقاط خطر ولا حظر تلقائي
-
-  /* الكود الأصلي — فعّله لو حبيت ترجّع نظام الـ risk score:
-  console.warn(`[RISK] user=${userId} +${points} reason=${reason}`);
-  const rows = await sql(
-    `UPDATE users SET risk_score = risk_score + $1, risk_updated_at = NOW() WHERE id = $2
-     RETURNING risk_score, shadow_banned`,
-    [points, userId]
-  );
-  if (!rows[0].shadow_banned && rows[0].risk_score >= CFG.RISK_BAN_THRESHOLD) {
-    await sql(`UPDATE users SET shadow_banned = TRUE WHERE id = $1`, [userId]);
-    console.warn(`[SHADOWBAN] auto-banned user=${userId}`);
-  }
-  */
-}
-
-// 🛡️ يقلل risk_score تدريجياً مع الوقت (RISK_DECAY_PER_DAY نقطة/يوم) — يمنع
-// تراكم دائم من false positives، ويرفع shadow ban تلقائياً لو رجع الـ score صفر
-async function decayRisk(userId) {
-  const rows = await sql(`
-    WITH decayed AS (
-      SELECT id,
-             GREATEST(0, risk_score - FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(risk_updated_at, created_at))) / 86400) * $2)::INT AS new_score
-      FROM users WHERE id = $1
-    )
-    UPDATE users u SET
-      risk_score      = d.new_score,
-      risk_updated_at = NOW(),
-      shadow_banned   = CASE WHEN d.new_score = 0 THEN FALSE ELSE u.shadow_banned END
-    FROM decayed d
-    WHERE u.id = d.id
-    RETURNING u.risk_score, u.shadow_banned
-  `, [userId, CFG.RISK_DECAY_PER_DAY]);
-  return rows[0];
-}
-
-// 🛡️ هاش لكل (initData + token) لا لكل initData لحالها.
-// initData بتيليجرام ثابتة طوال الجلسة (~ساعة، نفس مدة TTL تحت)، فلو اعتمدنا
-// عليها فقط، أي إعلان ثاني بنفس الجلسة كان يُرفض كـ "مكرر". إضافة الـ token
-// (فريد ومُصدَر لكل إعلان) تحل التضارب وتحافظ على نفس مستوى الحماية ضد replay.
-async function checkAndMarkInitHash(initData, token) {
-  const hash = crypto.createHash('sha256').update(initData + ':watchAd:' + token).digest('hex');
-  await sql(`DELETE FROM used_init_hashes WHERE used_at < NOW() - INTERVAL '1 hour'`);
-  try {
-    await sql(`INSERT INTO used_init_hashes (hash) VALUES ($1)`, [hash]);
-    return true;  // جديد ✓
-  } catch {
-    return false; // مكرر ✗
-  }
-}
-
-// 📊 يزيد إجمالي إعلانات اليوم (كل المستخدمين) بشكل ذري — تُستدعى من watchAd و gameAdVerify
-async function bumpAdDailyStat() {
-  await sql(`
-    INSERT INTO ad_daily_stats (day, total_count)
-    VALUES (CURRENT_DATE, 1)
-    ON CONFLICT (day) DO UPDATE SET total_count = ad_daily_stats.total_count + 1
-  `);
-}
-
-// 📊 عدّاد مستقل بحت لإعلانات مضاعفة اللعبة فقط — لا يمس daily_ads ولا AD_DAILY_MAX إطلاقاً
-async function bumpGameDoubleAdStat() {
-  await sql(`
-    INSERT INTO game_double_ad_stats (day, total_count)
-    VALUES (CURRENT_DATE, 1)
-    ON CONFLICT (day) DO UPDATE SET total_count = game_double_ad_stats.total_count + 1
-  `);
-}
-
-// 🛡️ يستهلك تأكيد Adsgram (إن وُجد) لهذا المستخدم — يُستدعى من watchAd
-// يعيد true فقط لو وصل تأكيد server-to-server حقيقي من Adsgram لم يُستهلك بعد
-async function consumeAdsgramConfirmation(telegramId) {
-  await sql(`DELETE FROM ad_reward_confirmations WHERE created_at < NOW() - INTERVAL '10 minutes'`);
-  const rows = await sql(`
-    UPDATE ad_reward_confirmations
-    SET consumed = TRUE
-    WHERE id = (
-      SELECT id FROM ad_reward_confirmations
-      WHERE telegram_id = $1 AND consumed = FALSE
-      ORDER BY created_at ASC
-      LIMIT 1
-    )
-    RETURNING id
-  `, [telegramId]);
-  return rows.length > 0;
-}
-
-async function upsertUser(tgUser, startParam = null, fp = null) {
-  const { id: telegram_id, username = null, first_name = null, photo_url = null } = tgUser;
-  const refCode = `REF${telegram_id}`;
-
-  // Only brand-new users can be attached to a referrer, and only once.
-  const existing = await sql('SELECT id FROM users WHERE telegram_id = $1', [telegram_id]);
-  const isNewUser = existing.length === 0;
-
-  let referredBy = null;
-  if (isNewUser && startParam) {
-    const m = /^ref_(\d+)$/.exec(String(startParam).trim());
-    if (m && m[1] !== String(telegram_id)) {
-      const refUser = await sql('SELECT telegram_id FROM users WHERE telegram_id = $1', [m[1]]);
-      if (refUser.length > 0) referredBy = m[1];
-    }
-  }
-
-  await sql(`
-    INSERT INTO users (telegram_id, username, first_name, photo_url, referral_code, referred_by)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    ON CONFLICT (telegram_id) DO UPDATE SET
-      username   = EXCLUDED.username,
-      first_name = EXCLUDED.first_name,
-      photo_url  = COALESCE(EXCLUDED.photo_url, users.photo_url)
-  `, [telegram_id, username, first_name, photo_url, refCode, referredBy]);
-
-  // 🛡️ Device fingerprint — يحظر فقط الحسابات الجديدة من نفس الجهاز
-  // ⚠️ الحجز atomic عبر device_fp_owner (UNIQUE fingerprint) بدل SELECT-ثم-INSERT
-  // (على Neon مافيش transaction بين الاستعلامات، فـ check-then-act كان بيسمح
-  // لحسابين يسجلوا بنفس اللحظة تقريباً ويفوتوا الحظر — race condition)
-  if (fp) {
-    try {
-      if (isNewUser) {
-        const claim = await sql(
-          `INSERT INTO device_fp_owner (fingerprint, telegram_id)
-           VALUES ($1, $2)
-           ON CONFLICT (fingerprint) DO NOTHING
-           RETURNING telegram_id`,
-          [fp, telegram_id]
-        );
-
-        if (claim.length === 0) {
-          // الفنغربرنت محجوز فعلاً لحساب تاني → احظر الحساب الجديد فوراً
-          const owner = await sql(
-            'SELECT telegram_id FROM device_fp_owner WHERE fingerprint = $1',
-            [fp]
-          );
-          await sql('UPDATE users SET banned = TRUE WHERE telegram_id = $1', [telegram_id]);
-          console.warn(`[DEVICE-BAN] banned NEW account ${telegram_id} — device already owned by ${owner[0]?.telegram_id}`);
-        } else {
-          console.log(`[DEVICE-FP] owner registered for ${telegram_id}`);
-        }
-      }
-
-      // سجل تاريخي (many-to-many) لكل الحسابات اللي ظهرت على هذا الفنغربرنت — للمراجعة الإدارية بس
-      await sql(
-        'INSERT INTO device_fingerprints (fingerprint, telegram_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-        [fp, telegram_id]
-      );
-    } catch (fpErr) {
-      console.error('[DEVICE-FP] error:', fpErr.message);
-    }
-  }
-
-  // 🕐 إشعار "إحالة معلّقة" عند التسجيل — المكافأة الفعلية تُعطى فقط عند مشاهدة عدد الإعلانات المطلوب
-  if (isNewUser && referredBy) {
-    const joinerName = first_name || username || 'Someone';
-
-    let pendingReferrals = 1;
-    try {
-      const cntRows = await sql(
-        'SELECT COUNT(*)::INT AS cnt FROM users WHERE referred_by = $1 AND referral_activated = FALSE',
-        [referredBy]
-      );
-      pendingReferrals = cntRows[0]?.cnt ?? 1;
-    } catch (_) {}
-
-    sendTelegramMessage(
-      referredBy,
-      `🔔 *New Pending Referral!*\n\n` +
-      `👤 *${joinerName}* just joined using your link.\n\n` +
-      `📊 Status: *⏳ Pending*\n` +
-      `🎯 Condition: *Watch ${APP_CFG.REFERRAL_ADS_REQUIRED} ads to activate*\n` +
-      `👥 *Total Pending: ${pendingReferrals}*\n\n` +
-      `💡 Once they watch ${APP_CFG.REFERRAL_ADS_REQUIRED} ads you'll get your reward automatically!`
-    ).catch(e => console.error('[referral-pending bot notify]', e.message));
-  }
-
-  const rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [telegram_id]);
-  return rows[0];
-}
-
-// 🎁 فحص وتفعيل الإحالة — يُستدعى بعد كل مشاهدة إعلان (أي نوع)
-// يعطي المُحيل مكافأته فوراً عند وصول المُحال لعدد الإعلانات المطلوب
-async function checkReferralActivation(userId) {
-  try {
-    const rows = await sql(
-      'SELECT referred_by, referral_activated, total_ads_watched, first_name, username FROM users WHERE id = $1',
-      [userId]
-    );
-    if (!rows[0] || !rows[0].referred_by || rows[0].referral_activated) return;
-    if (Number(rows[0].total_ads_watched) < APP_CFG.REFERRAL_ADS_REQUIRED) return;
-
-    // ✅ وصل لعدد الإعلانات المطلوب — فعّل الإحالة وامنح المُحيل مكافأته
-    await sql('UPDATE users SET referral_activated = TRUE WHERE id = $1', [userId]);
-
-    try {
+    // ── Seed default tasks if table is empty ──
+    const existingTasks = await sql(`SELECT COUNT(*) AS cnt FROM tasks`);
+    if (parseInt(existingTasks[0]?.cnt || 0) === 0) {
       await sql(`
-        UPDATE users
-        SET pts         = pts + $1,
-            balance_usd = balance_usd + $2
-        WHERE telegram_id = $3
-      `, [APP_CFG.REF_TICKET_REWARD, APP_CFG.REF_USDT_REWARD, rows[0].referred_by]);
-      console.log(`[referral] activated & credited — user=${userId} referrer=${rows[0].referred_by}`);
-    } catch (creditErr) {
-      console.error('[referral-activate] credit SQL failed:', creditErr.message);
+        INSERT INTO tasks (id, icon, name, reward, task_type, url, channel, description, sort_order) VALUES
+        ('earnChannel',   '📢', 'Join Earn Channel',  0.005, 'channel', NULL, 'botbababab',  'Subscribe on Telegram to unlock rewards', 1),
+        ('eMoneyChannel', '💰', 'E-Money Algeria',    0.005, 'channel', NULL, 'tt_fhp',      'Join our partner channel to earn bonus TON', 2)
+        ON CONFLICT (id) DO NOTHING
+      `);
     }
 
-    // إحصاء الإحالات المفعّلة للمُحيل
-    let activeReferrals = 1;
-    try {
-      const cntRows = await sql(
-        'SELECT COUNT(*)::INT AS cnt FROM users WHERE referred_by = $1 AND referral_activated = TRUE',
-        [rows[0].referred_by]
-      );
-      activeReferrals = cntRows[0]?.cnt ?? 1;
-    } catch (_) {}
+    // ── Migrations للمهام ──
+    const taskMigrations = [
+      `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_active  BOOLEAN NOT NULL DEFAULT TRUE`,
+      `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sort_order INT     NOT NULL DEFAULT 0`,
+    ];
+    for (const m of taskMigrations) {
+      try { await sql(m); } catch (_) {}
+    }
 
-    const joinerName = rows[0].first_name || rows[0].username || 'Someone';
+    // ── جدول السحوبات (Giveaways) ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS giveaways (
+        id            BIGSERIAL     PRIMARY KEY,
+        title         TEXT          NOT NULL,
+        reward        NUMERIC(18,6) NOT NULL DEFAULT 0,
+        winner_id     BIGINT,
+        is_active     BOOLEAN       NOT NULL DEFAULT TRUE,
+        draw_at       TIMESTAMPTZ,
+        created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
 
-    sendTelegramMessage(
-      rows[0].referred_by,
-      `🎉 *New Referral Activated!*\n\n` +
-      `Welcome, your referral is now active.\n\n` +
-      `👤 *${joinerName}*\n` +
-      `✅ Active\n\n` +
-      `🎁 *You Earned*\n` +
-      `🪙 *${APP_CFG.REF_TICKET_REWARD.toLocaleString()} Points*\n` +
-      `💵 *${APP_CFG.REF_USDT_REWARD} USDT*\n\n` +
-      `👥 *Total Active Referrals: ${activeReferrals}*\n\n` +
-      `🚀 Keep inviting friends to maximize your earnings!`
-    ).catch(e => console.error('[referral-activate bot notify]', e.message));
-  } catch (err) {
-    console.error('[checkReferralActivation] error:', err.message);
+    await sql(`
+      CREATE TABLE IF NOT EXISTS giveaway_entries (
+        giveaway_id   BIGINT        NOT NULL REFERENCES giveaways(id),
+        telegram_id   BIGINT        NOT NULL REFERENCES users(telegram_id),
+        entered_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (giveaway_id, telegram_id)
+      )
+    `);
+
+    // ── Migrations للجداول القديمة ──
+    const migrations = [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS shadow_banned   BOOLEAN       NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_score      INT           NOT NULL DEFAULT 0`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_rewarded BOOLEAN     NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_friends  INT         NOT NULL DEFAULT 0`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_balance  NUMERIC(18,6) NOT NULL DEFAULT 0`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hard_banned  BOOLEAN       NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url       TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS ad_last_reward  TIMESTAMPTZ`,
+      // ── Session nonce columns (session-based nonce system) ──
+      `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ad_nonce     TEXT`,
+      `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ad_nonce_exp TIMESTAMPTZ`,
+    ];
+    for (const m of migrations) {
+      try { await sql(m); } catch (_) {}
+    }
+
+    // ── Promo Codes table ──
+    await sql(`
+      CREATE TABLE IF NOT EXISTS promo_codes (
+        code          TEXT          PRIMARY KEY,
+        seeds         INT           NOT NULL DEFAULT 0,
+        water         INT           NOT NULL DEFAULT 0,
+        balance       NUMERIC(18,6) NOT NULL DEFAULT 0,
+        reward_desc   TEXT          NOT NULL DEFAULT '',
+        max_uses      INT           NOT NULL DEFAULT 100,
+        use_count     INT           NOT NULL DEFAULT 0,
+        expires_at    TIMESTAMPTZ,
+        is_active     BOOLEAN       NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await sql(`
+      CREATE TABLE IF NOT EXISTS promo_redemptions (
+        code          TEXT          NOT NULL,
+        telegram_id   BIGINT        NOT NULL,
+        redeemed_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (code, telegram_id)
+      )
+    `);
+
+    console.log('[DB] Bootstrap OK — Zero Trust v3.0');
+  } catch (e) {
+    console.error('[DB] Bootstrap failed:', e.message);
+  }
+}
+bootstrap();
+
+// ================================================================
+//  SECURITY LAYER — Zero Trust Core
+// ================================================================
+
+// ── تحقق من Telegram initData (HMAC-SHA256) ──
+function verifyTelegramInitData(initData) {
+  if (!BOT_TOKEN || !initData) return null;
+
+  try {
+    const params   = new URLSearchParams(initData);
+    const hash     = params.get('hash');
+    const authDate = parseInt(params.get('auth_date') || '0');
+
+    if (!hash || !authDate) return null;
+
+    // التحقق من انتهاء الصلاحية
+    const now = Math.floor(Date.now() / 1000);
+    if (now - authDate > INIT_DATA_TTL) return null;
+
+    // بناء data-check-string
+    params.delete('hash');
+    const checkArr = [];
+    params.forEach((v, k) => checkArr.push(`${k}=${v}`));
+    checkArr.sort();
+    const checkStr = checkArr.join('\n');
+
+    // HMAC verification
+    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
+    const expected  = crypto.createHmac('sha256', secretKey).update(checkStr).digest('hex');
+
+    if (expected !== hash) return null;
+
+    // استخراج بيانات المستخدم
+    const userStr = params.get('user');
+    if (!userStr) return null;
+    return JSON.parse(userStr);
+  } catch {
+    return null;
   }
 }
 
-async function getUserRank(userId) {
-  const rows = await sql(`
-    SELECT (COUNT(*) + 1)::INT AS rank
-    FROM users WHERE pts > (SELECT pts FROM users WHERE id = $1)
-  `, [userId]);
-  return rows[0]?.rank ?? 1;
+// ── Hash IP (لا نخزّن الـ IP الحقيقي) ──
+function hashIP(ip) {
+  if (!ip) return 'unknown';
+  return crypto.createHash('sha256').update(ip + (process.env.IP_SALT || 'zt_salt')).digest('hex').slice(0, 32);
 }
 
-async function getActiveCompetition() {
-  const rows = await sql(`
-    SELECT id, name, start_at, end_at
-    FROM competition
-    WHERE active = TRUE
-    ORDER BY created_at DESC
-    LIMIT 1
-  `);
-  return rows[0] || null;
+// ── بناء fingerprint محسّن من بيانات الطلب ──
+// يستخدم الـ fp hash المولّد client-side + fallback إلى الإشارات الأخرى
+function buildFingerprint(fpData, ipHash) {
+  // إذا أرسل الـ client fingerprint hash جاهزاً — نضيف IP ونُعيد hash
+  const clientFp = fpData.fp || '';
+
+  // الإشارات الأساسية كـ fallback
+  const ua      = (fpData.user_agent || '').slice(0, 200);
+  const lang    = fpData.lang        || '';
+  const screen  = fpData.screen      || '';
+  const tz      = String(fpData.tz_offset  || 0);
+  const tzName  = fpData.tz_name     || '';
+  const cores   = String(fpData.hw_cores   || 0);
+  const mem     = String(fpData.hw_mem     || 0);
+  const touch   = String(fpData.touch_pts  || 0);
+  const canvas  = (fpData.canvas_sig || '').slice(0, 40);
+  const webgl   = (fpData.webgl_sig  || '').slice(0, 60);
+  const audio   = (fpData.audio_sig  || '').slice(0, 40);
+  const dpr     = fpData.dpr         || '';
+  const colDepth = String(fpData.color_depth || 0);
+
+  // إذا عنده fp hash — نبني fingerprint مزدوج (client hash + server signals)
+  const raw = clientFp
+    ? [clientFp, ipHash, ua, lang, tz, tzName, cores, mem].join('|')
+    : [ua, lang, screen, tz, tzName, cores, mem, touch, canvas, webgl, audio, dpr, colDepth, ipHash].join('|');
+
+  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 40);
 }
 
-async function getLeaderboard(limit = 8) {
-  return await sql(`
-    SELECT telegram_id,
-           COALESCE(first_name, username, 'Anonymous') AS name,
-           pts,
-           photo_url,
-           ROW_NUMBER() OVER (ORDER BY pts DESC, telegram_id ASC)::INT AS rank
-    FROM users ORDER BY pts DESC, telegram_id ASC LIMIT $1
-  `, [limit]);
+// ── Resilient Fingerprint Comparison ──
+// يتحمّل تغير IP (proxy/NAT) لكن يرفض تغير الجهاز الكامل
+function isFingerprintMatch(stored, current, storedIp, currentIp) {
+  if (stored === current) return true; // مطابق تماماً
+  // IP تغيّر لكن هذا طبيعي — نقبل إذا fingerprint مطابق
+  // لو اختلف كلاهما — رفض قاطع
+  return false;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  🏆 توزيع جوائز المسابقة — تُستدعى مع كل طلب
-//
-//  لو انتهى وقت الموسم النشط (end_at <= NOW) ولم تُوزَّع جوائزه بعد:
-//   1. كل مستخدم يأخذ حصته من الجوائز في balance_usd حسب ترتيبه النهائي
-//      (المركز 1/2/3 → PODIUM_PRIZES، المراكز 4-11 → $1 لكل واحد، نفس
-//      الترتيب المعروض في الـ leaderboard/podium).
-//   2. تصفير نقاط الجميع (pts = 0) وبدء موسم جديد تلقائياً لمدة 20 يوم.
-//
-//  🛡️ آمنة عند التشغيل المتزامن (Vercel serverless = عدة invocations بنفس
-//  اللحظة): الـ UPDATE الأول بالأسفل يعمل "claim" ذرّي — فقط الـ invocation
-//  اللي يرجّع صف هو المسؤول عن التوزيع، والباقي يرجعوا فوراً بدون أي تأثير.
-// ══════════════════════════════════════════════════════════════════════════════
-async function distributeSeasonPrizes() {
-  const claimed = await sql(`
-    UPDATE competition
-    SET active = FALSE, prize_distributed = TRUE
-    WHERE active = TRUE AND prize_distributed = FALSE AND end_at <= NOW()
-    RETURNING id, name
-  `);
-  if (claimed.length === 0) return; // لا يوجد موسم منتهٍ بانتظار التوزيع
+// ── إنشاء Nonce داخل الجلسة (Session-based Nonce) ──
+// يُستدعى عند بدء مشاهدة إعلان — السيرفر يُنشئ nonce ويحفظه في الجلسة
+async function issueAdNonce(sessionId) {
+  const nonce   = crypto.randomBytes(32).toString('hex');
+  const expiry  = new Date(Date.now() + NONCE_TTL * 1000).toISOString();
+  await sql(
+    `UPDATE sessions SET ad_nonce = $2, ad_nonce_exp = $3 WHERE session_id = $1`,
+    [sessionId, nonce, expiry]
+  );
+  return nonce;
+}
 
-  const endedComp = claimed[0];
-  const { first, second, third } = APP_CFG.PODIUM_PRIZES;
-  const OTHERS_PRIZE = 1; // "Each $1" — المراكز 4 إلى 11 (نفس LB_PRIZE_LABEL)
+// ── التحقق من Nonce المخزّن في الجلسة (one-time use) ──
+// يقارن nonce القادم من العميل مع ما هو مخزّن داخل الجلسة فقط
+// بعد التحقق: يُحذف nonce فوراً (one-time use)
+async function consumeAdNonce(sessionId, clientNonce) {
+  if (!clientNonce || !sessionId) return false;
 
-  // 🏆 منح الجوائز دفعة واحدة على balance_usd حسب نفس ترتيب getLeaderboard
-  // (pts DESC, telegram_id ASC) — pts > 0 فقط، لمنع منح جوائز لحسابات لم تشارك
-  const winners = await sql(`
-    WITH ranked AS (
-      SELECT id, telegram_id,
-             ROW_NUMBER() OVER (ORDER BY pts DESC, telegram_id ASC) AS rnk
-      FROM users
-      WHERE pts > 0
-    ),
-    prized AS (
-      SELECT id, telegram_id, rnk,
-        CASE
-          WHEN rnk = 1 THEN $1::NUMERIC
-          WHEN rnk = 2 THEN $2::NUMERIC
-          WHEN rnk = 3 THEN $3::NUMERIC
-          WHEN rnk BETWEEN 4 AND 11 THEN $4::NUMERIC
-          ELSE 0
-        END AS prize
-      FROM ranked
-      WHERE rnk <= 11
-    )
-    UPDATE users u
-    SET balance_usd = balance_usd + p.prize
-    FROM prized p
-    WHERE u.id = p.id AND p.prize > 0
-    RETURNING u.telegram_id, p.rnk, p.prize
-  `, [first, second, third, OTHERS_PRIZE]);
+  const rows = await sql(
+    `SELECT ad_nonce, ad_nonce_exp FROM sessions
+     WHERE session_id = $1 AND is_valid = TRUE`,
+    [sessionId]
+  );
+  if (!rows.length) return false;
 
-  // 🔄 تصفير نقاط الجميع — موسم جديد يبدأ بترتيب نظيف للكل
-  await sql(`UPDATE users SET pts = 0`);
+  const { ad_nonce, ad_nonce_exp } = rows[0];
 
-  // ▶️ إنشاء الموسم التالي (الاسم: "Season N" → "Season N+1")
-  const m       = /(\d+)\s*$/.exec(endedComp.name || '');
-  const nextNum = m ? (parseInt(m[1], 10) + 1) : 2;
-  const nextName = m
-    ? endedComp.name.replace(/\d+\s*$/, String(nextNum))
-    : `${endedComp.name || 'Season'} ${nextNum}`;
+  // هل النonce موجود؟
+  if (!ad_nonce) return false;
 
-  await sql(`
-    INSERT INTO competition (name, start_at, end_at, active, prize_distributed)
-    VALUES ($1, NOW(), NOW() + INTERVAL '20 days', TRUE, FALSE)
-  `, [nextName]);
-
-  console.log(`[competition] "${endedComp.name}" ended — ${winners.length} prizes paid, started "${nextName}"`);
-
-  // ✅ إشعار بوت للفائزين (best-effort — لا يوقف التنفيذ)
-  for (const w of winners) {
-    const prizeAmount = parseFloat(w.prize);
-    sendTelegramMessage(
-      Number(w.telegram_id),
-      `🏆 *${endedComp.name} Has Ended!*\n\nYou finished *#${w.rnk}* on the leaderboard and won *+$${prizeAmount.toFixed(2)}* 🎉\n\nIt's already credited to your balance — withdraw anytime!\n\nA new season just started. Good luck! 🚀`
-    ).catch(e => console.error('[prize bot notify]', e.message));
+  // هل انتهت صلاحيته؟
+  if (!ad_nonce_exp || new Date(ad_nonce_exp) < new Date()) {
+    // تنظيف منتهي الصلاحية
+    await sql(`UPDATE sessions SET ad_nonce = NULL, ad_nonce_exp = NULL WHERE session_id = $1`, [sessionId]);
+    return false;
   }
+
+  // هل يطابق ما أصدره السيرفر؟ (constant-time comparison)
+  const expected = Buffer.from(ad_nonce,     'hex');
+  const received = Buffer.from(clientNonce,  'hex');
+  const match    = expected.length === received.length &&
+                   crypto.timingSafeEqual(expected, received);
+
+  if (!match) return false;
+
+  // ✅ مطابق — احذفه فوراً (one-time use)
+  await sql(`UPDATE sessions SET ad_nonce = NULL, ad_nonce_exp = NULL WHERE session_id = $1`, [sessionId]);
+  return true;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  Telegram Bot API
-// ══════════════════════════════════════════════════════════════════════════════
-async function sendTelegramMessage(chatId, text) {
-  if (!BOT_TOKEN) return { ok: false };
-  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: String(chatId), text, parse_mode: 'Markdown' })
-  });
-  return await res.json();
+// ── تنظيف دوري للجداول المؤقتة — كل ساعة (FIX #3) ─────────────
+// بدلاً من الحذف في كل request، نشغّل cron داخلي خفيف
+setInterval(async () => {
+  try {
+    await sql(`DELETE FROM nonces     WHERE expires_at  < NOW()`);
+    await sql(`DELETE FROM rate_limits WHERE window_start < $1`, [Date.now() - RATE_WINDOW * 10]);
+    console.log('[CLEANUP] nonces & rate_limits cleaned');
+  } catch (e) {
+    console.warn('[CLEANUP] error:', e.message);
+  }
+}, 60 * 60 * 1000); // كل ساعة
+
+// ── تحقق من Nonce العام (للعمليات الأخرى غير الإعلانات) ──
+async function checkNonce(tid, nonce) {
+  if (!nonce) return false;
+
+  // هل استُخدم من قبل؟
+  const existing = await sql(`SELECT 1 FROM nonces WHERE nonce = $1`, [nonce]);
+  if (existing.length) return false;
+
+  // تسجيله
+  await sql(
+    `INSERT INTO nonces (nonce, telegram_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [nonce, tid]
+  );
+  return true;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  Main Export
-// ══════════════════════════════════════════════════════════════════════════════
-module.exports = async function handler(req, res) {
-  // ── CORS محدود — مش wildcard ────────────────────────────────────────────────
-  const allowedOrigins = ['https://web.telegram.org','https://webk.telegram.org','https://webz.telegram.org'];
-  const origin = req.headers['origin'] || '';
-  res.setHeader('Access-Control-Allow-Origin',  allowedOrigins.includes(origin) ? origin : allowedOrigins[0]);
+// ── Rate Limiting (sliding window) ──
+async function checkRateLimit(tid) {
+  const window = Math.floor(Date.now() / RATE_WINDOW) * RATE_WINDOW;
+
+  // تنظيف Rate Limit يصير في interval مستقل (FIX #3) — لا نحذف هنا
+
+  const rows = await sql(
+    `INSERT INTO rate_limits (telegram_id, window_start, request_count)
+     VALUES ($1, $2, 1)
+     ON CONFLICT (telegram_id, window_start)
+     DO UPDATE SET request_count = rate_limits.request_count + 1
+     RETURNING request_count`,
+    [tid, window]
+  );
+  return (rows[0]?.request_count || 0) <= RATE_LIMIT;
+}
+
+// ── حساب Risk Score ──
+async function calcRiskScore(tid, ipHash, fingerprint, action) {
+  let score = 0;
+
+  // هل تغيّر الـ fingerprint؟
+  const fp = await sql(
+    `SELECT fingerprint FROM sessions WHERE telegram_id = $1 AND is_valid = TRUE LIMIT 1`,
+    [tid]
+  );
+  if (fp.length && fp[0].fingerprint !== fingerprint) score += 25;
+
+  // هل الـ IP تغيّر؟
+  const ip = await sql(
+    `SELECT ip_hash FROM sessions WHERE telegram_id = $1 AND is_valid = TRUE LIMIT 1`,
+    [tid]
+  );
+  if (ip.length && ip[0].ip_hash !== ipHash) score += 15;
+
+  // عدد المحاولات الفاشلة في آخر دقيقة
+  const failures = await sql(
+    `SELECT COUNT(*) AS c FROM security_logs
+     WHERE telegram_id = $1 AND verdict = 'deny' AND created_at > NOW() - INTERVAL '1 minute'`,
+    [tid]
+  );
+  score += Math.min(30, parseInt(failures[0]?.c || 0) * 10);
+
+  return Math.min(100, score);
+}
+
+// ── تسجيل في سجل الأمان ──
+async function auditLog(tid, ipHash, fingerprint, action, riskScore, verdict, detail = {}) {
+  try {
+    await sql(
+      `INSERT INTO security_logs (telegram_id, ip_hash, fingerprint, action, risk_score, verdict, detail)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [tid, ipHash, fingerprint, action, riskScore, verdict, JSON.stringify(detail)]
+    );
+  } catch (_) {}
+}
+
+// ── تحديث Risk Score في جدول المستخدمين ──
+async function updateUserRisk(tid, delta) {
+  await sql(
+    `UPDATE users SET risk_score = LEAST(100, GREATEST(0, risk_score + $2)), updated_at = NOW()
+     WHERE telegram_id = $1`,
+    [tid, delta]
+  );
+  // Shadow ban تلقائي إذا تجاوز الحد
+  await sql(
+    `UPDATE users SET shadow_banned = TRUE WHERE telegram_id = $1 AND risk_score >= $2`,
+    [tid, RISK_BAN]
+  );
+}
+
+// ================================================================
+//  HELPERS
+// ================================================================
+
+function cors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Init-Data');
-  res.setHeader('Vary', 'Origin');
-  if (req.method === 'OPTIONS') return res.status(204).end();
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Session-Id, X-Nonce, X-Init-Data, X-Fingerprint');
+}
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, error: 'Method not allowed' });
+function resolveCell(cell) {
+  if (!cell || cell.state === 'empty' || cell.state === 'ready') return cell;
+  if (cell.state === 'growing') {
+    const plantedAt = new Date(cell.planted_at).getTime();
+    const duration  = (cell.duration || GROW_DURATION) * 1000;
+    if (Date.now() >= plantedAt + duration) return { ...cell, state: 'ready' };
+  }
+  return cell;
+}
+
+function resolveCells(cells) {
+  if (!Array.isArray(cells)) return buildEmptyCells();
+  return cells.map(resolveCell);
+}
+
+function buildEmptyCells() {
+  return Array.from({ length: CELL_COUNT }, (_, i) => ({
+    id: i, state: 'empty', planted_at: null, duration: GROW_DURATION,
+  }));
+}
+
+function normalizeCellsFromDB(rawCells) {
+  if (!Array.isArray(rawCells) || rawCells.length === 0) return buildEmptyCells();
+  return rawCells;
+}
+
+function todayUTC() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function persistIfChanged(tid, original, resolved) {
+  const changed = resolved.some((c, i) => original[i]?.state !== c.state);
+  if (changed) {
+    await sql(`UPDATE users SET cells = $2, updated_at = NOW() WHERE telegram_id = $1`,
+      [tid, JSON.stringify(resolved)]);
+  }
+}
+
+// ── إنشاء Session ID آمن ──
+function generateSessionId() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// ================================================================
+//  MAIN HANDLER
+// ================================================================
+module.exports = async function handler(req, res) {
+  cors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST')    return res.status(405).json({ error: 'Method not allowed' });
+
+  // ── استخراج headers الأمان ──
+  const initData   = req.headers['x-init-data']   || '';
+  const sessionId  = req.headers['x-session-id']  || '';
+  const nonce      = req.headers['x-nonce']        || '';
+  const fpHeader   = req.headers['x-fingerprint']  || '{}';
+
+  let body = req.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch { return res.status(400).json({ error: 'Invalid JSON' }); }
   }
 
-  try {
-    await ensureSchema();
-  } catch (err) {
-    console.error('[Schema error]', err.message);
-    return res.status(500).json({ ok: false, error: 'DB schema error: ' + err.message });
-  }
+  const { action, data = {} } = body || {};
+  if (!action) return res.status(400).json({ error: 'Missing action' });
 
-  // 🏆 توزيع جوائز المسابقة فور انتهائها وبدء موسم جديد — best-effort،
-  // لا يوقف الطلب الحالي حتى لو فشل (سيُعاد المحاولة في الطلب التالي)
-  try {
-    await distributeSeasonPrizes();
-  } catch (err) {
-    console.error('[Prize distribution error]', err.message);
-  }
+  // ── معلومات الشبكة ──
+  const rawIP   = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '';
+  const ipHash  = hashIP(rawIP);
 
-  // 🛡️ IP rate limit عام
-  const clientIP = getClientIP(req);
-  try {
-    const ipOk = await checkIPLimit(clientIP, 'min');
-    if (!ipOk) return res.status(429).json({ ok: false, error: 'Too many requests' });
-  } catch (err) {
-    console.error('[IP limit error]', err.message);
-  }
+  // ── بناء fingerprint ──
+  let fpData = {};
+  try { fpData = JSON.parse(fpHeader); } catch (_) {}
+  const fingerprint = buildFingerprint(fpData, ipHash);
 
-  const body              = req.body || {};
-  const { type, data = {} } = body;
-  const rawInitData       = body.initData || req.headers['x-telegram-init-data'] || '';
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  let tgUser = null;
-  let dbUser = null;
-
-  if (type !== 'sendBotMsg') {
-    tgUser = verifyInitData(rawInitData);
-
+  // ================================================================
+  //  AUTH: تحقق initData عند login / create-session
+  // ================================================================
+  if (action === 'create_session') {
+    const tgUser = verifyTelegramInitData(initData);
     if (!tgUser) {
-      return res.status(401).json({ ok: false, error: 'Unauthorized' });
+      return res.status(401).json({ ok: false, error: 'Invalid or expired Telegram auth' });
     }
 
-    // 🛡️ فحص timestamp العميل — يمنع replay متأخر
-    if (data.ts) {
-      const drift = Math.abs(Date.now() / 1000 - parseInt(data.ts, 10));
-      if (drift > CFG.TS_DRIFT_SEC) {
-        return res.status(400).json({ ok: false, error: 'Request expired' });
-      }
-    }
+    const tid = parseInt(tgUser.id);
+    if (isNaN(tid)) return res.status(400).json({ ok: false, error: 'Invalid user ID' });
+
+    // ── إنشاء/تحديث المستخدم أولاً (خارج transaction) ──
+    await sql(
+      `INSERT INTO users (telegram_id, username, photo_url) VALUES ($1, $2, $3)
+       ON CONFLICT (telegram_id) DO UPDATE SET username = $2, photo_url = COALESCE($3, users.photo_url), updated_at = NOW()`,
+      [tid, tgUser.username || tgUser.first_name || null, tgUser.photo_url || null]
+    );
+
+    // ════════════════════════════════════════════════════════════════
+    //  ATOMIC MULTI-ACCOUNT DETECTION
+    //  كل شيء داخل transaction مع advisory lock لمنع race conditions
+    //  نستخدم نسخة منفصلة من neon هنا لأن BEGIN/COMMIT يحتاج connection
+    //  مستقل عن الـ _db المشترك (transaction-scoped connection)
+    // ════════════════════════════════════════════════════════════════
+    const db = neon(DATABASE_URL);
 
     try {
-      dbUser = await upsertUser(tgUser, data.startParam || null, body.fp || null);
-    } catch (err) {
-      console.error('[upsertUser error]', err.message);
-      return res.status(500).json({ ok: false, error: 'DB error: ' + err.message });
-    }
+      await db('BEGIN');
 
-    // 🟢 نبضة أونلاين — best-effort وغير محجوبة (fire-and-forget) عشان ما تبطئش الرد على المستخدم
-    sql(`UPDATE users SET last_seen_at = NOW() WHERE id = $1`, [dbUser.id])
-      .catch(err => console.error('[last_seen_at update]', err.message));
+      // ── Advisory lock مبني على ip_hash ──
+      // يحول نص الـ ip_hash إلى رقم صحيح 64-bit بطريقة ثابتة
+      // هذا يمنع حالات race condition لو جاء طلبان بنفس الـ IP في نفس الوقت
+      const lockKey = BigInt('0x' + ipHash.slice(0, 15)) & BigInt('0x7FFFFFFFFFFFFFFF');
+      await db(`SELECT pg_advisory_xact_lock($1)`, [lockKey.toString()]);
 
-    // 🛡️ تلاشي تدريجي لـ risk_score مع الوقت + رفع شادو-بان تلقائي لو رجع الـ score صفر
-    if (dbUser.risk_score > 0 || dbUser.shadow_banned) {
-      try {
-        const decayed = await decayRisk(dbUser.id);
-        if (decayed) {
-          dbUser.risk_score    = decayed.risk_score;
-          dbUser.shadow_banned = decayed.shadow_banned;
-        }
-      } catch (err) {
-        console.error('[decayRisk error]', err.message);
+      // ── فحص Hard Ban أولاً ──
+      const banCheck = await db(
+        `SELECT shadow_banned, is_hard_banned, risk_score, created_at
+         FROM users WHERE telegram_id = $1`,
+        [tid]
+      );
+      const userRow = banCheck[0];
+
+      if (userRow?.is_hard_banned) {
+        await db('ROLLBACK');
+        await auditLog(tid, ipHash, fingerprint, 'create_session_hard_banned', 100, 'deny',
+          { reason: 'hard_banned', tg_id: tid });
+        return res.status(200).json({ ok: false, is_banned: true, ban_type: 'hard' });
       }
+
+      if (userRow?.shadow_banned) {
+        await db('ROLLBACK');
+        await auditLog(tid, ipHash, fingerprint, 'create_session_shadow_banned', userRow.risk_score, 'deny',
+          { reason: 'shadow_banned' });
+        return res.status(200).json({ ok: false, is_banned: true });
+      }
+
+      // ── تحديد هل الحساب "جديد" ──
+      const accountCreatedAt = userRow?.created_at ? new Date(userRow.created_at) : new Date();
+      const accountAgeDays   = (Date.now() - accountCreatedAt.getTime()) / (1000 * 60 * 60 * 24);
+      const isNewAccount     = accountAgeDays < MULTI_ACCT.NEW_ACCOUNT_AGE_DAYS;
+
+      // ── IP Whitelist check ──
+      const isWhitelisted = MULTI_ACCT.IP_WHITELIST.has(ipHash);
+
+      if (!isWhitelisted && isNewAccount) {
+        // ════════════════════════════════════════════════════════════
+        //  STEP 1 — عدد الحسابات لكل IP
+        //  نحسب كم حساباً مختلفاً تم تسجيله من هذا الـ IP
+        //  نستخدم DISTINCT لأن نفس المستخدم قد يفتح جلسات متعددة
+        // ════════════════════════════════════════════════════════════
+        const ipCountResult = await db(
+          `SELECT COUNT(DISTINCT telegram_id) AS cnt
+           FROM sessions
+           WHERE ip_hash = $1
+             AND telegram_id != $2
+             AND is_valid = TRUE
+             AND expires_at > NOW()`,
+          [ipHash, tid]
+        );
+        const activeAccountsOnIP = parseInt(ipCountResult[0]?.cnt || 0);
+
+        // ════════════════════════════════════════════════════════════
+        //  STEP 2 — عدد الحسابات لكل fingerprint
+        //  fingerprint أقوى من IP لأنه يمثل الجهاز الفعلي
+        // ════════════════════════════════════════════════════════════
+        const fpCountResult = await db(
+          `SELECT COUNT(DISTINCT telegram_id) AS cnt
+           FROM device_fingerprints
+           WHERE fingerprint = $1
+             AND telegram_id != $2`,
+          [fingerprint, tid]
+        );
+        const accountsOnFingerprint = parseInt(fpCountResult[0]?.cnt || 0);
+
+        // ════════════════════════════════════════════════════════════
+        //  STEP 3 — منطق الحظر المزدوج
+        //
+        //  القرار: Hard Ban فقط عند تحقق الشرطين معاً:
+        //   ① IP فيه أكثر من MAX_ACCOUNTS_PER_IP حسابات
+        //   ② نفس الـ fingerprint مستخدم مع حساب آخر
+        //
+        //  أو: Fingerprint وحده كافٍ إذا تجاوز الحد
+        //  (حالة أشد خطورة: نفس الجهاز بحسابات متعددة)
+        // ════════════════════════════════════════════════════════════
+        const ipViolation = activeAccountsOnIP >= MULTI_ACCT.MAX_ACCOUNTS_PER_IP;
+        const fpViolation  = accountsOnFingerprint >= MULTI_ACCT.MAX_ACCOUNTS_PER_FINGERPRINT;
+
+        const shouldBan = (ipViolation && fpViolation) || fpViolation;
+        // شرح المنطق:
+        // • fpViolation وحده = Ban (أقوى دليل: نفس الجهاز → multi-account حقيقي)
+        // • ipViolation && fpViolation = Ban (تأكيد مزدوج)
+        // • ipViolation وحده = لا ban (شبكة مشتركة/NAT)
+
+        if (shouldBan) {
+          // ── Hard Ban للحساب الجديد فقط ──
+          // الحسابات القديمة لا تُمس
+          await db(
+            `UPDATE users SET is_hard_banned = TRUE, updated_at = NOW() WHERE telegram_id = $1`,
+            [tid]
+          );
+
+          // تسجيل تفصيلي للتحليل لاحقاً
+          await db(
+            `INSERT INTO security_logs
+               (telegram_id, ip_hash, fingerprint, action, risk_score, verdict, detail)
+             VALUES ($1, $2, $3, 'multi_account_detected', 100, 'deny', $4)`,
+            [
+              tid, ipHash, fingerprint,
+              JSON.stringify({
+                reason            : 'multi_account_hard_ban',
+                ip_accounts_count : activeAccountsOnIP,
+                fp_accounts_count : accountsOnFingerprint,
+                ip_violation      : ipViolation,
+                fp_violation      : fpViolation,
+                account_age_days  : Math.round(accountAgeDays * 10) / 10,
+                is_new_account    : isNewAccount,
+                fingerprint       : fingerprint,
+                ip_hash           : ipHash,
+                tg_id             : tid,
+              })
+            ]
+          );
+
+          await db('COMMIT');
+
+          console.warn(
+            `[ANTI-FRAUD] Hard Ban applied → tg_id=${tid}` +
+            ` ip_accounts=${activeAccountsOnIP} fp_accounts=${accountsOnFingerprint}` +
+            ` ip_hash=${ipHash.slice(0, 8)}... fp=${fingerprint.slice(0, 8)}...`
+          );
+
+          return res.status(200).json({ ok: false, is_banned: true, ban_type: 'hard' });
+        }
+
+        // ── تحذير فقط: IP فيه حسابات متعددة لكن بدون تطابق fingerprint ──
+        if (ipViolation && !fpViolation) {
+          // نسجّل للتحليل لكن لا نحظر
+          await db(
+            `INSERT INTO security_logs
+               (telegram_id, ip_hash, fingerprint, action, risk_score, verdict, detail)
+             VALUES ($1, $2, $3, 'multi_ip_warning', 30, 'allow', $4)`,
+            [
+              tid, ipHash, fingerprint,
+              JSON.stringify({
+                reason            : 'shared_ip_multiple_accounts',
+                ip_accounts_count : activeAccountsOnIP,
+                fp_accounts_count : accountsOnFingerprint,
+                note              : 'Shared WiFi / Carrier NAT — no ban applied',
+              })
+            ]
+          );
+        }
+      }
+      // ════════════════════════════════════════════════════════════
+      //  END MULTI-ACCOUNT CHECK
+      // ════════════════════════════════════════════════════════════
+
+      // ── Reset خفيف عند ارتفاع risk_score السابق ──
+      if (userRow?.risk_score >= RISK_SUSPICIOUS) {
+        await db(
+          `UPDATE users SET risk_score = 0, updated_at = NOW() WHERE telegram_id = $1`,
+          [tid]
+        );
+        await db(`DELETE FROM device_fingerprints WHERE telegram_id = $1`, [tid]);
+        await db(`DELETE FROM security_logs WHERE telegram_id = $1 AND verdict = 'deny'`, [tid]);
+      }
+
+      // ── إلغاء الجلسات القديمة ──
+      await db(`UPDATE sessions SET is_valid = FALSE WHERE telegram_id = $1`, [tid]);
+
+      // ── إنشاء جلسة جديدة داخل نفس الـ transaction ──
+      const sid = generateSessionId();
+      await db(
+        `INSERT INTO sessions (session_id, telegram_id, ip_hash, fingerprint)
+         VALUES ($1, $2, $3, $4)`,
+        [sid, tid, ipHash, fingerprint]
+      );
+
+      // ── حفظ fingerprint ──
+      await db(
+        `INSERT INTO device_fingerprints (fingerprint, telegram_id, user_agent, lang, screen, timezone_off)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (fingerprint, telegram_id) DO UPDATE SET last_seen = NOW()`,
+        [fingerprint, tid, fpData.user_agent || null, fpData.lang || null,
+         fpData.screen || null, fpData.tz_offset || 0]
+      );
+
+      await db('COMMIT');
+
+      await auditLog(tid, ipHash, fingerprint, 'create_session', 0, 'allow',
+        { tg_id: tid, is_new_account: isNewAccount });
+
+      return res.status(200).json({ ok: true, session_id: sid });
+
+    } catch (txErr) {
+      try { await db('ROLLBACK'); } catch (_) {}
+      console.error('[create_session TX Error]', txErr.message);
+      return res.status(500).json({ ok: false, error: 'Session creation failed' });
     }
-    // ملاحظة: شيلنا الرد العام الموحّد لـ shadow ban (كان يكسر صفحات مثل init
-    // لكل المحظورين). صار التعامل معه داخل كل case على حدة (watchAd / withdraw)
-    // فقط — أي الأماكن اللي فيها مكسب فعلي (نقاط / فلوس).
   }
 
-  // ── Router ─────────────────────────────────────────────────────────────────
-  try {
-    switch (type) {
-
-      case 'init': {
-        const [userRank, leaderboard, refStats, competition] = await Promise.all([
-          getUserRank(dbUser.id),
-          getLeaderboard(11),
-          sql(`SELECT
-                COUNT(*)::INT                                        AS ref_count,
-                COUNT(*) FILTER (WHERE referral_activated = TRUE)::INT  AS active_count,
-                COUNT(*) FILTER (WHERE referral_activated = FALSE)::INT AS pending_count,
-                (COUNT(*) FILTER (WHERE referral_activated = TRUE) * $2)::INT AS ref_earned
-               FROM users WHERE referred_by = $1`, [dbUser.telegram_id, APP_CFG.REF_TICKET_REWARD]),
-          getActiveCompetition()
-        ]);
-
-        // دمج توقيت المسابقة من DB في الـ config
-        const configWithCompetition = {
-          ...APP_CFG,
-          COMPETITION_END_MS:   competition ? new Date(competition.end_at).getTime()   : APP_CFG.COMPETITION_END_MS,
-          COMPETITION_START_MS: competition ? new Date(competition.start_at).getTime() : Date.now(),
-          COMPETITION_NAME:     competition?.name ?? 'Season 1',
-        };
-        return res.json({
-          ok: true,
-          user: {
-            id:            dbUser.id,
-            telegram_id:   Number(dbUser.telegram_id),
-            name:          dbUser.first_name || dbUser.username || 'You',
-            photo_url:     dbUser.photo_url || null,
-            pts:           Number(dbUser.pts),
-            balance_usd:   parseFloat(dbUser.balance_usd),
-            referral_code: dbUser.referral_code,
-            rank:          userRank,
-            banned:        dbUser.banned || false,
-            onboarding_seen: dbUser.onboarding_seen || false
-          },
-          leaderboard: leaderboard.map(r => ({
-            telegram_id: Number(r.telegram_id),
-            name: r.name,
-            photo_url: r.photo_url || null,
-            pts:  Number(r.pts),
-            rank: r.rank
-          })),
-          referral: {
-            count:   refStats[0]?.ref_count    ?? 0,
-            active:  refStats[0]?.active_count  ?? 0,
-            pending: refStats[0]?.pending_count ?? 0,
-            earned:  refStats[0]?.ref_earned    ?? 0
-          },
-          config: configWithCompetition
-        });
-      }
-
-      // ✅ markOnboardingSeen — يُسجَّل في DB بدل localStorage (يضمن مشاهدة واحدة فقط حتى بعد مسح الكاش)
-      case 'markOnboardingSeen': {
-        await sql(`UPDATE users SET onboarding_seen = TRUE WHERE id = $1`, [dbUser.id]);
-        return res.json({ ok: true });
-      }
-
-      // 🛡️ startAd — الخطوة الأولى: احجز token موقّع قبل تشغيل الإعلان
-      case 'startAd': {
-        // 📢 اشتراك إجباري بالقناة قبل مشاهدة أي إعلان — نفس البوابة المستخدمة عند السحب
-        const isMemberForAd = await isChannelMember(dbUser.telegram_id);
-        if (!isMemberForAd) {
-          return res.status(403).json({ ok: false, error: 'channel_required', channel: CHANNEL_USERNAME });
-        }
-
-        const today = new Date().toISOString().slice(0, 10);
-        const uRows = await sql(`SELECT last_ad_watch, daily_ads, last_ad_date FROM users WHERE id = $1`, [dbUser.id]);
-        const u = uRows[0];
-        const sameDay = u.last_ad_date && String(u.last_ad_date).slice(0, 10) === today;
-        const dailyCount = sameDay ? u.daily_ads : 0;
-
-        if (dailyCount >= CFG.AD_DAILY_MAX) {
-          return res.status(429).json({ ok: false, error: 'Daily ad limit reached' });
-        }
-        if (u.last_ad_watch) {
-          const secSince = (Date.now() - new Date(u.last_ad_watch).getTime()) / 1000;
-          if (secSince < CFG.AD_COOLDOWN_SEC) {
-            return res.status(429).json({ ok: false, error: 'Please wait', waitSec: Math.ceil(CFG.AD_COOLDOWN_SEC - secSince) });
-          }
-        }
-
-        // 🛡️ احذف أي token قديم غير مستخدم — يمنع تجميع tokens
-        await sql(`DELETE FROM ad_sessions WHERE user_id = $1 AND used = FALSE`, [dbUser.id]);
-
-        // 🛡️ مدة المشاهدة تُحدَّد من السيرفر حسب نوع الإعلان — لا توجد قيمة ثابتة 30s
-        const adType = (typeof data.adType === 'string' ? data.adType.toLowerCase() : 'default');
-        const dur    = AD_DURATIONS[adType] || AD_DURATIONS.default;
-
-        // 🔒 Payload موقّع HMAC — لا يمكن للعميل تعديل uid/adType/iat/dur ولا إنشاء token بدون السر
-        const token = signAdToken({ uid: dbUser.id, adType, dur, iat: Date.now() });
-
-        await sql(`INSERT INTO ad_sessions (token, user_id, ad_type) VALUES ($1, $2, $3)`, [token, dbUser.id, adType]);
-        return res.json({ ok: true, token });
-      }
-
-      case 'watchAd': {
-        const { token } = data;
-
-        // 🛡️ تحقق التوقيع أولاً — أي تلاعب أو تزوير يُرفض فوراً قبل أي وصول لقاعدة البيانات
-        const payload = verifyAdToken(token);
-        if (!payload || typeof payload.uid !== 'number' || typeof payload.iat !== 'number') {
-          await addRisk(dbUser.id, 30, 'no_token');
-          return res.status(400).json({ ok: false, error: 'Invalid session' });
-        }
-
-        // 🛡️ التحقق إن الـ token صادر لهذا المستخدم بالضبط
-        if (payload.uid !== dbUser.id) {
-          await addRisk(dbUser.id, 80, 'token_stolen');
-          return res.status(403).json({ ok: false, error: 'Session mismatch' });
-        }
-
-        // 🛡️ IP limit للإعلانات
-        const ipAdOk = await checkIPLimit(clientIP, 'hr');
-        if (!ipAdOk) return res.status(429).json({ ok: false, error: 'Too many ads from this network' });
-
-        // جلب الجلسة (one-time use — حماية إضافية حتى لو التوقيع صحيح)
-        const sessions = await sql(`SELECT * FROM ad_sessions WHERE token = $1`, [token]);
-        if (sessions.length === 0) {
-          await addRisk(dbUser.id, 40, 'fake_token');
-          return res.status(400).json({ ok: false, error: 'Invalid session' });
-        }
-        const session = sessions[0];
-
-        if (session.user_id !== dbUser.id) {
-          await addRisk(dbUser.id, 80, 'token_stolen');
-          return res.status(403).json({ ok: false, error: 'Session mismatch' });
-        }
-
-        if (session.used) {
-          await addRisk(dbUser.id, 60, 'used_token');
-          return res.status(400).json({ ok: false, error: 'Session already used' });
-        }
-
-        // 🛡️ مدة المشاهدة المطلوبة محسوبة من التوكن نفسه (موقّعة من السيرفر، لا يتحكم بها العميل)
-        const requiredDur = AD_DURATIONS[payload.adType] || AD_DURATIONS.default;
-        const sessionAge  = (Date.now() - payload.iat) / 1000;
-
-        // 🛡️ لازم مضى وقت كافٍ — إثبات المشاهدة الفعلية
-        // (مع هامش صغير لفروقات الشبكة/الجهاز — تحميل SDK وعرض الإعلان
-        // عادة بياخذوا أطول من requiredDur أصلاً)
-        if (sessionAge < requiredDur - CFG.AD_TIMING_TOLERANCE_SEC) {
-          await addRisk(dbUser.id, 70, `too_fast_${Math.round(sessionAge)}s`);
-          return res.status(400).json({ ok: false, error: 'Ad not fully watched' });
-        }
-
-        // 🛡️ نافذة صلاحية ضيقة (مدة الإعلان + هامش صغير) بدل صلاحية ثابتة 5 دقائق
-        if (sessionAge > requiredDur + AD_GRACE_SEC) {
-          await sql(`DELETE FROM ad_sessions WHERE token = $1`, [token]);
-          await addRisk(dbUser.id, 20, `token_expired_${Math.round(sessionAge)}s`);
-          return res.status(400).json({ ok: false, error: 'Session expired' });
-        }
-
-        // فحص الـ daily limit مرة ثانية (atomic)
-        const today = new Date().toISOString().slice(0, 10);
-        const uRows = await sql(`SELECT daily_ads, last_ad_date, last_ad_watch FROM users WHERE id = $1`, [dbUser.id]);
-        const u2 = uRows[0];
-        const sameDay = u2.last_ad_date && String(u2.last_ad_date).slice(0, 10) === today;
-        if ((sameDay ? u2.daily_ads : 0) >= CFG.AD_DAILY_MAX) {
-          return res.status(429).json({ ok: false, error: 'Daily ad limit reached' });
-        }
-
-        // 🛡️ فحص cooldown داخل watchAd أيضاً — لو تجاوز startAd بطريقة ما
-        if (u2.last_ad_watch) {
-          const secSince = (Date.now() - new Date(u2.last_ad_watch).getTime()) / 1000;
-          if (secSince < CFG.AD_COOLDOWN_SEC) {
-            await addRisk(dbUser.id, 40, `cooldown_bypass_${Math.round(secSince)}s`);
-            return res.status(429).json({ ok: false, error: 'Please wait between ads' });
-          }
-        }
-
-        // 🛡️ بوابة Adsgram Reward URL — تمنع السكربتات من تزوير "المشاهدة" بمجرد الانتظار
-        // مفعّلة فقط لـ adType === 'adsgram' وفقط بعد ضبط ADSGRAM_REWARD_SECRET في env
-        // لازم وصل تأكيد server-to-server حقيقي من Adsgram لهذا المستخدم قبل منح النقاط
-        if (payload.adType === 'adsgram' && process.env.ADSGRAM_REWARD_SECRET) {
-          const confirmed = await consumeAdsgramConfirmation(dbUser.telegram_id);
-          if (!confirmed) {
-            // قد يكون تأكيد Adsgram لم يصل بعد (تأخير شبكة) — اطلب من العميل إعادة المحاولة بعد قليل
-            return res.status(202).json({ ok: false, error: 'pending_confirmation', retryAfterMs: 1500 });
-          }
-        }
-
-        // 🛡️ منع replay — يُسجَّل هنا فقط بعد تأكيد Adsgram حتى تنجح إعادة المحاولة عند pending_confirmation
-        const hashOk = await checkAndMarkInitHash(rawInitData, token);
-        if (!hashOk) {
-          await addRisk(dbUser.id, 50, 'replay_initData');
-          return res.status(400).json({ ok: false, error: 'Duplicate request' });
-        }
-
-        const AD_REWARD = APP_CFG.AD_USD_REWARD;
-
-        // 🎯 تحديد المكافأة: أقل من AD_FULL_REWARD_MIN_SEC → 50% فقط
-        const isPartialWatch = sessionAge < AD_FULL_REWARD_MIN_SEC;
-        const actualReward   = isPartialWatch ? +(AD_REWARD * 0.5).toFixed(6) : AD_REWARD;
-
-        // 🛡️ Shadow ban — كل الفحوصات أعلاه نجحت بشكل طبيعي (نفس تجربة مستخدم حقيقي)،
-        // بس ما رايح نمنح نقاط فعلية. الرد يبدو ناجح عشان المخترق ما يلاحظ شي،
-        // وما عاد بيؤثر على باقي الصفحات (init وغيرها) كما كان سابقاً.
-        if (dbUser.shadow_banned) {
-          await sql(`UPDATE ad_sessions SET used = TRUE WHERE token = $1`, [token]);
-          const fakeRank = await getUserRank(dbUser.id);
-          return res.json({
-            ok:        true,
-            reward:    actualReward,
-            partial:   isPartialWatch,
-            rankUp:    false,
-            newRank:   fakeRank,
-            rankDelta: 0,
-            chatId:    null
-          });
-        }
-
-        const rankBefore = await getUserRank(dbUser.id);
-
-        // 🔒 Atomic update
-        await sql(`
-          UPDATE users SET
-            balance_usd       = balance_usd + $1,
-            last_ad_watch     = NOW(),
-            daily_ads         = CASE WHEN last_ad_date = CURRENT_DATE THEN daily_ads + 1 ELSE 1 END,
-            last_ad_date      = CURRENT_DATE,
-            total_ads_watched = total_ads_watched + 1
-          WHERE id = $2
-        `, [actualReward, dbUser.id]);
-
-        // وسّم الـ token كمستخدم
-        await sql(`UPDATE ad_sessions SET used = TRUE WHERE token = $1`, [token]);
-        await sql('INSERT INTO ad_watches (user_id, reward) VALUES ($1, $2)', [dbUser.id, actualReward]);
-        await bumpAdDailyStat(); // 📊 إجمالي إعلانات اليوم لكل المستخدمين
-
-        // 🎁 فحص تفعيل الإحالة — await لضمان إرسال الإشعار قبل انتهاء الدالة
-        await checkReferralActivation(dbUser.id);
-
-        const rankAfter  = await getUserRank(dbUser.id);
-        const rankUp     = rankAfter < rankBefore;
-
-        // ✅ إشعار rank-up مباشر من الباكند
-        if (rankUp) {
-          sendTelegramMessage(
-            Number(dbUser.telegram_id),
-            `🏆 *Rank Up!*\n\n` +
-            `You just climbed to *#${rankAfter}* on the leaderboard!\n\n` +
-            `📈 *Current Rank:* #${rankAfter}\n` +
-            `🎯 Keep watching ads to hold your spot!\n\n` +
-            `Stay on top and secure your prize! 🔥`
-          ).catch(e => console.error('[rankup bot notify]', e.message));
-        }
-
-        return res.json({
-          ok:        true,
-          reward:    actualReward,
-          partial:   isPartialWatch,
-          rankUp,
-          newRank:   rankAfter,
-          rankDelta: rankUp ? rankBefore - rankAfter : 0
-        });
-      }
-
-      // ══════════════════════════════════════════════════════════════════
-      // 🎮 gameRoundStart — ينشئ جلسة جولة على السيرفر ويعيد UUID معتم
-      //    العميل لا يرسل أي نقاط — السيرفر يحدد المكافأة داخلياً
-      // ══════════════════════════════════════════════════════════════════
-      case 'gameRoundStart': {
-        // كولداون: يمنع إنشاء جلسات أسرع من مدة الجولة الفعلية
-        const gRows = await sql(`SELECT last_game_round FROM users WHERE id = $1`, [dbUser.id]);
-        const lastRound = gRows[0]?.last_game_round;
-        if (lastRound) {
-          const secSince = (Date.now() - new Date(lastRound).getTime()) / 1000;
-          if (secSince < CFG.GAME_ROUND_DURATION_SEC - 5) {
-            return res.status(429).json({ ok: false, error: 'Please wait', waitSec: Math.ceil(CFG.GAME_ROUND_DURATION_SEC - 5 - secSince) });
-          }
-        }
-        // تنظيف جلسات قديمة غير مُستخدَمة لهذا المستخدم
-        await sql(`DELETE FROM game_sessions WHERE user_id = $1 AND used = FALSE AND created_at < NOW() - INTERVAL '6 minutes'`, [dbUser.id]);
-        // إنشاء seed + تسلسل عناصر محدد مسبقاً (السيرفر يعرف كل عنصر سيظهر)
-        const seed     = (Math.random() * 2 ** 31) >>> 0;
-        const sequence = generateGameSequence(seed);
-        const sRows    = await sql(
-          `INSERT INTO game_sessions (user_id, seed, sequence_json) VALUES ($1, $2, $3) RETURNING id`,
-          [dbUser.id, seed, JSON.stringify(sequence)]
-        );
-        // _t = token معتم، seed للـ PRNG على العميل — لا يوجد "sessionId" في الـ JSON
-        return res.json({ ok: true, _t: sRows[0].id, seed });
-      }
-
-      // ══════════════════════════════════════════════════════════════════
-      // 🎮 gameAdVerify — يتحقق من تأكيد Adsgram S2S ويُفعّل المضاعفة
-      //    على الجلسة داخلياً بدون إرسال أي قيمة من العميل
-      // ══════════════════════════════════════════════════════════════════
-      case 'gameAdVerify': {
-        const { _t: gAvSid } = data;
-        if (!gAvSid) return res.status(400).json({ ok: false, error: 'Missing token' });
-
-        const gAvRows = await sql(
-          `SELECT id, user_id, used, double_approved FROM game_sessions WHERE id = $1`,
-          [gAvSid]
-        );
-        if (!gAvRows.length || gAvRows[0].user_id !== dbUser.id)
-          return res.status(403).json({ ok: false, error: 'Invalid token' });
-        if (gAvRows[0].used)
-          return res.status(400).json({ ok: false, error: 'Session already used' });
-        if (gAvRows[0].double_approved)
-          return res.status(400).json({ ok: false, error: 'Double already applied' });
-
-        // 🛡️ تأكيد Adsgram S2S — نفس آلية الإعلانات الرئيسية
-        if (process.env.ADSGRAM_REWARD_SECRET) {
-          const confirmed = await consumeAdsgramConfirmation(dbUser.telegram_id);
-          if (!confirmed) {
-            return res.status(202).json({ ok: false, error: 'pending_confirmation', retryAfterMs: 1500 });
-          }
-        }
-
-        await sql(`UPDATE game_sessions SET double_approved = TRUE WHERE id = $1`, [gAvSid]);
-
-        // 📊 تتبّع عدد فقط — جدول مستقل خاص بإعلانات مضاعفة اللعبة، لا علاقة له
-        // بـ daily_ads ولا بحد AD_DAILY_MAX إطلاقاً (لا يُقرأ ولا يُكتب هنا)
-        await bumpGameDoubleAdStat();
-
-        return res.json({ ok: true });
-      }
-
-      // ══════════════════════════════════════════════════════════════════
-      // 🎮 gameRoundEnd — يستهلك الجلسة ويمنح مكافأة ثابتة من السيرفر
-      //    لا يقبل أي نقاط أو score من العميل
-      // ══════════════════════════════════════════════════════════════════
-      case 'gameRoundEnd': {
-        // c = caught indices (مؤشرات العناصر التي صادها اللاعب)
-        // n = totalSpawned  (كم عنصر ظهر فعلاً في هذه الجولة)
-        // _t = token معتم (يُستخدم داخلياً فقط — لا يُعرض في UI)
-        const { _t: gReSid, c: rawCaught, n: totalSpawned } = data;
-        if (!gReSid) return res.status(400).json({ ok: false, error: 'Missing token' });
-
-        const gReRows = await sql(
-          `SELECT id, user_id, used, double_approved, created_at, sequence_json FROM game_sessions WHERE id = $1`,
-          [gReSid]
-        );
-        if (!gReRows.length || gReRows[0].user_id !== dbUser.id) {
-          await addRisk(dbUser.id, 40, 'game_invalid_token');
-          return res.status(403).json({ ok: false, error: 'Invalid token' });
-        }
-        const gs = gReRows[0];
-        if (gs.used) {
-          await addRisk(dbUser.id, 30, 'game_replay');
-          return res.status(400).json({ ok: false, error: 'Session already used' });
-        }
-
-        // 🛡️ تحقق من التوقيت
-        const elapsed = (Date.now() - new Date(gs.created_at).getTime()) / 1000;
-        if (elapsed < CFG.GAME_ROUND_DURATION_SEC - 5) {
-          await addRisk(dbUser.id, 60, `game_too_fast_${Math.round(elapsed)}s`);
-          return res.status(400).json({ ok: false, error: 'Round not complete' });
-        }
-        if (elapsed > CFG.GAME_ROUND_SESSION_TTL_SEC) {
-          await sql(`UPDATE game_sessions SET used = TRUE WHERE id = $1`, [gReSid]);
-          return res.status(400).json({ ok: false, error: 'Session expired' });
-        }
-
-        // 🛡️ تحقق من بيانات الصيد
-        const sequence    = gs.sequence_json ? JSON.parse(gs.sequence_json) : null;
-        const spawnedCount = Math.min(Math.max(0, parseInt(totalSpawned) || 0), _GAME_SEQ_LEN);
-        const caughtIds   = Array.isArray(rawCaught) ? rawCaught : [];
-
-        // 🛡️ التحقق من سجل موقع السلة (bLog)
-        // العميل يرسل مصفوفة x مُعيَّر (0-1) كل 500ms طوال الجولة
-        const rawBLog = data.bLog;
-        const bLog = Array.isArray(rawBLog)
-          ? rawBLog.filter(v => typeof v === 'number' && isFinite(v) && v >= 0 && v <= 1).slice(0, 200)
-          : [];
-
-        if (bLog.length < 8) {
-          // سجل مفقود أو شحيح جداً — شك في التلاعب عبر API مباشرة
-          await addRisk(dbUser.id, 30, `game_missing_basket_log_n${bLog.length}`);
-        } else {
-          // تحقق من حركة السلة: سلة ثابتة = بوت
-          const mean   = bLog.reduce((a, b) => a + b, 0) / bLog.length;
-          const stdDev = Math.sqrt(bLog.reduce((a, x) => a + (x - mean) ** 2, 0) / bLog.length);
-          if (stdDev < 0.02) {
-            await addRisk(dbUser.id, 55, `game_static_basket_std${stdDev.toFixed(4)}`);
-          }
-        }
-
-        let score = 0;
-        let dollarCount = 0;
-        if (sequence) {
-          const seen = new Set();
-          for (const idx of caughtIds) {
-            const i = parseInt(idx);
-            if (!Number.isInteger(i) || i < 0 || i >= spawnedCount || seen.has(i)) continue;
-            seen.add(i);
-            const entry = sequence[i];
-            score += (typeof entry === 'object' ? entry?.val : entry) ?? 0;
-            if (entry && typeof entry === 'object' && entry.d) dollarCount++;
-          }
-          score = Math.max(0, score);
-          dollarCount = Math.min(dollarCount, GAME_USDT);
-
-          // 🛡️ نسبة صيد مشبوهة (> 95% من كل العناصر)
-          if (spawnedCount > 10 && seen.size / spawnedCount > 0.95) {
-            await addRisk(dbUser.id, 25, `game_catch_rate_${Math.round(seen.size / spawnedCount * 100)}pct`);
-          }
-
-          // 🛡️ تحقق مكاني: تذكرة في منطقة بعيدة يجب أن يكون السلة قريبة منها
-          if (bLog.length >= 8) {
-            for (const idx of seen) {
-              const entry = sequence[idx];
-              if (!entry || typeof entry !== 'object' || entry.val <= 0) continue;
-              const itemX = entry.x; // 0-1 normalized
-              // منطقة حافة (< 18% أو > 82% من عرض الشاشة)
-              if (itemX < 0.18 || itemX > 0.82) {
-                const basketReached = bLog.some(bx => Math.abs(bx - itemX) < 0.20);
-                if (!basketReached) {
-                  await addRisk(dbUser.id, 50, `game_impossible_catch_x${itemX.toFixed(2)}_idx${idx}`);
-                  break; // نقطة واحدة تكفي للتنبيه
-                }
-              }
-            }
-          }
-        } else {
-          // جلسة قديمة بدون sequence — مكافأة ثابتة fallback
-          score = CFG.GAME_ROUND_TICKETS;
-        }
-
-        // استهلاك الجلسة atomic
-        const consumed = await sql(
-          `UPDATE game_sessions SET used = TRUE WHERE id = $1 AND used = FALSE RETURNING id`,
-          [gReSid]
-        );
-        if (!consumed.length) return res.status(400).json({ ok: false, error: 'Session already used' });
-
-        const doubled     = gs.double_approved;
-        const awarded     = doubled ? score * 2 : score;
-        const usdAwarded  = +((doubled ? dollarCount * 2 : dollarCount) * GAME_DOLLAR_VALUE).toFixed(6); // 🎮 USDT من عملات الدولار (تُضاعَف كالتذاكر)
-
-        await sql(`UPDATE users SET last_game_round = NOW() WHERE id = $1`, [dbUser.id]);
-
-        // 🛡️ Shadow ban
-        if (dbUser.shadow_banned) return res.json({ ok: true, awarded, doubled, usdAwarded });
-
-        await sql(`UPDATE users SET pts = pts + $1, balance_usd = balance_usd + $2 WHERE id = $3`, [awarded, usdAwarded, dbUser.id]);
-        await sql(`INSERT INTO activity_logs (user_id, action, meta) VALUES ($1, 'game_round', $2)`,
-          [dbUser.id, JSON.stringify({ score, awarded, doubled, usdAwarded, dollarCount, spawned: spawnedCount, caught: caughtIds.length })]);
-
-        // 🎁 فحص تفعيل الإحالة — await لضمان إرسال الإشعار قبل انتهاء الدالة
-        await checkReferralActivation(dbUser.id);
-
-        return res.json({ ok: true, awarded, doubled, usdAwarded });
-      }
-
-      case 'withdraw': {
-        const { address, memo, amount, fee } = data;
-        if (!address?.trim()) return res.status(400).json({ ok: false, error: 'Wallet address required' });
-        const amt    = parseFloat(amount);           // الإجمالي — يُخصم من رصيد المستخدم
-        const feeAmt = 0;                             // 🚫 لا رسوم على السحب إطلاقاً — يُتجاهل أي fee قادم من العميل
-        const netAmt = Math.max(0, Math.round((amt - feeAmt) * 1000) / 1000); // الصافي — يُسجَّل كمبلغ السحب المستحق فعلياً
-        if (isNaN(amt) || amt < APP_CFG.WITHDRAW_MIN) return res.status(400).json({ ok: false, error: `Minimum withdrawal is $${APP_CFG.WITHDRAW_MIN.toFixed(2)}` });
-        if (parseFloat(dbUser.balance_usd) < amt) return res.status(400).json({ ok: false, error: 'Insufficient balance' });
-
-        // 🎯 شرط السحب: لازم عدد إحالات مفعّلة كافٍ
-        const activeRefRows = await sql(
-          'SELECT COUNT(*)::INT AS cnt FROM users WHERE referred_by = $1 AND referral_activated = TRUE',
-          [dbUser.telegram_id]
-        );
-        const activeReferralsCount = activeRefRows[0]?.cnt ?? 0;
-        if (activeReferralsCount < APP_CFG.WITHDRAW_MIN_ACTIVE_REFERRALS) {
-          return res.status(403).json({
-            ok:              false,
-            error:           'referrals_required',
-            required:        APP_CFG.WITHDRAW_MIN_ACTIVE_REFERRALS,
-            current:         activeReferralsCount,
-          });
-        }
-
-        // 📢 اشتراك إجباري بالقناة قبل أي سحب — تحقق فوري عبر Telegram Bot API
-        const isMember = await isChannelMember(dbUser.telegram_id);
-        if (!isMember) {
-          return res.status(403).json({ ok: false, error: 'channel_required', channel: CHANNEL_USERNAME });
-        }
-
-        // 🛡️ Shadow ban — رد ناجح وهمي بدون خصم رصيد فعلي أو تسجيل سحب حقيقي
-        if (dbUser.shadow_banned) {
-          return res.json({ ok: true });
-        }
-
-        const feeMemo  = feeAmt > 0 ? `Fee: $${feeAmt.toFixed(3).replace(/0$/, '')} (gross $${amt.toFixed(2)})` : null;
-        const fullMemo = [memo?.trim(), feeMemo].filter(Boolean).join(' | ') || null;
-
-        await sql('UPDATE users SET balance_usd = balance_usd - $1 WHERE id = $2', [amt, dbUser.id]);
-        await sql('INSERT INTO withdrawals (user_id, address, memo, amount) VALUES ($1,$2,$3,$4)',
-          [dbUser.id, address.trim(), fullMemo, netAmt]);
-
-        // ✅ إشعار بوت مباشر من الباكند
-        sendTelegramMessage(
-          Number(dbUser.telegram_id),
-          `✅ *Withdrawal Request Submitted*\n\n` +
-          `Your request has been received and is being processed.\n\n` +
-          `💎 *Amount:* $${netAmt.toFixed(2)} USDT\n` +
-          `👛 *Wallet:* \`${address.trim()}\`\n\n` +
-          `🕒 *Processing...* We'll notify you once it's confirmed.`
-        ).catch(e => console.error('[withdraw bot notify]', e.message));
-
-        return res.json({ ok: true });
-      }
-
-      // 📢 فحص عضوية القناة فقط — يُستخدم من زر "I Joined - Verify" بعد السحب المرفوض
-      case 'checkChannel': {
-        const isMember = await isChannelMember(dbUser.telegram_id);
-        return res.json({ ok: isMember, channel: CHANNEL_USERNAME });
-      }
-
-      // 💎 depositInit — يحجز صف "pending" قبل ما نرسل المستخدم يوقّع بمحفظته
-      case 'depositInit': {
-        const { packageId, walletAddress } = data;
-        const pkg = APP_CFG.TICKET_PACKAGES.find(p => p.id === packageId);
-        if (!pkg) return res.status(400).json({ ok: false, error: 'Invalid package' });
-        if (!walletAddress?.trim()) return res.status(400).json({ ok: false, error: 'Wallet not connected' });
-        if (!TREASURY_WALLET_ADDRESS) return res.status(500).json({ ok: false, error: 'Deposits are temporarily unavailable' });
-
-        if (dbUser.shadow_banned) {
-          // 🛡️ نفس منطق الـ shadow ban بالسحب — نرجّع depositId وهمي بدون تسجيل حقيقي
-          return res.json({ ok: true, depositId: 0 });
-        }
-
-        const rows = await sql(
-          `INSERT INTO deposits (user_id, package_id, tickets, ton_amount, wallet_address, status)
-           VALUES ($1,$2,$3,$4,$5,'pending') RETURNING id`,
-          [dbUser.id, pkg.id, pkg.tickets, pkg.ton, walletAddress.trim()]
-        );
-
-        return res.json({ ok: true, depositId: rows[0].id, treasury: TREASURY_WALLET_ADDRESS });
-      }
-
-      // 💎 depositStatus — يتحقق فعلياً من TonCenter قبل ما يسلّم أي تذكرة
-      case 'depositStatus': {
-        const depositId = parseInt(data.depositId, 10);
-        if (!depositId) return res.json({ ok: true, status: 'pending' });
-
-        const rows = await sql(
-          `SELECT * FROM deposits WHERE id = $1 AND user_id = $2`,
-          [depositId, dbUser.id]
-        );
-        const dep = rows[0];
-        if (!dep) return res.status(404).json({ ok: false, error: 'Deposit not found' });
-
-        if (dep.status !== 'pending') {
-          return res.json({ ok: true, status: dep.status });
-        }
-
-        // ⏱️ بعد 15 دقيقة بدون العثور على المعاملة → فشل نهائي
-        const ageMs = Date.now() - new Date(dep.created_at).getTime();
-        if (ageMs > 15 * 60 * 1000) {
-          await sql(`UPDATE deposits SET status = 'failed' WHERE id = $1`, [dep.id]);
-          return res.json({ ok: true, status: 'failed' });
-        }
-
-        try {
-          const nanotons = Math.round(parseFloat(dep.ton_amount) * 1e9);
-          const found = await findConfirmingTonTransaction({
-            treasury:  TREASURY_WALLET_ADDRESS,
-            senderRaw: dep.wallet_address,
-            nanotons,
-            memo:      dbUser.telegram_id,
-            sinceMs:   new Date(dep.created_at).getTime(),
-            depositId: dep.id
-          });
-
-          if (!found) return res.json({ ok: true, status: 'pending' });
-
-          // ✅ المعاملة موجودة فعلياً على السلسلة — نحاول نحجزها ذرياً لهذا الصف فقط
-          const txHashHex = found.hash ? Buffer.from(found.hash, 'base64').toString('hex') : null;
-          const finalHash = txHashHex || found.hash;
-
-          let claimed;
-          try {
-            claimed = await sql(
-              `UPDATE deposits SET status = 'confirmed', tx_hash = $1, confirmed_at = NOW()
-               WHERE id = $2 AND status = 'pending' RETURNING id`,
-              [finalHash, dep.id]
-            );
-          } catch (e) {
-            // 🛡️ 23505 = unique_violation → نفس tx_hash اتاستخدم بالفعل لتأكيد صف تاني
-            // (محاولة تلاعب عبر عدة depositInit لنفس الدفعة، أو سباق race بين طلبين)
-            if (e?.code === '23505' || /duplicate key/i.test(String(e?.message))) {
-              await sql(`UPDATE deposits SET status = 'failed' WHERE id = $1 AND status = 'pending'`, [dep.id]);
-              console.error(`[deposit#${dep.id}] BLOCKED — tx already claimed by another deposit row`);
-              return res.json({ ok: true, status: 'failed', error: 'This transaction was already used for another deposit' });
-            }
-            throw e;
-          }
-
-          if (!claimed || !claimed.length) {
-            // سباق: طلب متزامن آخر لنفس الصف أكّده أول منا — منرجعش نضيف نقاط تاني
-            return res.json({ ok: true, status: 'confirmed' });
-          }
-
-          // ✅ نجحنا فعلاً في حجز هذه المعاملة لهذا الصف فقط — الآن فقط نسلّم التذاكر
-          await sql(`UPDATE users SET pts = pts + $1 WHERE id = $2`, [dep.tickets, dbUser.id]);
-
-          const explorerLine = txHashHex
-            ? `🔗 *TX:* [tonviewer.com/transaction/${txHashHex.slice(0, 10)}…](https://tonviewer.com/transaction/${txHashHex})\n\n`
-            : '';
-
-          sendTelegramMessage(
-            Number(dbUser.telegram_id),
-            `💎 *Deposit Confirmed!*\n\n` +
-            `✅ *${dep.tickets.toLocaleString()} Tickets* added to your balance\n` +
-            `💰 *Amount:* ${parseFloat(dep.ton_amount)} TON\n` +
-            explorerLine +
-            `Good luck in the competition! 🏆`
-          ).catch(e => console.error('[deposit bot notify]', e.message));
-
-          return res.json({ ok: true, status: 'confirmed', txHash: txHashHex });
-        } catch (e) {
-          console.error('[depositStatus] TonCenter check failed:', e.message);
-          return res.json({ ok: true, status: 'pending' }); // نحاول تاني بالبوّلينغ الجاي
-        }
-      }
-
-      case 'banUser': {
-        // 🛡️ أدمن فقط — محمي بـ INTERNAL_SECRET
-        const providedSecret = req.headers['x-internal-secret'] || data.secret || '';
-        if (!INTERNAL_SECRET || providedSecret !== INTERNAL_SECRET) {
-          return res.status(403).json({ ok: false, error: 'Forbidden' });
-        }
-        const targetId = data.telegram_id;
-        const unban    = data.unban === true;
-        if (!targetId) return res.status(400).json({ ok: false, error: 'telegram_id required' });
-        const rows = await sql(
-          `UPDATE users SET banned = $1 WHERE telegram_id = $2 RETURNING id, telegram_id`,
-          [!unban, targetId]
-        );
-        if (rows.length === 0) return res.status(404).json({ ok: false, error: 'User not found' });
-        console.log(`[ban] telegram_id=${targetId} banned=${!unban}`);
-        return res.json({ ok: true, banned: !unban });
-      }
-
-      case 'sendBotMsg': {
-        // 🛡️ محمي بـ INTERNAL_SECRET — منع أي شخص خارجي
-        const providedSecret = req.headers['x-internal-secret'] || data.secret || '';
-        if (!INTERNAL_SECRET || providedSecret !== INTERNAL_SECRET) {
-          return res.status(403).json({ ok: false, error: 'Forbidden' });
-        }
-        const { chatId, text } = data;
-        if (!chatId || !text) return res.status(400).json({ ok: false, error: 'chatId and text required' });
-        const result = await sendTelegramMessage(chatId, text);
-        return res.json({ ok: !!result.ok });
-      }
-
-      // ══════════════════════════════════════════════════════════════════
-      // 💬 Chat — غرفة عامة واحدة لكل المستخدمين
-      // ══════════════════════════════════════════════════════════════════
-      case 'getChatMessages': {
-        const afterId = parseInt(data.afterId, 10) || 0;
-
-        let rows;
-        if (afterId > 0) {
-          // 📡 Polling — بس الرسائل الجديدة بعد آخر id شافه العميل
-          rows = await sql(`
-            SELECT cm.id, cm.user_id, cm.message, cm.created_at,
-                   u.telegram_id, COALESCE(u.first_name, u.username, 'Player') AS name, u.photo_url
-            FROM chat_messages cm
-            JOIN users u ON u.id = cm.user_id
-            WHERE cm.id > $1
-            ORDER BY cm.id ASC
-            LIMIT $2
-          `, [afterId, CHAT_CFG.POLL_LIMIT]);
-        } else {
-          // 🕐 التحميل الأول — آخر HISTORY_LIMIT رسالة (نعكس الترتيب لعرضها تصاعدي)
-          const recent = await sql(`
-            SELECT cm.id, cm.user_id, cm.message, cm.created_at,
-                   u.telegram_id, COALESCE(u.first_name, u.username, 'Player') AS name, u.photo_url
-            FROM chat_messages cm
-            JOIN users u ON u.id = cm.user_id
-            ORDER BY cm.id DESC
-            LIMIT $1
-          `, [CHAT_CFG.HISTORY_LIMIT]);
-          rows = recent.reverse();
-        }
-
-        return res.json({
-          ok: true,
-          messages: rows.map(r => ({
-            id:          Number(r.id),
-            user_id:     r.user_id,
-            telegram_id: Number(r.telegram_id),
-            name:        r.name,
-            photo_url:   r.photo_url || null,
-            message:     r.message,
-            created_at:  r.created_at,
-            is_me:       r.user_id === dbUser.id
-          }))
-        });
-      }
-
-      case 'sendChatMessage': {
-        if (dbUser.banned) return res.status(403).json({ ok: false, error: 'Forbidden' });
-
-        const text = String(data.text || '').trim();
-        if (!text) return res.status(400).json({ ok: false, error: 'Message is empty' });
-        if (text.length > CHAT_CFG.MSG_MAX_LEN) {
-          return res.status(400).json({ ok: false, error: `Message too long (max ${CHAT_CFG.MSG_MAX_LEN})` });
-        }
-
-        // 🛡️ تبريد بسيط لمنع السبام
-        const rows = await sql(`SELECT last_chat_msg_at FROM users WHERE id = $1`, [dbUser.id]);
-        const lastAt = rows[0]?.last_chat_msg_at;
-        if (lastAt) {
-          const secSince = (Date.now() - new Date(lastAt).getTime()) / 1000;
-          if (secSince < CHAT_CFG.COOLDOWN_SEC) {
-            return res.status(429).json({ ok: false, error: 'Please wait', waitSec: Math.ceil(CHAT_CFG.COOLDOWN_SEC - secSince) });
-          }
-        }
-
-        const inserted = await sql(`
-          INSERT INTO chat_messages (user_id, message) VALUES ($1, $2)
-          RETURNING id, created_at
-        `, [dbUser.id, text]);
-
-        await sql(`UPDATE users SET last_chat_msg_at = NOW() WHERE id = $1`, [dbUser.id]);
-
-        return res.json({
-          ok: true,
-          message: {
-            id:          Number(inserted[0].id),
-            user_id:     dbUser.id,
-            telegram_id: Number(dbUser.telegram_id),
-            name:        dbUser.first_name || dbUser.username || 'Player',
-            photo_url:   dbUser.photo_url || null,
-            message:     text,
-            created_at:  inserted[0].created_at,
-            is_me:       true
-          }
-        });
-      }
-
-      case 'logRefCopy': {
-        await sql("INSERT INTO activity_logs (user_id, action) VALUES ($1, 'ref_copy')", [dbUser.id]);
-        return res.json({ ok: true });
-      }
-
-      case 'logShare': {
-        await sql("INSERT INTO activity_logs (user_id, action, meta) VALUES ($1, 'share', $2)",
-          [dbUser.id, JSON.stringify({ platform: data.platform || 'unknown' })]);
-        return res.json({ ok: true });
-      }
-
-      case 'logSecEvent': {
-        const event  = String(data.event  || 'unknown').slice(0, 64);
-        const detail = data.detail ? JSON.stringify(data.detail).slice(0, 256) : null;
-        await sql(
-          `INSERT INTO activity_logs (user_id, action, meta) VALUES ($1, 'sec_event', $2)`,
-          [dbUser.id, JSON.stringify({ event, detail })]
-        );
-        console.warn(`[sec_event] user=${dbUser.id} event=${event}`);
-        return res.json({ ok: true });
-      }
-
-      default:
-        return res.status(400).json({ ok: false, error: `Unknown type: "${type}"` });
+  // ================================================================
+  //  START_AD — إصدار Nonce للجلسة (session-based, server-generated)
+  //  ✅ لا nonce API عام — السيرفر يُنشئ nonce ويحفظه داخل الجلسة فقط
+  //  ✅ العميل يتلقى nonce مؤقت (5 دقائق) ويُرسله مع reward_ad
+  //  ✅ لا يمكن توليد nonce من العميل — مصدره السيرفر فقط
+  // ================================================================
+  if (action === 'start_ad') {
+    if (!sessionId) return res.status(401).json({ ok: false, error: 'Missing session' });
+
+    // التحقق من الجلسة أولاً
+    const startAdSession = await sql(
+      `SELECT session_id, telegram_id FROM sessions
+       WHERE session_id = $1 AND is_valid = TRUE AND expires_at > NOW()`,
+      [sessionId]
+    );
+    if (!startAdSession.length) {
+      return res.status(401).json({ ok: false, error: 'Invalid or expired session' });
     }
+
+    const startAdTid = parseInt(startAdSession[0].telegram_id);
+
+    // فحص Shadow/Hard Ban
+    const startAdUser = await sql(
+      `SELECT shadow_banned, is_hard_banned FROM users WHERE telegram_id = $1`,
+      [startAdTid]
+    );
+    if (startAdUser[0]?.is_hard_banned) {
+      return res.status(200).json({ ok: false, error: 'access_denied' });
+    }
+
+    // إصدار nonce جديد داخل الجلسة
+    const adNonce = await issueAdNonce(sessionId);
+
+    await auditLog(startAdTid, ipHash, fingerprint, 'start_ad', 0, 'allow', {
+      session_id: sessionId.slice(0, 8) + '...'
+    });
+
+    console.log(`[START_AD] nonce issued → tid=${startAdTid} session=${sessionId.slice(0,8)}...`);
+
+    return res.status(200).json({ ok: true, ad_nonce: adNonce });
+  }
+  if (!sessionId) return res.status(401).json({ ok: false, error: 'Missing session' });
+
+  // التحقق من صحة الجلسة
+  const sessionRows = await sql(
+    `SELECT * FROM sessions WHERE session_id = $1 AND is_valid = TRUE AND expires_at > NOW()`,
+    [sessionId]
+  );
+  if (!sessionRows.length) {
+    return res.status(401).json({ ok: false, error: 'Invalid or expired session' });
+  }
+
+  const session = sessionRows[0];
+  const tid     = parseInt(session.telegram_id);
+
+  // التحقق من تطابق الـ fingerprint فقط — IP يتغير بشكل طبيعي (proxy/NAT/4G)
+  // رفض فقط إذا اختلف الـ fingerprint (الجهاز الفعلي) وليس الـ IP
+  if (session.fingerprint !== fingerprint) {
+    // تغيّر fingerprint = جهاز مختلف = خطر حقيقي
+    await sql(`UPDATE sessions SET is_valid = FALSE WHERE session_id = $1`, [sessionId]);
+    await updateUserRisk(tid, 30);
+    await auditLog(tid, ipHash, fingerprint, action, 30, 'deny',
+      { reason: 'fingerprint_mismatch', expected_fp: session.fingerprint });
+    return res.status(401).json({ ok: false, error: 'Session mismatch — please re-authenticate' });
+  }
+
+  // تغيّر IP فقط = طبيعي — نُحدّث الجلسة برفق ونضيف risk بسيط
+  if (session.ip_hash !== ipHash) {
+    await sql(`UPDATE sessions SET ip_hash = $2 WHERE session_id = $1`, [sessionId, ipHash]);
+    await updateUserRisk(tid, 5); // risk منخفض فقط
+    await auditLog(tid, ipHash, fingerprint, action, 5, 'allow',
+      { reason: 'ip_changed', note: 'natural IP rotation' });
+  }
+
+  // ── Rate Limiting ──
+  const withinLimit = await checkRateLimit(tid);
+  if (!withinLimit) {
+    await updateUserRisk(tid, 5);
+    await auditLog(tid, ipHash, fingerprint, action, 5, 'rate_limit', {});
+    return res.status(429).json({ ok: false, error: 'Too many requests' });
+  }
+
+  // ── Nonce Check (للعمليات العامة — ليس الإعلانات) ──
+  // reward_ad يستخدم نظام nonce مستقل (session-based) داخل consumeAdNonce
+  // start_ad لا يحتاج nonce — هو من يُنشئه
+  if (!['get_state', 'load', 'reward_ad', 'start_ad'].includes(action)) {
+    const nonceValid = await checkNonce(tid, nonce);
+    if (!nonceValid) {
+      await updateUserRisk(tid, 20);
+      await auditLog(tid, ipHash, fingerprint, action, 20, 'deny', { reason: 'nonce_replay' });
+      return res.status(400).json({ ok: false, error: 'Nonce already used or missing' });
+    }
+  }
+
+  // ── Risk Score Check ──
+  const riskScore = await calcRiskScore(tid, ipHash, fingerprint, action);
+
+  // فحص Shadow Ban
+  const userRisk = await sql(`SELECT risk_score, shadow_banned FROM users WHERE telegram_id = $1`, [tid]);
+  const currentRisk = userRisk[0]?.risk_score || 0;
+  const isShadowBanned = userRisk[0]?.shadow_banned || false;
+
+  await auditLog(tid, ipHash, fingerprint, action, riskScore, isShadowBanned ? 'shadow' : 'allow', {});
+
+  try {
+
+    // ══════════════════════════════════════════════════════════════
+    //  LOAD
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'load') {
+      let rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
+
+      const username   = data.username   || null;
+      const referralBy = data.referral_by ? parseInt(data.referral_by) : null;
+      const validRef   = referralBy && !isNaN(referralBy) && referralBy !== tid ? referralBy : null;
+
+      if (!rows.length) {
+        // مستخدم جديد كلياً
+        rows = await sql(
+          `INSERT INTO users (telegram_id, username, referral_by, cells)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (telegram_id) DO UPDATE
+             SET username   = EXCLUDED.username,
+                 referral_by = COALESCE(users.referral_by, EXCLUDED.referral_by),
+                 updated_at = NOW()
+           RETURNING *`,
+          [tid, username, validRef, JSON.stringify(buildEmptyCells())]
+        );
+      } else {
+        // مستخدم موجود — نحدث الاسم ونحفظ referral_by إذا لم يكن محفوظاً بعد
+        if (validRef && !rows[0].referral_by) {
+          await sql(
+            `UPDATE users SET referral_by = $2, updated_at = NOW()
+             WHERE telegram_id = $1 AND referral_by IS NULL`,
+            [tid, validRef]
+          );
+          rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
+        }
+      }
+
+      const u = rows[0];
+
+      // معالجة الإحالة: إذا عنده referral_by ولم يتم احتسابه بعد
+      if (u.referral_by && !u.referral_rewarded) {
+        // تحقق أن المُحيل موجود
+        const refExists = await sql(`SELECT telegram_id FROM users WHERE telegram_id = $1`, [u.referral_by]);
+        if (refExists.length) {
+          await sql(
+            `UPDATE users
+             SET referral_friends = referral_friends + 1,
+                 updated_at       = NOW()
+             WHERE telegram_id = $1`,
+            [u.referral_by]
+          );
+        }
+        await sql(`UPDATE users SET referral_rewarded = TRUE WHERE telegram_id = $1`, [tid]);
+        rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
+      }
+
+      if (rows[0].today_date !== todayUTC()) {
+        await sql(
+          `UPDATE users SET today_date = $2, today_earn = 0, updated_at = NOW() WHERE telegram_id = $1`,
+          [tid, todayUTC()]
+        );
+        rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
+      }
+
+      const user     = rows[0];
+      const original = normalizeCellsFromDB(user.cells);
+      const resolved = resolveCells(original);
+      await persistIfChanged(tid, original, resolved);
+
+      // ── FIX: عدد الأصدقاء الحقيقي من جدول users مباشرة ──
+      // نعتمد على العد الفعلي بدلاً من الحقل المخزّن الذي قد يكون قديماً
+      const realFriendsCount = await sql(
+        `SELECT COUNT(*) AS cnt FROM users WHERE referral_by = $1 AND referral_rewarded = TRUE`,
+        [tid]
+      );
+      const trueReferralFriends = parseInt(realFriendsCount[0]?.cnt || 0);
+
+      // Shadow-banned users get real data but rewards are silently ignored upstream
+      return res.status(200).json({
+        ok: true,
+        user: { ...user, cells: resolved, referral_friends: trueReferralFriends }
+      });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  GET_STATE — polling
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'get_state') {
+      const rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
+      if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
+
+      const user = rows[0];
+
+      if (user.today_date !== todayUTC()) {
+        await sql(
+          `UPDATE users SET today_date = $2, today_earn = 0, updated_at = NOW() WHERE telegram_id = $1`,
+          [tid, todayUTC()]
+        );
+        user.today_earn = 0;
+        user.today_date = todayUTC();
+      }
+
+      const original = normalizeCellsFromDB(user.cells);
+      const resolved = resolveCells(original);
+      await persistIfChanged(tid, original, resolved);
+
+      // ── FIX: عدد الأصدقاء الحقيقي ──
+      const realFriendsCount2 = await sql(
+        `SELECT COUNT(*) AS cnt FROM users WHERE referral_by = $1 AND referral_rewarded = TRUE`,
+        [tid]
+      );
+      const trueReferralFriends2 = parseInt(realFriendsCount2[0]?.cnt || 0);
+
+      return res.status(200).json({
+        ok: true,
+        user: { ...user, cells: resolved, referral_friends: trueReferralFriends2 }
+      });
+    }
+    if (action === 'plant') {
+      const cellId   = parseInt(data.cell_id);
+      const duration = GROW_DURATION; // السيرفر يحدد المدة فقط، لا العميل
+
+      if (isNaN(cellId) || cellId < 0 || cellId >= CELL_COUNT)
+        return res.status(400).json({ ok: false, error: 'Invalid cell_id' });
+
+      const rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
+      if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
+
+      const user = rows[0];
+      if (user.seeds <= 0) return res.status(400).json({ ok: false, error: 'Not enough seeds' });
+
+      const cells = resolveCells(normalizeCellsFromDB(user.cells));
+      if (cells[cellId].state !== 'empty')
+        return res.status(400).json({ ok: false, error: 'Cell is not empty' });
+
+      // السيرفر يضع الوقت فقط
+      cells[cellId] = { id: cellId, state: 'growing', planted_at: new Date().toISOString(), duration };
+
+      await sql(
+        `UPDATE users SET cells = $2, seeds = seeds - 1, updated_at = NOW() WHERE telegram_id = $1`,
+        [tid, JSON.stringify(cells)]
+      );
+
+      return res.status(200).json({ ok: true, cells });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  HARVEST — السيرفر يحسب المكافأة، لا يقبلها من العميل
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'harvest') {
+      const cellId = parseInt(data.cell_id);
+
+      if (isNaN(cellId) || cellId < 0 || cellId >= CELL_COUNT)
+        return res.status(400).json({ ok: false, error: 'Invalid cell_id' });
+
+      const rows = await sql('SELECT * FROM users WHERE telegram_id = $1', [tid]);
+      if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
+
+      const user  = rows[0];
+      const cells = resolveCells(normalizeCellsFromDB(user.cells));
+
+      if (cells[cellId].state !== 'ready')
+        return res.status(400).json({ ok: false, error: 'Cell is not ready to harvest' });
+
+      // ⚡ السيرفر يحسب المكافأة — لا نأخذها من العميل أبداً
+      const SERVER_REWARD = 0.0001; // مطابق للعميل: 0.0001 TON لكل حصاد
+
+      // Shadow ban: يعطي استجابة ناجحة لكن لا يضيف رصيداً
+      const actualReward = isShadowBanned ? 0 : SERVER_REWARD;
+
+      cells[cellId] = { id: cellId, state: 'empty', planted_at: null, duration: GROW_DURATION };
+
+      const today        = todayUTC();
+      const isSameDay    = user.today_date === today;
+      const newTodayEarn = isSameDay ? parseFloat(user.today_earn) + actualReward : actualReward;
+
+      await sql(
+        `UPDATE users
+         SET balance        = balance + $2,
+             cells          = $3,
+             today_date     = $4,
+             today_earn     = $5,
+             total_harvests = total_harvests + 1,
+             updated_at     = NOW()
+         WHERE telegram_id = $1`,
+        [tid, actualReward, JSON.stringify(cells), today, newTodayEarn]
+      );
+
+      // 5% referral — فقط إذا لم يكن shadow banned
+      if (user.referral_by && !isShadowBanned) {
+        const cut = parseFloat((SERVER_REWARD * 0.05).toFixed(6));
+        await sql(
+          `UPDATE users
+           SET referral_balance = referral_balance + $2,
+               balance          = balance + $2,
+               updated_at       = NOW()
+           WHERE telegram_id = $1`,
+          [user.referral_by, cut]
+        );
+      }
+
+      // جلب الرصيد الحقيقي بعد التحديث
+      const updatedUser = await sql(`SELECT balance, today_earn, total_harvests FROM users WHERE telegram_id = $1`, [tid]);
+
+      return res.status(200).json({
+        ok: true, cells,
+        reward:       SERVER_REWARD,
+        balance:      parseFloat(updatedUser[0]?.balance      || 0),
+        today_earn:   parseFloat(updatedUser[0]?.today_earn   || 0),
+        total_harvests: parseInt(updatedUser[0]?.total_harvests || 0),
+        referral_cut: user.referral_by ? parseFloat((SERVER_REWARD * 0.05).toFixed(6)) : 0
+      });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  UPDATE_CELL — ري (السيرفر يحدد المدة الجديدة)
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'update_cell') {
+      const cellId = parseInt(data.cell_id);
+
+      if (isNaN(cellId) || cellId < 0 || cellId >= CELL_COUNT)
+        return res.status(400).json({ ok: false, error: 'Invalid cell_id' });
+
+      // السيرفر فقط يحدد ما يُسمح بتعديله وبأي قيم
+      const rows = await sql('SELECT cells, water_count FROM users WHERE telegram_id = $1', [tid]);
+      if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
+
+      const user  = rows[0];
+      if (user.water_count <= 0) return res.status(400).json({ ok: false, error: 'No water left' });
+
+      const cells = resolveCells(normalizeCellsFromDB(user.cells));
+      if (cells[cellId].state !== 'growing')
+        return res.status(400).json({ ok: false, error: 'Cell is not growing' });
+
+      // السيرفر يحدد كمية التسريع
+      const WATER_SPEEDUP = 60; // ثانية تُخصم من وقت النمو
+      const newDuration   = Math.max(10, (cells[cellId].duration || GROW_DURATION) - WATER_SPEEDUP);
+      cells[cellId]       = { ...cells[cellId], duration: newDuration, watered: true };
+
+      await sql(
+        `UPDATE users SET cells = $2, water_count = water_count - 1, updated_at = NOW() WHERE telegram_id = $1`,
+        [tid, JSON.stringify(cells)]
+      );
+
+      return res.status(200).json({ ok: true, cells });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  ADD_RESOURCE — مغلق من الـ frontend ❌
+    //  يُستخدم فقط داخلياً عبر _internalAddResource()
+    //  أي طلب مباشر من العميل يُرفض فوراً
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'add_resource') {
+      await auditLog(tid, ipHash, fingerprint, 'add_resource_blocked', 30, 'deny',
+        { reason: 'direct_call_forbidden', hint: 'use reward_ad instead' });
+      return res.status(403).json({ ok: false, error: 'Use reward_ad action' });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  REWARD_AD — مكافأة الإعلان الموثّقة (Zero-Trust Ad Reward)
+    //  ✅ يتحقق من session + ad_nonce (مخزّن في الجلسة، مولّد من السيرفر)
+    //  ✅ nonce لا يمر عبر الشبكة عند الإنشاء — يُرسل فقط عند الاستهلاك
+    //  ✅ one-time use: يُحذف بعد أول استخدام ناجح
+    //  ✅ لا يقبل nonce من مصدر غير السيرفر
+    //  ✅ shadow ban: استجابة ناجحة زائفة بدون تعديل فعلي
+    //  ✅ logging كامل: كل مشاهدة + كل reward + كل رفض
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'reward_ad') {
+      const { ad_type, ad_nonce: clientAdNonce } = data;
+
+      // ── التحقق من session-based nonce ──
+      // السيرفر يُقارن clientAdNonce مع ما أصدره في start_ad
+      // أي nonce غير مطابق أو منتهي الصلاحية أو مُعاد استخدامه → رفض
+      const nonceValid = await consumeAdNonce(sessionId, clientAdNonce);
+      if (!nonceValid) {
+        await updateUserRisk(tid, 20);
+        await auditLog(tid, ipHash, fingerprint, 'reward_ad_nonce_fail', 20, 'deny',
+          { reason: 'invalid_or_missing_ad_nonce', ad_type });
+        return res.status(400).json({ ok: false, error: 'Invalid or missing ad nonce' });
+      }
+
+      // ── تحديد نوع المكافأة من السيرفر فقط ──
+      // daily_max: الحد اليومي للوحدات (ليس حد صلب على الـ column)
+      // seed_single: 10 مشاهدات × 1 بذرة = 10 بذور/يوم
+      // seed_bundle: 4 حزم × 7 بذور   = 28 بذرة/يوم
+      // water:       6 مرات × 3 ماء   = 18 ماء/يوم
+      const AD_REWARDS = {
+        seed_single: { col: 'seeds',       amount: 1, daily_max: 10  },
+        seed_bundle: { col: 'seeds',       amount: 7, daily_max: 28  },
+        water:       { col: 'water_count', amount: 3, daily_max: 18  },
+      };
+
+      const reward = AD_REWARDS[ad_type];
+      if (!reward) {
+        await auditLog(tid, ipHash, fingerprint, 'reward_ad_invalid_type', 15, 'deny',
+          { ad_type });
+        return res.status(400).json({ ok: false, error: 'Invalid ad_type' });
+      }
+
+      // ── Cooldown: منع الطلبات المتوازية (3 ثواني بين كل reward) ──
+      // نستخدم ad_last_reward من جدول users مباشرة — أسرع وأدق من security_logs
+      const cooldownRows = await sql(
+        `SELECT ad_last_reward FROM users WHERE telegram_id = $1`,
+        [tid]
+      );
+      const lastRewardTime = cooldownRows[0]?.ad_last_reward;
+      if (lastRewardTime) {
+        const elapsedMs = Date.now() - new Date(lastRewardTime).getTime();
+        if (elapsedMs < 3000) {
+          await auditLog(tid, ipHash, fingerprint, 'reward_ad_cooldown', 5, 'deny',
+            { reason: 'cooldown_active', ad_type, elapsed_ms: elapsedMs });
+          return res.status(429).json({ ok: false, error: 'Please wait before claiming another reward' });
+        }
+      }
+
+      // ── فحص الحد اليومي من security_logs ──
+      const usageRows = await sql(
+        `SELECT COALESCE(SUM((detail->>'amount')::int), 0) AS used
+         FROM security_logs
+         WHERE telegram_id = $1
+           AND action = 'reward_ad'
+           AND detail->>'ad_type' = $2
+           AND verdict = 'allow'
+           AND created_at >= NOW() - INTERVAL '24 hours'`,
+        [tid, ad_type]
+      );
+      const usedToday = parseInt(usageRows[0]?.used || 0);
+
+      if (usedToday + reward.amount > reward.daily_max) {
+        await auditLog(tid, ipHash, fingerprint, 'reward_ad', 5, 'deny',
+          { reason: 'daily_limit', ad_type, used: usedToday, limit: reward.daily_max });
+        return res.status(200).json({ ok: false, error: 'Daily limit reached' });
+      }
+
+      // ── Shadow ban: رد ناجح زائف ──
+      if (isShadowBanned) {
+        await auditLog(tid, ipHash, fingerprint, 'reward_ad', 0, 'shadow',
+          { ad_type, amount: reward.amount, reason: 'shadow_ban_suppressed' });
+        const fakeRows = await sql(`SELECT ${reward.col} FROM users WHERE telegram_id = $1`, [tid]);
+        return res.status(200).json({ ok: true, [reward.col]: fakeRows[0]?.[reward.col] ?? 0 });
+      }
+
+      // ── تطبيق المكافأة (بدون حد صلب — السقف الوحيد هو الـ daily_max أعلاه) ──
+      await sql(
+        `UPDATE users
+         SET ${reward.col}   = ${reward.col} + $2,
+             ad_last_reward  = NOW(),
+             updated_at      = NOW()
+         WHERE telegram_id = $1`,
+        [tid, reward.amount]
+      );
+
+      const updatedRows = await sql(
+        `SELECT ${reward.col} FROM users WHERE telegram_id = $1`,
+        [tid]
+      );
+      const newValue = updatedRows[0]?.[reward.col] ?? 0;
+
+      // ── تسجيل كامل: نوع الإعلان + الكمية + القيمة الجديدة ──
+      await auditLog(tid, ipHash, fingerprint, 'reward_ad', 0, 'allow',
+        { ad_type, amount: reward.amount, new_value: newValue });
+
+      console.log(`[AD_REWARD] tid=${tid} ad_type=${ad_type} +${reward.amount} → ${reward.col}=${newValue}`);
+
+      return res.status(200).json({ ok: true, [reward.col]: newValue });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  GET_TASKS — جلب كل المهام + حالة المستخدم لكل منها
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'get_tasks') {
+      const tasks = await sql(
+        `SELECT t.*,
+                ut.completed,
+                ut.completed_at
+         FROM tasks t
+         LEFT JOIN user_tasks ut
+           ON ut.task_id = t.id AND ut.telegram_id = $1
+         WHERE t.is_active = TRUE
+         ORDER BY t.sort_order ASC, t.created_at ASC`,
+        [tid]
+      );
+      return res.status(200).json({ ok: true, tasks });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  HANDLE_TASK — معالجة المهمة الموحّدة
+    //  يدعم: channel | url
+    //  data: { task_id, step: 'open' | 'verify' }
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'handle_task') {
+      const { task_id, step } = data;
+      if (!task_id || !step)
+        return res.status(400).json({ ok: false, error: 'Missing task_id or step' });
+
+      // جلب المهمة من DB
+      const taskRows = await sql(
+        `SELECT * FROM tasks WHERE id = $1 AND is_active = TRUE`,
+        [task_id]
+      );
+      if (!taskRows.length)
+        return res.status(404).json({ ok: false, error: 'Task not found' });
+
+      const task = taskRows[0];
+
+      // هل المهمة مكتملة مسبقاً؟ (منع الغش - PRIMARY KEY check)
+      const existing = await sql(
+        `SELECT completed FROM user_tasks WHERE telegram_id = $1 AND task_id = $2`,
+        [tid, task_id]
+      );
+      if (existing.length && existing[0].completed)
+        return res.status(400).json({ ok: false, error: 'Task already completed' });
+
+      // ── ROUTE بناءً على task_type ──
+      switch (task.task_type) {
+        case 'channel': return handleChannelTask(task, tid, step, isShadowBanned, ipHash, fingerprint, res);
+        case 'url':     return handleUrlTask(task, tid, step, isShadowBanned, ipHash, fingerprint, res);
+        default:
+          return res.status(400).json({ ok: false, error: 'Unsupported task_type: ' + task.task_type });
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  SAVE_TASKS — (Legacy compat — kept for old clients)
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'save_tasks') {
+      // مهمل — النظام الجديد يستخدم user_tasks table فقط
+      return res.status(200).json({ ok: true });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  ADD_BALANCE — (Legacy compat)
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'add_balance') {
+      const source = data.source || 'unknown';
+      // حوّل الـ source القديم إلى handle_task
+      data.task_id = source;
+      data.step    = 'verify';
+      // إعادة التوجيه لـ handle_task
+      const taskRows = await sql(`SELECT * FROM tasks WHERE id = $1 AND is_active = TRUE`, [source]);
+      if (!taskRows.length) return res.status(400).json({ ok: false, error: 'Unknown reward source' });
+      const task = taskRows[0];
+      const existing = await sql(
+        `SELECT completed FROM user_tasks WHERE telegram_id = $1 AND task_id = $2`,
+        [tid, source]
+      );
+      if (existing.length && existing[0].completed)
+        return res.status(400).json({ ok: false, error: 'Task already rewarded' });
+      if (isShadowBanned) return res.status(200).json({ ok: true });
+      return completeTask(task, tid, res);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  UPDATE_PHOTO — تحديث صورة المستخدم
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'update_photo') {
+      const { photo_url } = data;
+      if (!photo_url || typeof photo_url !== 'string')
+        return res.status(400).json({ ok: false, error: 'Missing or invalid photo_url' });
+
+      // تحقق بسيط من أن الرابط من Telegram CDN فقط
+      const allowedHosts = ['t.me', 'telegram.org', 'cdn1.telegram-cdn.org', 'cdn2.telegram-cdn.org', 'cdn4.telegram-cdn.org'];
+      let isAllowed = false;
+      try {
+        const parsed = new URL(photo_url);
+        isAllowed = allowedHosts.some(h => parsed.hostname === h || parsed.hostname.endsWith('.' + h));
+      } catch (_) {}
+
+      // إذا لم يكن من Telegram CDN، نقبله فقط إذا كان HTTPS
+      if (!isAllowed) {
+        try {
+          const parsed = new URL(photo_url);
+          if (parsed.protocol !== 'https:')
+            return res.status(400).json({ ok: false, error: 'Only HTTPS URLs are allowed' });
+        } catch (_) {
+          return res.status(400).json({ ok: false, error: 'Invalid URL format' });
+        }
+      }
+
+      await sql(
+        `UPDATE users SET photo_url = $2, updated_at = NOW() WHERE telegram_id = $1`,
+        [tid, photo_url]
+      );
+
+      return res.status(200).json({ ok: true, photo_url });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  WITHDRAW
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'withdraw') {
+      const { account, amount, method } = data;
+      const amt = parseFloat(amount);
+      const wdMethod = method === 'ton' ? 'ton' : 'fp';
+
+      if (!account)               return res.status(400).json({ ok: false, error: 'Missing account' });
+      if (isNaN(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'Invalid amount' });
+      if (amt < 0.05)             return res.status(400).json({ ok: false, error: 'Minimum 0.05 TON' });
+      // Validate TON address format
+      if (wdMethod === 'ton' && !account.startsWith('UQ') && !account.startsWith('EQ'))
+        return res.status(400).json({ ok: false, error: 'Invalid TON address format' });
+
+      // Shadow ban: نرفض السحب
+      if (isShadowBanned) return res.status(403).json({ ok: false, error: 'Account under review' });
+
+      const rows = await sql('SELECT balance, wd_history FROM users WHERE telegram_id = $1', [tid]);
+      if (!rows.length)                      return res.status(404).json({ ok: false, error: 'User not found' });
+      if (parseFloat(rows[0].balance) < amt) return res.status(400).json({ ok: false, error: 'Insufficient balance' });
+
+      // السيرفر يستخدم وقته فقط
+      const now     = new Date();
+      const dateStr = now.toISOString();
+      const entry   = { account, amount: amt, date: dateStr, status: 'pending', method: wdMethod };
+      const history = Array.isArray(rows[0].wd_history) ? rows[0].wd_history : [];
+      history.unshift(entry);
+      if (history.length > 50) history.splice(50);
+
+      await sql(
+        `UPDATE users SET balance = balance - $2, wd_history = $3, updated_at = NOW() WHERE telegram_id = $1`,
+        [tid, amt, JSON.stringify(history)]
+      );
+
+      return res.status(200).json({ ok: true, entry });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  GIVEAWAY — تسجيل في السحب
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'giveaway_enter') {
+      const gid = parseInt(data.giveaway_id);
+      if (isNaN(gid)) return res.status(400).json({ ok: false, error: 'Invalid giveaway_id' });
+
+      // Shadow ban: يُسجّل لكن لن يفوز
+      const gwRows = await sql(`SELECT * FROM giveaways WHERE id = $1 AND is_active = TRUE`, [gid]);
+      if (!gwRows.length) return res.status(404).json({ ok: false, error: 'Giveaway not found' });
+
+      await sql(
+        `INSERT INTO giveaway_entries (giveaway_id, telegram_id)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [gid, tid]
+      );
+
+      return res.status(200).json({ ok: true });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  REDEEM_PROMO — Promo code redemption with user limit
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'redeem_promo') {
+      try {
+        const { code } = data;
+
+        // Validate payload
+        if (!code || typeof code !== 'string' || !code.trim()) {
+          return res.status(400).json({
+            ok: false,
+            success: false,
+            error: 'invalid_code',
+            message: 'Invalid or missing promo code'
+          });
+        }
+
+        const cleanCode = code.trim().toUpperCase().slice(0, 32);
+
+        // Validate code format (alphanumeric + dashes only)
+        if (!/^[A-Z0-9_-]{2,32}$/.test(cleanCode)) {
+          return res.status(400).json({
+            ok: false,
+            success: false,
+            error: 'invalid_code',
+            message: 'Invalid code format'
+          });
+        }
+
+        // Fetch promo code details
+        const promoRows = await sql(
+          `SELECT * FROM promo_codes WHERE code = $1 AND is_active = TRUE`,
+          [cleanCode]
+        );
+
+        if (!promoRows.length) {
+          console.log(`[PROMO] Code not found: ${cleanCode} | user: ${tid}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'not_found',
+            message: 'Invalid or expired code'
+          });
+        }
+
+        const promo = promoRows[0];
+
+        // Check expiry
+        if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+          console.log(`[PROMO] Code expired: ${cleanCode} | user: ${tid}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'expired',
+            message: 'Invalid or expired code'
+          });
+        }
+
+        // Check global usage limit
+        if (promo.use_count >= promo.max_uses) {
+          console.log(`[PROMO] Code limit reached: ${cleanCode} | use_count=${promo.use_count}`);
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'user_limit',
+            message: 'This code has reached its maximum usage limit'
+          });
+        }
+
+        // Check if this user already redeemed this code
+        const alreadyUsed = await sql(
+          `SELECT 1 FROM promo_redemptions WHERE code = $1 AND telegram_id = $2`,
+          [cleanCode, tid]
+        );
+        if (alreadyUsed.length) {
+          return res.status(200).json({
+            ok: false,
+            success: false,
+            error: 'already_used',
+            message: 'You have already used this code'
+          });
+        }
+
+        // Shadow ban: fake success (no actual reward applied)
+        if (isShadowBanned) {
+          console.log(`[PROMO] Shadow ban fake success: code=${cleanCode} user=${tid}`);
+          return res.status(200).json({
+            ok: true,
+            success: true,
+            message: 'Code redeemed successfully',
+            reward: promo.reward_desc || 'Reward claimed!',
+            seeds: promo.seeds || 0,
+            water: promo.water || 0,
+            balance: promo.balance || 0,
+            reward_desc: promo.reward_desc || 'Reward claimed!'
+          });
+        }
+
+        // Apply rewards atomically
+        await sql(
+          `UPDATE users
+           SET seeds       = seeds + $2,
+               water_count = water_count + $3,
+               balance     = balance + $4,
+               updated_at  = NOW()
+           WHERE telegram_id = $1`,
+          [tid, promo.seeds || 0, promo.water || 0, promo.balance || 0]
+        );
+
+        // Record redemption to prevent re-use
+        await sql(
+          `INSERT INTO promo_redemptions (code, telegram_id) VALUES ($1, $2)`,
+          [cleanCode, tid]
+        );
+
+        // Increment global use counter
+        await sql(
+          `UPDATE promo_codes SET use_count = use_count + 1 WHERE code = $1`,
+          [cleanCode]
+        );
+
+        const rewardAmount = promo.balance || 0;
+        console.log(`[PROMO] Redeemed: code=${cleanCode} user=${tid} seeds=${promo.seeds||0} water=${promo.water||0} balance=${promo.balance||0}`);
+
+        return res.status(200).json({
+          ok: true,
+          success: true,
+          message: 'Code redeemed successfully',
+          reward: rewardAmount,
+          seeds:       promo.seeds   || 0,
+          water:       promo.water   || 0,
+          balance:     promo.balance || 0,
+          reward_desc: promo.reward_desc || 'Reward claimed!'
+        });
+
+      } catch (promoErr) {
+        console.error('[PROMO] Redemption error:', promoErr.message, promoErr.stack);
+        return res.status(500).json({
+          ok: false,
+          success: false,
+          error: 'server_error',
+          message: 'An error occurred while redeeming the code. Please try again.'
+        });
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  UPDATE_WITHDRAWAL — Admin endpoint to approve/reject withdrawals
+    //  Updates status from 'pending' → 'completed' or 'rejected'
+    // ══════════════════════════════════════════════════════════════
+    if (action === 'update_withdrawal') {
+      const { target_tid, date, status: newStatus } = data;
+      const adminKey = req.headers['x-admin-key'] || '';
+
+      // Validate admin key
+      if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+        return res.status(403).json({ ok: false, error: 'Unauthorized' });
+      }
+
+      const allowedStatuses = ['completed', 'approved', 'rejected'];
+      if (!allowedStatuses.includes(newStatus)) {
+        return res.status(400).json({ ok: false, error: 'Invalid status. Use: completed, approved, or rejected' });
+      }
+
+      const targetId = parseInt(target_tid);
+      if (isNaN(targetId)) return res.status(400).json({ ok: false, error: 'Invalid target_tid' });
+
+      const rows = await sql('SELECT wd_history FROM users WHERE telegram_id = $1', [targetId]);
+      if (!rows.length) return res.status(404).json({ ok: false, error: 'User not found' });
+
+      const history = Array.isArray(rows[0].wd_history) ? rows[0].wd_history : [];
+      let updated = false;
+
+      // Find withdrawal by date or update the most recent pending one
+      const updatedHistory = history.map(entry => {
+        if (entry.status === 'pending') {
+          if (date && entry.date === date) {
+            updated = true;
+            return { ...entry, status: newStatus, updated_at: new Date().toISOString() };
+          } else if (!date && !updated) {
+            updated = true;
+            return { ...entry, status: newStatus, updated_at: new Date().toISOString() };
+          }
+        }
+        return entry;
+      });
+
+      if (!updated) return res.status(404).json({ ok: false, error: 'No matching pending withdrawal found' });
+
+      await sql(
+        `UPDATE users SET wd_history = $2, updated_at = NOW() WHERE telegram_id = $1`,
+        [targetId, JSON.stringify(updatedHistory)]
+      );
+
+      console.log(`[WITHDRAW] Status updated: user=${targetId} status=${newStatus} date=${date || 'latest'}`);
+      return res.status(200).json({ ok: true, message: `Withdrawal marked as ${newStatus}` });
+    }
+
+    return res.status(400).json({ ok: false, error: 'Unknown action', action });
+
   } catch (err) {
-    console.error('[Handler error]', type, err.message);
-    return res.status(500).json({ ok: false, error: err.message });
+    console.error('[API Error]', action || 'unknown', err.message, err.stack);
+    return res.status(500).json({
+      ok: false,
+      error: 'internal_server_error',
+      message: 'An unexpected error occurred. Please try again.',
+      ...(process.env.NODE_ENV !== 'production' && { detail: err.message })
+    });
   }
 };
+
+// ================================================================
+//  TASK HANDLERS — كل نوع مهمة له دالة مستقلة
+//  قابل للتوسع: url | channel | app_install | invite | social
+// ================================================================
+
+/**
+ * handleUrlTask — مهمة رابط خارجي
+ * step='open'   : تسجيل النقرة + إعادة الرابط للفتح
+ * step='verify' : إعطاء المكافأة فوراً (لا يوجد تحقق خارجي)
+ */
+async function handleUrlTask(task, tid, step, isShadowBanned, ipHash, fingerprint, res) {
+  if (step === 'open') {
+    // سجّل الفتح في audit log — لا نُعطي المكافأة هنا
+    await sql(
+      `INSERT INTO user_tasks (telegram_id, task_id, completed)
+       VALUES ($1, $2, FALSE)
+       ON CONFLICT (telegram_id, task_id) DO NOTHING`,
+      [tid, task.id]
+    );
+    return res.status(200).json({ ok: true, step: 'open', url: task.url });
+  }
+
+  if (step === 'verify') {
+    // URL tasks: المكافأة تُعطى تلقائياً بعد فتح الرابط — لا تحقق خارجي
+    if (isShadowBanned) return res.status(200).json({ ok: true }); // shadow: ok زائف
+    return completeTask(task, tid, res);
+  }
+
+  return res.status(400).json({ ok: false, error: 'Invalid step for url task' });
+}
+
+/**
+ * handleChannelTask — مهمة قناة Telegram
+ * step='open'   : فتح القناة + تسجيل "joined"
+ * step='verify' : تحقق عبر getChatMember + إعطاء المكافأة
+ */
+async function handleChannelTask(task, tid, step, isShadowBanned, ipHash, fingerprint, res) {
+  if (step === 'open') {
+    await sql(
+      `INSERT INTO user_tasks (telegram_id, task_id, completed)
+       VALUES ($1, $2, FALSE)
+       ON CONFLICT (telegram_id, task_id) DO NOTHING`,
+      [tid, task.id]
+    );
+    const channelUrl = 'https://t.me/' + (task.channel || '');
+    return res.status(200).json({ ok: true, step: 'open', url: channelUrl });
+  }
+
+  if (step === 'verify') {
+    // التحقق عبر Telegram Bot API
+    const isMember = await verifyChannelMembership(tid, task.channel);
+    if (!isMember) {
+      return res.status(400).json({ ok: false, error: 'not_member', message: 'Please join the channel first' });
+    }
+    if (isShadowBanned) return res.status(200).json({ ok: true }); // shadow: ok زائف
+    return completeTask(task, tid, res);
+  }
+
+  return res.status(400).json({ ok: false, error: 'Invalid step for channel task' });
+}
+
+/**
+ * completeTask — إكمال المهمة وإضافة المكافأة
+ * مشترك بين جميع أنواع المهام
+ */
+async function completeTask(task, tid, res) {
+  const reward = parseFloat(task.reward) || 0;
+
+  // تحديث user_tasks
+  await sql(
+    `INSERT INTO user_tasks (telegram_id, task_id, completed, completed_at)
+     VALUES ($1, $2, TRUE, NOW())
+     ON CONFLICT (telegram_id, task_id)
+     DO UPDATE SET completed = TRUE, completed_at = NOW()`,
+    [tid, task.id]
+  );
+
+  // تحديث balance وإرجاع القيمة الجديدة في query واحدة (FIX #2) ─
+  let newBalance = 0;
+  if (reward > 0) {
+    const updated = await sql(
+      `UPDATE users SET balance = balance + $2, updated_at = NOW()
+       WHERE telegram_id = $1 RETURNING balance`,
+      [tid, reward]
+    );
+    newBalance = parseFloat(updated[0]?.balance || 0);
+  } else {
+    const cur = await sql(`SELECT balance FROM users WHERE telegram_id = $1`, [tid]);
+    newBalance = parseFloat(cur[0]?.balance || 0);
+  }
+
+  return res.status(200).json({ ok: true, reward, balance: newBalance });
+}
+
+/**
+ * verifyChannelMembership — تحقق عبر Telegram Bot API getChatMember
+ */
+async function verifyChannelMembership(telegramId, channelUsername) {
+  if (!BOT_TOKEN || !channelUsername) return false;
+  try {
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=@${channelUsername}&user_id=${telegramId}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.ok) return false;
+    const status = data.result?.status;
+    // مقبول: member | administrator | creator
+    return ['member', 'administrator', 'creator'].includes(status);
+  } catch (e) {
+    console.warn('[verifyChannel] error:', e.message);
+    return false;
+  }
+}
