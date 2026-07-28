@@ -1,576 +1,273 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
-<title>RealCash</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Tajawal:wght@300;400;500;700&family=Pacifico&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>App</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js"></script>
+<script>
+        if (window.Telegram?.WebApp) {
+            Telegram.WebApp.setHeaderColor('#000000');
+            Telegram.WebApp.setBackgroundColor('#000');
+        }
+    </script>
 <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+<script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Aleo:ital,wght@0,100..900;1,100..900&family=Permanent+Marker&family=DynaPuff:wght@400;500;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+<!-- ══ Ban Screen ══ -->
+<div id="ban-screen" style="display:none; position:fixed; inset:0; z-index:9999; background:#0d0d0f; display:none; align-items:center; justify-content:center; flex-direction:column; gap:24px; text-align:center;">
+  <svg xmlns="http://www.w3.org/2000/svg" width="148" height="148" viewBox="0 0 128 128" fill="none">
+    <style>
+      .ban-lock { transform-origin:center; animation:softPulse 2.5s ease-in-out infinite; }
+      .ban-body { fill:#e84040; }
+      .ban-line { stroke:#e84040; stroke-width:8; stroke-linecap:round; stroke-linejoin:round; }
+      .ban-key  { fill:#0d0d0f; }
+      @keyframes softPulse { 0%,100%{transform:scale(1);opacity:.92;} 50%{transform:scale(1.04);opacity:1;} }
+    </style>
+    <g class="ban-lock">
+      <path class="ban-line" d="M40 54 V38 C40 24 50 14 64 14 C78 14 88 24 88 38 V54"/>
+      <rect class="ban-body" x="28" y="50" width="72" height="58" rx="16"/>
+      <circle class="ban-key" cx="64" cy="74" r="6"/>
+      <rect   class="ban-key" x="61" y="78" width="6" height="14" rx="3"/>
+    </g>
+  </svg>
+  <p style="font-family:'Permanent Marker',cursive; font-size:22px; color:#f0f0f0; margin:0;">Your account has been locked</p>
+</div>
 
-<!-- ===== Sidebar ===== -->
-<nav class="sidebar" id="sidebar">
-  <div class="sb-head">
-    <div class="sb-brand">
-      <div class="mark">
-        <img src="asesst/icon.png" alt="RealCash">
+<!-- ══ Toast Container ══ -->
+<div id="toast-container"></div>
+
+<div class="pages">
+  <div class="page active" id="page-contest">
+    <div class="home-wrap">
+
+      <div class="home-hero reveal from-top">
+        <h1 class="contest-title">Big League</h1>
+        <div class="contest-underline"></div>
+        <p class="home-sub">Watch ads, earn USDT — simple as that.</p>
       </div>
-      <div>
-        <b>ريل كاش</b>
-        <small>RealCash</small>
+
+      <div class="earn-section reveal from-bottom">
+        <div class="earn-ad-card">
+          <div class="earn-ad-icon">
+            <img src="asesst/adsgram.jpg" alt="Adsgram">
+          </div>
+          <div class="earn-ad-info">
+            <span class="earn-ad-label">Watch an Ad</span>
+            <div class="earn-ad-reward">
+              <span id="ad-ticket-reward">$0.03</span>
+              <span class="per-ad">per ad</span>
+            </div>
+          </div>
+          <button class="earn-watch-btn" id="watch-btn" onclick="handleWatchAd()">
+            <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Watch</span>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ Referral Page ══ -->
+  <div class="page" id="page-referral">
+    <div class="ref-wrap">
+
+      <div class="ref-hero reveal from-top">
+        <div class="ref-crest-wrap">
+          <div class="ref-crest-glow"></div>
+          <div class="ref-icon-wrap">
+            <svg viewBox="0 0 24 24">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div class="ref-chip"><b id="ref-count">0</b>&nbsp;friends already earning</div>
+        </div>
+
+        <h1 class="ref-title">Recruit your <span>legion</span></h1>
+        <p class="ref-sub">Bring in players, earn USDT on everything they play — automatically, forever.</p>
+
+        <div class="ref-reward-pill">
+          <span id="ref-usdt-reward">+$0.1</span>
+          <span class="pill-label">per friend</span>
+        </div>
+      </div>
+
+      <div class="ref-block reveal from-left">
+        <div class="ref-label">Your link</div>
+        <div class="ref-link-row">
+          <span class="ref-link-text" id="ref-link-display">t.me/YourBot?start=REF123456</span>
+          <button class="ref-copy-btn" id="ref-copy-btn" onclick="handleCopyLink()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span id="copy-label">Copy</span>
+          </button>
+        </div>
+
+        <div class="ref-share-row">
+          <a class="ref-share-btn tg" href="#" onclick="handleShareTelegram(event)" aria-label="Share on Telegram">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#4fb6ea" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+          </a>
+          <a class="ref-share-btn wa" href="#" onclick="handleShareWhatsApp(event)" aria-label="Share on WhatsApp">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#38d17a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          </a>
+          <a class="ref-share-btn x" href="#" onclick="handleShareX(event)" aria-label="Share on X">
+            <svg viewBox="0 0 24 24" fill="#e8ebf2"><path d="M18.9 2H22l-7.6 8.7L23.3 22H16.9l-5-6.5-5.7 6.5H2.9l8.1-9.3L2 2h6.6l4.5 5.9L18.9 2zm-1.1 18h1.7L7.3 3.9H5.5L17.8 20z"/></svg>
+          </a>
+          <a class="ref-share-btn fb" href="#" onclick="handleShareFacebook(event)" aria-label="Share on Facebook">
+            <svg viewBox="0 0 24 24" fill="#1877f2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="ref-foot-note reveal from-bottom">No limit on invites · No cap on earnings</div>
+
+    </div>
+  </div>
+
+  <!-- ══ Withdraw Page ══ -->
+  <div class="page" id="page-withdraw">
+    <div class="wd-wrap">
+
+      <div class="wd-hero reveal from-top">
+        <div class="wd-icon-wrap">
+          <svg viewBox="0 0 24 24">
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z"/>
+          </svg>
+        </div>
+        <h1 class="wd-title" id="wd-hero-title">Withdraw Your Earnings</h1>
+        <div class="wd-balance-row">
+          <span>Balance</span>
+          <strong id="wd-balance">$0.00</strong>
+        </div>
+      </div>
+
+      <div class="wd-wallet-block reveal from-left">
+        <div id="ton-connect-button"></div>
+        <span class="wd-wallet-address" id="ad-wallet"></span>
+      </div>
+
+      <!-- ══ Withdraw section — quick-select tier cards ══ -->
+      <div class="wd-form" id="wd-section-withdraw">
+
+        <div class="wc-label-row reveal from-left">
+          <span class="wd-label">Choose a Withdraw Amount</span>
+          <span class="wc-instant-pill">
+            <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+            Instant
+          </span>
+        </div>
+
+        <div class="wc-packages" id="wc-packages"><!-- filled by renderWithdrawTiers() --></div>
+
+        <div class="wc-status" id="wc-status">Fee is deducted automatically from the amount</div>
+
       </div>
     </div>
-    <div class="sb-close" onclick="closeSidebar()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </div>
   </div>
+</div>
 
-  <div class="sb-nav" id="sbNav">
-    <div class="sb-link active" data-page="home">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
-      الرئيسية
-    </div>
-    <div class="sb-link" data-page="tasks">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l2.5 2.5L16 9"/></svg>
-      المهام
-    </div>
-    <div class="sb-link" data-page="rewards">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M8.5 13L6 21l6-3 6 3-2.5-8"/></svg>
-      المكافآت
-    </div>
-    <div class="sb-link" data-page="referral">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg>
-      الإحالات
-    </div>
-    <div class="sb-link" data-page="contest">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 01-10 0V4z"/><path d="M7 6H4a3 3 0 003 3"/><path d="M17 6h3a3 3 0 01-3 3"/></svg>
-      المسابقة
-    </div>
-    <div class="sb-link" data-page="wallet">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/><path d="M16 15h2"/></svg>
-      المحفظة
-    </div>
-    <div class="sb-link" data-page="history">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 3"/></svg>
-      السجل
-    </div>
-    <div class="sb-link" data-page="settings">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
-      الإعدادات
-    </div>
-  </div>
+  <button id="chat-fab" type="button" onclick="openChatPage()" aria-label="Chat">
+    <svg viewBox="0 0 24 24">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+    </svg>
+  </button>
 
-  <div class="sb-foot">
-    <div class="av">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+<nav>
+  <button class="nb active" data-page="contest">
+    <div class="ic">
+      <svg viewBox="0 0 24 24">
+        <path d="M3 9.5 12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V9.5Z"/>
+      </svg>
     </div>
-    <div class="info" id="sbUserInfo">
-      <b id="sbUserName">مستخدم</b>
-      <small id="sbUserMeta">عضو</small>
+    <span class="lbl">Home</span>
+  </button>
+
+  <button class="nb" data-page="referral">
+    <div class="ic">
+      <svg viewBox="0 0 24 24">
+        <circle cx="18" cy="5" r="3"/>
+        <circle cx="6"  cy="12" r="3"/>
+        <circle cx="18" cy="19" r="3"/>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+      </svg>
     </div>
-  </div>
+    <span class="lbl">Referral</span>
+  </button>
+
+  <button class="nb" data-page="withdraw">
+    <div class="ic">
+      <svg viewBox="0 0 24 24">
+        <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
+        <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
+        <path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z"/>
+      </svg>
+    </div>
+    <span class="lbl">Withdraw</span>
+  </button>
 </nav>
 
-<div class="app">
-
-  <!-- ============ HOME ============ -->
-  <div class="page active" id="page-home">
-    <div class="topbar">
-      <div style="width:44px"></div>
-      <div class="brand-mini">
-        <div class="mark"><img src="asesst/icon.png" alt="RealCash"></div>
-        <span>ريل كاش</span>
-      </div>
-      <div class="avatar-btn">
-        <div class="dot"></div>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
-      </div>
-    </div>
-
-    <div class="greeting">
-      <h1 id="greetingText">مرحباً 👋</h1>
-      <p>إليك ملخص أرباحك اليوم</p>
-    </div>
-
-    <div class="balance-zone">
-      <div class="balance-top">
-        <div class="balance-label">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg>
-          الرصيد الحالي
-        </div>
-        <div class="rank-ring">
-          <svg viewBox="0 0 60 60">
-            <circle class="track" cx="30" cy="30" r="25"/>
-            <circle class="prog" cx="30" cy="30" r="25"/>
-          </svg>
-          <div class="lvl"><b id="userRankBadge">-</b><small>ترتيب</small></div>
-        </div>
-      </div>
-
-      <div class="balance-amount">
-        <span class="num anim-num" id="homeBalance">0.000</span>
-        <span class="cur">USD</span>
-      </div>
-      <div class="balance-sub">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-        <span id="todayEarnText">+٠.٠٠$ اليوم</span>
-      </div>
-
-      <div class="balance-actions">
-        <button class="btn-primary" onclick="goTo('wallet')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-          سحب الرصيد
-        </button>
-        <button class="btn-ghost" onclick="goTo('history')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"/><path d="M3 3v5h5"/></svg>
-          السجل
-        </button>
-      </div>
-    </div>
-
-    <div class="stats-row">
-      <div class="stat-chip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-        <div class="v anim-num" id="statTodayEarn">0.000$</div>
-        <div class="l">أرباح اليوم</div>
-      </div>
-      <div class="stat-chip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg>
-        <div class="v anim-num" id="statReferrals">0</div>
-        <div class="l">إحالة</div>
-      </div>
-      <div class="stat-chip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l2.5 2.5L16 9"/></svg>
-        <div class="v" id="statTasks">0/4</div>
-        <div class="l">مهام</div>
-      </div>
-    </div>
-
-    <div class="sec-head">
-      <h3>إجراءات سريعة</h3>
-    </div>
-    <div class="quick-grid">
-      <div class="quick-item" onclick="goTo('tasks')">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
-        <span>مشاهدة إعلان</span>
-      </div>
-      <div class="quick-item" onclick="goTo('tasks')">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l2.5 2.5L16 9"/></svg></div>
-        <span>إنجاز مهمة</span>
-      </div>
-      <div class="quick-item" onclick="goTo('referral')">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg></div>
-        <span>دعوة صديق</span>
-      </div>
-      <div class="quick-item" onclick="goTo('wallet')">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></div>
-        <span>سحب</span>
-      </div>
-    </div>
-
-    <div class="bottom-pad"></div>
+<!-- ══ Chat Overlay — غرفة عامة لكل المستخدمين ══ -->
+<div id="chat-overlay">
+  <div class="chat-header">
+    <button class="chat-back" type="button" onclick="closeChatPage()">
+      <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <span class="chat-title">Group Chat</span>
   </div>
-
-  <!-- ============ TASKS ============ -->
-  <div class="page" id="page-tasks">
-    <div class="topbar">
-      <div style="width:44px"></div>
-      <div class="brand-mini"><span>المهام</span></div>
-      <div style="width:44px"></div>
-    </div>
-
-    <div class="eyebrow" id="tasksEyebrow">مهامك اليوم</div>
-    <div class="page-title">أنجز مهام واربح</div>
-
-    <div class="task-card">
-      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
-      <div class="task-mid">
-        <div class="tn">شاهد إعلانات</div>
-        <div class="td" id="watchAdsProgress">تحميل...</div>
-      </div>
-      <button class="task-btn" id="taskBtn-watch_ads_5" onclick="handleAdTask(this)">ابدأ</button>
-    </div>
-
-    <div class="task-card" id="taskCard-join_channel" style="display:none;">
-      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9"/></svg></div>
-      <div class="task-mid">
-        <div class="tn">انضم لقناة تيليجرام</div>
-        <div class="td" id="joinChannelProgress">مكافأة فورية</div>
-        <div class="task-status" id="joinChannelStatus" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>مكتملة</div>
-      </div>
-      <button class="task-btn" id="taskBtn-join_channel" onclick="handleJoinChannel(this)">تحقق</button>
-    </div>
-
-    <div class="task-card">
-      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg></div>
-      <div class="task-mid">
-        <div class="tn">ادعُ 3 أصدقاء</div>
-        <div class="td" id="inviteFriendsProgress">تحميل...</div>
-        <div class="task-status" id="inviteFriendsStatus" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>مكتملة</div>
-      </div>
-      <button class="task-btn" id="taskBtn-invite_3_friends" onclick="shareReferralLink()">دعوة</button>
-    </div>
-
-    <div class="task-card">
-      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-      <div class="task-mid">
-        <div class="tn">تسجيل دخول يومي</div>
-        <div class="td" id="dailyLoginProgress">7 أيام متتالية = مكافأة كبرى</div>
-        <div class="task-status" id="dailyLoginStatus" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>مكتملة</div>
-      </div>
-      <button class="task-btn" id="taskBtn-daily_login" onclick="handleDailyLogin(this)">استلام</button>
-    </div>
-
-    <div class="bottom-pad"></div>
-  </div>
-
-  <!-- ============ REWARDS ============ -->
-  <div class="page" id="page-rewards">
-    <div class="topbar">
-      <div style="width:44px"></div>
-      <div class="brand-mini"><span>المكافآت</span></div>
-      <div style="width:44px"></div>
-    </div>
-
-    <div class="eyebrow">رصيدك من النقاط</div>
-    <div class="page-title"><span class="anim-num" id="pointsBalance">0</span> نقطة</div>
-
-    <div id="rewardsList"></div>
-
-    <div class="bottom-pad"></div>
-  </div>
-
-  <!-- ============ REFERRAL ============ -->
-  <div class="page" id="page-referral">
-    <div class="topbar">
-      <div style="width:44px"></div>
-      <div class="brand-mini"><span>الإحالات</span></div>
-      <div style="width:44px"></div>
-    </div>
-
-    <div class="ref-card">
-      <svg class="big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg>
-      <h3>ادعُ أصدقاءك واربح معًا</h3>
-      <p>احصل على 500 نقطة مسابقة فور تفعيل حساب صديقك، بالإضافة إلى 10% من أرباحه مدى الحياة</p>
-      <div class="link-box">
-        <span id="refLinkText">تحميل...</span>
-        <button id="copyRefBtn" onclick="copyReferralLink()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-primary" onclick="shareReferralLink()" style="margin-top:14px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
-          مشاركة الرابط
-        </button>
-      </div>
-    </div>
-
-    <div class="ref-stats">
-      <div class="stat-chip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
-        <div class="v anim-num" id="refActiveCount">0</div>
-        <div class="l">إحالات نشطة</div>
-      </div>
-      <div class="stat-chip">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-        <div class="v anim-num" id="refPendingCount">0</div>
-        <div class="l">بانتظار التفعيل</div>
-      </div>
-    </div>
-
-    <div class="sec-head"><h3>سجل الإحالات</h3></div>
-    <div class="panel" style="padding:6px 14px;">
-      <div id="refHistoryList">
-        <div style="padding:16px 4px; color:var(--text-3); font-size:12.5px; text-align:center;">لا يوجد إحالات بعد</div>
-      </div>
-    </div>
-
-    <div class="bottom-pad"></div>
-  </div>
-
-  <!-- ============ CONTEST ============ -->
-  <div class="page" id="page-contest">
-    <div class="topbar">
-      <div style="width:44px"></div>
-      <div class="brand-mini"><span>المسابقة</span></div>
-      <div style="width:44px"></div>
-    </div>
-
-    <div class="eyebrow" id="contestName">المسابقة الأسبوعية</div>
-    <div class="page-title">سباق الصدارة</div>
-
-    <div class="contest-timer" id="contestTimer">
-      <div class="ct-box"><b id="ctDays">--</b><small>أيام</small></div>
-      <div class="ct-box"><b id="ctHours">--</b><small>ساعات</small></div>
-      <div class="ct-box"><b id="ctMinutes">--</b><small>دقيقة</small></div>
-    </div>
-
-    <div class="podium" id="contestPodium"></div>
-
-    <div class="sec-head"><h3>الترتيب الكامل</h3></div>
-    <div class="panel" style="padding:4px 14px;">
-      <div id="contestLeaderboard"></div>
-    </div>
-
-    <div class="bottom-pad"></div>
-  </div>
-
-  <!-- ============ WALLET ============ -->
-  <div class="page" id="page-wallet">
-    <div class="topbar">
-      <div style="width:44px"></div>
-      <div class="brand-mini"><span>المحفظة</span></div>
-      <div style="width:44px"></div>
-    </div>
-
-    <div class="wallet-hero">
-      <div class="lbl">إجمالي الرصيد</div>
-      <div class="amt"><span class="anim-num" id="walletBalance">0.000</span> <span class="cur2">USD</span></div>
-      <button class="withdraw-btn" id="withdrawBtn" onclick="openWithdrawModal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-        سحب إلى TON
-      </button>
-      <div class="wallet-chip" id="walletChipWallet" style="display:none;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg>
-        <span id="walletAddrWallet"></span>
-      </div>
-    </div>
-
-    <div class="sec-head"><h3>آخر العمليات</h3></div>
-    <div class="panel" style="padding:4px 14px;">
-      <div id="walletTxList"></div>
-    </div>
-
-    <div class="bottom-pad"></div>
-  </div>
-
-  <!-- ============ HISTORY ============ -->
-  <div class="page" id="page-history">
-    <div class="topbar">
-      <div style="width:44px"></div>
-      <div class="brand-mini"><span>السجل</span></div>
-      <div style="width:44px"></div>
-    </div>
-
-    <div class="filter-tabs" id="historyFilterTabs">
-      <div class="f-tab active" data-filter="all">الكل</div>
-      <div class="f-tab" data-filter="earn">أرباح</div>
-      <div class="f-tab" data-filter="withdraw">سحوبات</div>
-      <div class="f-tab" data-filter="referral">إحالات</div>
-      <div class="f-tab" data-filter="task">مهام</div>
-    </div>
-
-    <div class="timeline" id="historyTimeline"></div>
-
-    <div class="bottom-pad"></div>
-  </div>
-
-  <!-- ============ SETTINGS ============ -->
-  <div class="page" id="page-settings">
-    <div class="topbar">
-      <div style="width:44px"></div>
-      <div class="brand-mini"><span>الإعدادات</span></div>
-      <div style="width:44px"></div>
-    </div>
-
-    <div class="settings-profile">
-      <div class="av" id="settingsAvatarInitial">؟</div>
-      <div>
-        <div class="sn" id="settingsName">مستخدم</div>
-        <div class="sid" id="settingsHandle">@—</div>
-      </div>
-    </div>
-
-    <div class="set-group">
-      <div class="gl">الحساب</div>
-      <div class="panel" style="padding:0 14px;">
-        <div class="set-row" id="walletSettingRow" onclick="onWalletRowClick()">
-          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg></div>
-          <div class="sn2">
-            عنوان محفظة TON
-            <div id="walletSettingSub" style="font-size:10.5px; color:var(--text-3); font-weight:400; margin-top:2px; direction:ltr; word-break:break-all;">غير متصلة</div>
-          </div>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-      </div>
-    </div>
-
-    <div class="set-group">
-      <div class="gl">التنبيهات</div>
-      <div class="panel" style="padding:0 14px;">
-        <div class="set-row">
-          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg></div>
-          <div class="sn2">إشعارات المهام</div>
-          <div class="toggle" id="toggle-notify_tasks" onclick="saveSetting('notify_tasks', this)"></div>
-        </div>
-        <div class="set-row">
-          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-          <div class="sn2">تنبيهات الأرباح</div>
-          <div class="toggle" id="toggle-notify_earnings" onclick="saveSetting('notify_earnings', this)"></div>
-        </div>
-        <div class="set-row">
-          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 01-10 0V4z"/></svg></div>
-          <div class="sn2">تحديثات المسابقة</div>
-          <div class="toggle" id="toggle-notify_contest" onclick="saveSetting('notify_contest', this)"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="set-group">
-      <div class="gl">الدعم</div>
-      <div class="panel" style="padding:0 14px;">
-        <div class="set-row" onclick="openHelpChannel()">
-          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 015.8 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-          <div class="sn2">مركز المساعدة</div>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div class="set-row" onclick="openSupportChat()">
-          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
-          <div class="sn2">تواصل معنا</div>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div class="set-row" onclick="openModal('faqModalOverlay')">
-          <div class="set-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></div>
-          <div class="sn2">الأسئلة الشائعة</div>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-      </div>
-    </div>
-
-    <div class="bottom-pad"></div>
-  </div>
-
-</div>
-
-<div class="fab" onclick="openSidebar()">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
-</div>
-
-<!-- ===== Toast container ===== -->
-<div class="toast-stack" id="toastStack"></div>
-
-<!-- ===== Withdraw modal ===== -->
-<div class="modal-overlay" id="withdrawModalOverlay" onclick="if(event.target===this) closeModal('withdrawModalOverlay')">
-  <div class="modal-sheet">
-    <div class="modal-close" onclick="closeModal('withdrawModalOverlay')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </div>
-    <div class="modal-handle"></div>
-    <div class="modal-title">سحب إلى TON</div>
-    <div class="modal-sub">الرصيد المتاح: <b id="withdrawAvailable">0.000$</b></div>
-    <div class="modal-sub">الحد الأدنى للسحب: <b id="withdrawMinNote">0.000$</b></div>
-
-    <div class="modal-field">
-      <label>عنوان محفظة TON</label>
-      <input type="text" id="withdrawAddress" placeholder="EQ..." readonly>
-    </div>
-    <div class="modal-field">
-      <label>المبلغ (USD)</label>
-      <input type="number" id="withdrawAmount" placeholder="0.000" min="0" step="0.001">
-    </div>
-
-    <div class="modal-note">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      لازم تربط محفظة TON أولًا قبل السحب
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn-ghost" onclick="closeModal('withdrawModalOverlay')" style="flex:1;">إلغاء</button>
-      <button class="btn-primary" id="withdrawConfirmBtn" onclick="submitWithdraw()" style="flex:2;">تأكيد السحب</button>
-    </div>
+  <div class="chat-messages" id="chat-messages"></div>
+  <div class="chat-inputbar">
+    <input type="text" id="chat-input" placeholder="Type a message…" maxlength="500" autocomplete="off">
+    <button class="chat-send" type="button" onclick="sendChatMsg()">
+      <svg viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7Z"/></svg>
+    </button>
   </div>
 </div>
 
-<!-- ===== Generic confirm modal (rewards / tasks) ===== -->
-<div class="modal-overlay" id="confirmModalOverlay" onclick="if(event.target===this) closeModal('confirmModalOverlay')">
-  <div class="modal-sheet">
-    <div class="modal-close" onclick="closeModal('confirmModalOverlay')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </div>
-    <div class="modal-handle"></div>
-    <div class="modal-title" id="confirmModalTitle">تأكيد</div>
-    <div class="modal-sub" id="confirmModalSub"></div>
-    <div class="modal-actions">
-      <button class="btn-ghost" onclick="closeModal('confirmModalOverlay')" style="flex:1;">إلغاء</button>
-      <button class="btn-primary" id="confirmModalBtn" style="flex:2;">تأكيد</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== FAQ modal ===== -->
-<div class="modal-overlay" id="faqModalOverlay" onclick="if(event.target===this) closeModal('faqModalOverlay')">
-  <div class="modal-sheet" style="max-height:80vh; overflow-y:auto;">
-    <div class="modal-close" onclick="closeModal('faqModalOverlay')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </div>
-    <div class="modal-handle"></div>
-    <div class="modal-title">الأسئلة الشائعة</div>
-    <div class="modal-sub">كل اللي بدك تعرفه عن ريل كاش</div>
-
-    <div class="faq-list">
-      <div class="faq-item">
-        <div class="faq-q" onclick="toggleFaq(this)">
-          <span>من نحن؟</span>
-          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
-        <div class="faq-a">
-          <p>ريل كاش منصة داخل تيليجرام بتخليك تربح مال حقيقي أو نقاط من خلال مشاهدة الإعلانات، إنجاز المهام، ودعوة أصدقائك. أرباحك بتتجمع برصيدك وتقدر تسحبها لمحفظة TON.</p>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-q" onclick="toggleFaq(this)">
-          <span>كيف أربح رصيد؟</span>
-          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
-        <div class="faq-a">
-          <p>من صفحة "المهام" — شاهد إعلانات، أنجز مهام يومية، أو ادعُ أصدقاء عبر رابط الإحالة الخاص فيك من صفحة "الإحالات". كل مهمة موضح جنبها المبلغ اللي بتربحه.</p>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-q" onclick="toggleFaq(this)">
-          <span>كيف أسحب رصيدي؟</span>
-          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
-        <div class="faq-a">
-          <p>اربط محفظة TON من صفحة "الإعدادات"، بعدها روح لصفحة "المحفظة" واضغط "سحب إلى TON"، حدد المبلغ وأكّد. الطلب بينعالج ويوصلك إشعار لما ينرسل.</p>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-q" onclick="toggleFaq(this)">
-          <span>هل بياناتي وأموالي آمنة؟</span>
-          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
-        <div class="faq-a">
-          <p>نعم — التطبيق بيتحقق من هويتك عبر بيانات تيليجرام الرسمية، وكل عمليات السحب بتنربط بمحفظة TON اللي تربطها إنت بنفسك. ما منطلب أي معلومات حساسة زي كلمات مرور المحفظة.</p>
-        </div>
-      </div>
-
-      <div class="faq-item">
-        <div class="faq-q" onclick="toggleFaq(this)">
-          <span>عندي سؤال ثاني، كيف أتواصل معكم؟</span>
-          <svg class="faq-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
-        <div class="faq-a">
-          <p>تقدر تتواصل معنا مباشرة من زر "تواصل معنا" بصفحة الإعدادات، أو تنضم لقناة "مركز المساعدة" لآخر التحديثات والدعم.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
+<!-- ══ Scripts — order matters ══ -->
 <script src="config.js"></script>
 <script src="api.js"></script>
-<script src="ui.js"></script>
+<script src="security.js"></script>
+<script src="notifications.js"></script>
+<script src="pages.js"></script>
 <script src="app.js"></script>
+
+
+  <!-- ══ Channel Gate Overlay — اشتراك إجباري بالقناة قبل السحب ══ -->
+  <div id="channel-gate-overlay">
+    <div class="cg-backdrop"></div>
+    <div class="cg-card">
+      <svg viewBox="0 0 24 24" class="cg-icon">
+        <path d="M22 2 11 13"/>
+        <path d="M22 2 15 22l-4-9-9-4 20-7Z"/>
+      </svg>
+      <div class="cg-title">Join Our Channel</div>
+      <div class="cg-msg">You need to join our channel before you can withdraw. It only takes a second.</div>
+      <button class="btn-ad" id="cg-join-btn" type="button" onclick="openChannelFromGate()">Join Channel</button>
+      <button class="btn-claim" id="cg-verify-btn" type="button" onclick="verifyChannelAndRetry()">✓ I Joined — Verify</button>
+      <button class="btn-again" type="button" onclick="hideChannelGate()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- 🛡️ Developer Tools Block Overlay — global, يظهر فوق كل الصفحات دايماً -->
+  <div id="devtools-overlay">
+    <div class="dt-backdrop"></div>
+    <div class="dt-card">
+      <svg viewBox="0 0 24 24" class="dt-icon"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg>
+      <div class="dt-title">Access Blocked</div>
+      <div class="dt-msg">Close Developer Tools to continue using the app.</div>
+    </div>
+  </div>
 
 </body>
 </html>

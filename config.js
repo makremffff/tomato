@@ -1,29 +1,63 @@
 /* ══════════════════════════════════════════════════════
-   config.js — ثوابت التطبيق + تهيئة Telegram WebApp
-   غيّر القيم أدناه (روابط الدعم، Adsgram Block ID...) بحرية
+   config.js — App-wide constants & shared state
 ══════════════════════════════════════════════════════ */
 
-  /* =========================================================
-     RealCash — live wiring against api/index.js (نمط طلب واحد
-     بحقل "type"، مطابق تماماً لبنية BigLeague). كل نداء يرسل
-     initData + type + data إلى نفس الـ endpoint.
-     ========================================================= */
+const BOT_USERNAME = 'EarnlixBot';
+let   REF_LINK     = 'https://t.me/EarnlixBot/play?startapp=ref_';
 
-  const API_ENDPOINT = '/api'; // يشير لـ api/index.js على Vercel
-  const TON_MANIFEST_URL = location.origin + '/tonconnect-manifest.json';
-  const HELP_CHANNEL_LINK = 'https://t.me/YOUR_HELP_CHANNEL'; // TODO: استبدله بقناة الدعم
-  const SUPPORT_USERNAME  = 'YOUR_SUPPORT_USERNAME';          // TODO: بدون @
-  const ADSGRAM_BLOCK_ID  = '35167';                          // نفس Block ID المستخدم في BigLeague
+// ⚠️ غيّره بالـ blockId الحقيقي من partner.adsgram.ai (Get blockId section)
+const ADSGRAM_BLOCK_ID = '35167';
 
-  // 🔗 رابط الإحالة الرسمي — Mini App deep link عبر startapp (وليس start العادي)
-  // الصيغة: https://t.me/<bot_username>/<mini_app_short_name>?startapp=<referral_code>
-  const REFERRAL_LINK_BASE = 'https://t.me/real_cash0Bot/play?startapp=';
+// ⚠️ غيّر يوزرنيم قناتك هنا — يُستخدم في زر "Join Channel" بالأونبوردنغ وبصفحة السحب
+// ⚠️ لازم يطابق نفس اليوزرنيم في متغير البيئة CHANNEL_USERNAME على السيرفر (api/index.js)
+const CHANNEL_LINK = 'https://t.me/withdrawlProof2026';
 
-  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-  if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
-  const initData = tg ? tg.initData : '';
+// ⚠️ غيّره بدومينك الحقيقي بعد رفع المشروع — لازم ترفع ملف tonconnect-manifest.json
+// (مرفق في التسليم) في جذر نفس الدومين بحيث يكون متاح على /tonconnect-manifest.json
+const TONCONNECT_MANIFEST_URL = 'https://spin-snowy.vercel.app/tonconnect-manifest.json';
 
-  // 🔗 يلتقط start_param (ref_<telegram_id>) من رابط الدعوة عند أول فتح للتطبيق
-  const startParam = tg?.initDataUnsafe?.start_param || null;
+// عنوان محفظة الاستلام (Treasury) — كل ايداعات التذاكر تُرسل هنا مباشرة عبر TonConnect SDK
+const TREASURY_WALLET_ADDRESS = 'UQABsMMUakTi2iRO5pox4DDR--0J7uqsULYqHDv4Zo3w0E-T';
 
-  let appState = null; // آخر رد كامل من init — تُبنى عليه كل الصفحات
+/* ══════════════════════════════════════════════════════
+   APP_CONFIG — Single source of truth for all values
+   Edit here and everything (frontend + backend) stays in sync.
+   Backend reads these via the init API response (appState.config).
+══════════════════════════════════════════════════════ */
+const APP_CONFIG = {
+  /* Referral rewards */
+  REF_TICKET_REWARD : 5000,   // competition tickets per referral
+  REF_USDT_REWARD   : 0.01,   // USDT added to balance per referral
+
+  /* Ad rewards */
+  AD_USD_REWARD     : 0.001,  // USD per ad watch
+  AD_DAILY_MAX      : 3000,   // max ads per day
+
+  /* Withdrawal */
+  WITHDRAW_MIN      : 0.01,   // minimum withdrawal in USD — no fees
+
+  /* Withdraw tiers — quick-select cards on the withdraw page (no fees) */
+  WITHDRAW_TIERS: [
+    { id: 'wd_1', amount: 10,  fee: 0 },
+    { id: 'wd_2', amount: 20,  fee: 0 },
+    { id: 'wd_3', amount: 50,  fee: 0 },
+    { id: 'wd_4', amount: 100, fee: 0, best: true },
+  ],
+};
+
+/* Single source of truth — all pages read from here */
+let appState = {
+  user: {
+    id: null, telegram_id: null, name: 'You', photo_url: null,
+    pts: 0, balance_usd: 0, referral_code: '', rank: 0
+  },
+  leaderboard: [],
+  referral: { count: 0, earned: 0 },
+  config: APP_CONFIG   // overwritten by server response on init
+};
+
+/* Page entrance animation delay between each .reveal element */
+const REVEAL_STEP = 70; // ms
+
+/* Shared SVG snippets */
+const LB_AVATAR_SVG = `<svg viewBox="0 0 24 24" stroke-width="1.5" fill="none" stroke="white"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>`;
