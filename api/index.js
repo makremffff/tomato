@@ -80,7 +80,7 @@ const APP_CFG = {
   // ⚠️ ملاحظة أمان: الاستبدال يخصم فقط من عمود points، ولا يمسّ contest_score إطلاقاً —
   // نقاط ترتيب المسابقة الأسبوعية محفوظة بعمود منفصل تماماً ولا تتأثر بالاستبدال هنا
   REWARDS_CATALOG: {
-    balance_001usd: { cost: 10000, title: 'رصيد إضافي 0.01$', type: 'balance', amountUsd: 0.01 },
+    balance_001usd: { cost: 1000, title: 'رصيد إضافي 0.01$', type: 'balance', amountUsd: 0.01 },
   },
 };
 
