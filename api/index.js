@@ -446,8 +446,7 @@ async function maybeActivateReferral(dbUser) {
 
   sendTelegramMessage(
     Number(referrer.telegram_id),
-    `🎉 *إحالة جديدة تم تفعيلها!*\n\nانضم صديقك وشاهد ${APP_CFG.REFERRAL_ACTIVATION_ADS} إعلانات — ` +
-    `تم إضافة *${APP_CFG.REFERRAL_REWARD_USD.toFixed(2)}$* لرصيدك 💰`
+    `🎉 انضم صديقك *${escapeHtml(dbUser.first_name || 'صديقك')}* وستربح 10% من أرباحه مدى الحياة`
   ).catch(e => console.error('[referral notify]', e.message));
 }
 
@@ -725,6 +724,7 @@ module.exports = async function handler(req, res) {
             ad_batch_bonus_usd: APP_CFG.AD_BATCH_BONUS_USD,
             daily_login_reward_usd: APP_CFG.DAILY_LOGIN_REWARD_USD,
             join_channel_reward_usd: APP_CFG.JOIN_CHANNEL_REWARD_USD,
+            contest_prizes_usd: APP_CFG.CONTEST_PRIZES_USD,
             withdraw_min_usd: APP_CFG.WITHDRAW_MIN_USD, rewards_catalog: APP_CFG.REWARDS_CATALOG,
             channel_username: CHANNEL_USERNAME || null,
           },
