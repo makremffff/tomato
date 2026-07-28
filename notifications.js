@@ -1,264 +1,99 @@
-// ================================================================
-//  Tomato Farm — Notification System
-//  sendNotification | broadcast | checkAndNotifyUsers
-// ================================================================
+/* ══════════════════════════════════════════════════════
+   notifications.js — Toast Notification System (v2 · Premium)
+   showToast({ type, title, msg, duration })
+   type: 'ad' | 'rank' | 'referral' | 'success' | 'withdraw' | 'error'
+══════════════════════════════════════════════════════ */
 
-const { neon } = require('@neondatabase/serverless');
-
-const DATABASE_URL = process.env.DATABASE_URL;
-const BOT_TOKEN    = process.env.BOT_TOKEN;
-
-// ── SQL executor ─────────────────────────────────────────────────
-async function sql(query, params = []) {
-  const db = neon(DATABASE_URL);
-  return await db(query, params);
-}
-
-// ── Config ───────────────────────────────────────────────────────
-const NOTIFY_COOLDOWN_MS  = 10 * 60 * 1000; // 10 min between same-type notifications
-const BATCH_SIZE          = 20;              // users per batch
-const BATCH_DELAY_MS      = 700;             // ~28 req/sec (safe under 30)
-const CHECK_INTERVAL_MS   = 30 * 1000;       // check every 30 seconds
-
-// ── Notification types ───────────────────────────────────────────
-const NOTIFY_TYPES = {
-  ready  : 'ready',
-  reward : 'reward',
-  system : 'system',
+const TOAST_ICONS = {
+  ad: `
+    <svg viewBox="0 0 24 24">
+      <path d="M12 2v20M17 5.5c0-1.9-2.2-3.5-5-3.5S7 3.6 7 5.5 9.2 9 12 9s5 1.6 5 3.5-2.2 3.5-5 3.5-5-1.6-5-3.5"/>
+    </svg>`,
+  rank: `
+    <svg viewBox="0 0 24 24">
+      <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/>
+      <path d="M7 6H4a3 3 0 0 0 3 3M17 6h3a3 3 0 0 1-3 3"/>
+    </svg>`,
+  referral: `
+    <svg viewBox="0 0 24 24">
+      <circle cx="9" cy="8" r="3.2"/>
+      <path d="M3.5 20c0-3.3 2.5-5.5 5.5-5.5s5.5 2.2 5.5 5.5"/>
+      <path d="M17 8.5c1.3.3 2.2 1.4 2.2 2.8s-.9 2.5-2.2 2.8M19 20c0-2.6-1.6-4.5-3.7-5.2"/>
+    </svg>`,
+  success: `
+    <svg viewBox="0 0 24 24">
+      <path d="M20 6 9 17l-5-5"/>
+    </svg>`,
+  withdraw: `
+    <svg viewBox="0 0 24 24">
+      <rect x="3" y="6" width="18" height="13" rx="2.5"/>
+      <path d="M3 10h18"/>
+      <circle cx="16.5" cy="14.2" r="1.3" fill="#0a0710" stroke="none"/>
+    </svg>`,
+  error: `
+    <svg viewBox="0 0 24 24">
+      <path d="M12 3 2 20h20L12 3Z"/>
+      <path d="M12 10v4"/>
+      <circle cx="12" cy="17" r=".6" fill="#0a0710" stroke="none"/>
+    </svg>`
 };
 
-// ── Migration: add last_notified column if missing ───────────────
-async function migrateNotifyColumn() {
-  try {
-    await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_notified JSONB NOT NULL DEFAULT '{}'`);
-    console.log('[Notify] Migration OK — last_notified column ready');
-  } catch (e) {
-    console.error('[Notify] Migration failed:', e.message);
-  }
+const _toastContainer = document.getElementById('toast-container');
+const _toastQueue     = [];
+let   _toastBusy      = false;
+
+function showToast({ type = 'ad', title, msg, duration = 4000 }) {
+  _toastQueue.push({ type, title, msg, duration });
+  _drainToastQueue();
 }
 
-// ================================================================
-//  sendNotification(userId, message, type)
-//  Sends a Telegram message to a single user.
-//  Handles: blocked users, invalid chat, rate limit errors.
-//  Returns: { ok: true } or { ok: false, reason }
-// ================================================================
-async function sendNotification(userId, message, type = NOTIFY_TYPES.system) {
-  if (!BOT_TOKEN) {
-    console.error('[Notify] BOT_TOKEN missing');
-    return { ok: false, reason: 'no_token' };
-  }
-
-  // ── Check cooldown ───────────────────────────────────────────
-  try {
-    const rows = await sql(
-      `SELECT last_notified, shadow_banned, is_hard_banned FROM users WHERE telegram_id = $1`,
-      [userId]
-    );
-
-    if (!rows.length) return { ok: false, reason: 'user_not_found' };
-
-    const user = rows[0];
-
-    // Skip banned users silently
-    if (user.shadow_banned || user.is_hard_banned) {
-      return { ok: false, reason: 'banned' };
-    }
-
-    // Check per-type cooldown
-    const lastNotified = user.last_notified || {};
-    const lastTime     = lastNotified[type] ? new Date(lastNotified[type]).getTime() : 0;
-    const now          = Date.now();
-
-    if (now - lastTime < NOTIFY_COOLDOWN_MS) {
-      const remainSec = Math.ceil((NOTIFY_COOLDOWN_MS - (now - lastTime)) / 1000);
-      return { ok: false, reason: 'cooldown', remainSec };
-    }
-  } catch (dbErr) {
-    console.error(`[Notify] DB check error for ${userId}:`, dbErr.message);
-    return { ok: false, reason: 'db_error' };
-  }
-
-  // ── Send via Telegram Bot API ────────────────────────────────
-  try {
-    const url  = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-    const body = {
-      chat_id    : userId,
-      text       : message,
-      parse_mode : 'HTML',
-    };
-
-    const res  = await fetch(url, {
-      method  : 'POST',
-      headers : { 'Content-Type': 'application/json' },
-      body    : JSON.stringify(body),
-    });
-
-    const data = await res.json();
-
-    if (!data.ok) {
-      const errCode = data.error_code;
-      // 403 = user blocked the bot | 400 = chat not found
-      if (errCode === 403 || errCode === 400) {
-        console.warn(`[Notify] User ${userId} blocked/invalid — skipping`);
-        return { ok: false, reason: 'blocked' };
-      }
-      // 429 = rate limited by Telegram
-      if (errCode === 429) {
-        const retryAfter = data.parameters?.retry_after || 5;
-        console.warn(`[Notify] Rate limited — retry after ${retryAfter}s`);
-        return { ok: false, reason: 'rate_limit', retryAfter };
-      }
-      console.error(`[Notify] Telegram error for ${userId}:`, data.description);
-      return { ok: false, reason: 'telegram_error', detail: data.description };
-    }
-
-    // ── Update last_notified timestamp ───────────────────────
-    await sql(
-      `UPDATE users
-       SET last_notified = last_notified || $2::jsonb, updated_at = NOW()
-       WHERE telegram_id = $1`,
-      [userId, JSON.stringify({ [type]: new Date().toISOString() })]
-    );
-
-    console.log(`[Notify] ✅ Sent [${type}] to ${userId}`);
-    return { ok: true };
-
-  } catch (e) {
-    console.error(`[Notify] Fetch error for ${userId}:`, e.message);
-    return { ok: false, reason: 'fetch_error' };
-  }
+function _drainToastQueue() {
+  if (_toastBusy || _toastQueue.length === 0) return;
+  _toastBusy = true;
+  const { type, title, msg, duration } = _toastQueue.shift();
+  _renderToast({ type, title, msg, duration });
 }
 
-// ================================================================
-//  broadcast(message, type)
-//  Sends a message to ALL users in batches of BATCH_SIZE.
-//  Rate: ~28 req/sec — safe under Telegram's 30/sec limit.
-//  Returns: { sent, failed, skipped }
-// ================================================================
-async function broadcast(message, type = NOTIFY_TYPES.system) {
-  console.log(`[Broadcast] Starting broadcast [${type}] ...`);
+function _renderToast({ type, title, msg, duration }) {
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
 
-  let users;
-  try {
-    users = await sql(
-      `SELECT telegram_id FROM users
-       WHERE shadow_banned = FALSE AND is_hard_banned = FALSE
-       ORDER BY created_at ASC`
-    );
-  } catch (e) {
-    console.error('[Broadcast] Failed to fetch users:', e.message);
-    return { ok: false, reason: 'db_error' };
-  }
+  const icon = TOAST_ICONS[type] || TOAST_ICONS.ad;
 
-  const stats = { sent: 0, failed: 0, skipped: 0 };
-  const total  = users.length;
-  console.log(`[Broadcast] ${total} users to notify`);
+  toast.innerHTML = `
+    <span class="toast-icon">${icon}</span>
+    <div class="toast-body">
+      <span class="toast-title">${title}</span>
+      ${msg ? `<span class="toast-msg">${msg}</span>` : ''}
+    </div>
+    <span class="toast-close">
+      <svg class="toast-close-ring" viewBox="0 0 26 26">
+        <circle class="ring-track" cx="13" cy="13" r="11"/>
+        <circle class="ring-fill" cx="13" cy="13" r="11" style="animation-duration: ${duration}ms;"/>
+      </svg>
+      <span class="toast-close-btn">✕</span>
+    </span>
+  `;
 
-  // ── Process in batches ───────────────────────────────────────
-  for (let i = 0; i < total; i += BATCH_SIZE) {
-    const batch = users.slice(i, i + BATCH_SIZE);
+  _toastContainer.appendChild(toast);
 
-    await Promise.all(
-      batch.map(async (u) => {
-        const result = await sendNotification(u.telegram_id, message, type);
-        if (result.ok)                           stats.sent++;
-        else if (result.reason === 'cooldown' ||
-                 result.reason === 'banned')      stats.skipped++;
-        else                                      stats.failed++;
-      })
-    );
+  // dismiss on tap
+  toast.addEventListener('click', () => _dismissToast(toast));
 
-    const processed = Math.min(i + BATCH_SIZE, total);
-    console.log(`[Broadcast] Progress: ${processed}/${total}`);
-
-    // Delay between batches to respect rate limit
-    if (i + BATCH_SIZE < total) {
-      await delay(BATCH_DELAY_MS);
-    }
-  }
-
-  console.log(`[Broadcast] Done — sent:${stats.sent} failed:${stats.failed} skipped:${stats.skipped}`);
-  return { ok: true, ...stats };
+  // auto-dismiss
+  const timer = setTimeout(() => _dismissToast(toast), duration);
+  toast._dismissTimer = timer;
 }
 
-// ================================================================
-//  checkAndNotifyUsers()
-//  Scans all cells for status='ready' and sends harvest reminder.
-//  Called by setInterval every CHECK_INTERVAL_MS seconds.
-//  Guarantees one notification per growth cycle using last_notified.
-// ================================================================
-async function checkAndNotifyUsers() {
-  try {
-    // Fetch users who have at least one ready cell
-    // We check: any cell in the cells array has status='ready'
-    const users = await sql(`
-      SELECT telegram_id, cells, last_notified, shadow_banned, is_hard_banned
-      FROM users
-      WHERE shadow_banned   = FALSE
-        AND is_hard_banned  = FALSE
-        AND EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements(cells) AS cell
-          WHERE cell->>'status' = 'ready'
-        )
-    `);
-
-    if (!users.length) return;
-
-    console.log(`[CheckNotify] ${users.length} users have ready crops`);
-
-    for (const user of users) {
-      const lastNotified = user.last_notified || {};
-      const lastReadyAt  = lastNotified['ready']
-        ? new Date(lastNotified['ready']).getTime()
-        : 0;
-      const now = Date.now();
-
-      // Skip if already notified within cooldown window
-      if (now - lastReadyAt < NOTIFY_COOLDOWN_MS) continue;
-
-      const readyCells = (user.cells || []).filter(c => c.status === 'ready');
-      const count      = readyCells.length;
-      const plural     = count > 1 ? 's' : '';
-
-      const message =
-        `🍅 <b>Your crop${plural} ${count > 1 ? 'are' : 'is'} ready!</b>\n\n` +
-        `You have <b>${count}</b> plot${plural} ready to harvest.\n` +
-        `Open Tomato Farm and collect your TON now! 🌱`;
-
-      await sendNotification(user.telegram_id, message, NOTIFY_TYPES.ready);
-
-      // Small delay between users to avoid burst
-      await delay(50);
-    }
-  } catch (e) {
-    console.error('[CheckNotify] Error:', e.message);
-  }
+function _dismissToast(toast) {
+  if (toast._dismissed) return;
+  toast._dismissed = true;
+  clearTimeout(toast._dismissTimer);
+  toast.classList.add('leaving');
+  toast.addEventListener('animationend', () => {
+    toast.remove();
+    _toastBusy = false;
+    // small delay before next toast so they don't stack visually
+    setTimeout(_drainToastQueue, 120);
+  }, { once: true });
 }
-
-// ================================================================
-//  startNotificationScheduler()
-//  Call once at bot startup. Runs checkAndNotifyUsers on interval.
-// ================================================================
-function startNotificationScheduler() {
-  console.log(`[Notify] Scheduler started — checking every ${CHECK_INTERVAL_MS / 1000}s`);
-  setInterval(checkAndNotifyUsers, CHECK_INTERVAL_MS);
-  // Run immediately on start too
-  checkAndNotifyUsers();
-}
-
-// ── Utility ──────────────────────────────────────────────────────
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// ── Exports ──────────────────────────────────────────────────────
-module.exports = {
-  sendNotification,
-  broadcast,
-  checkAndNotifyUsers,
-  startNotificationScheduler,
-  migrateNotifyColumn,
-  NOTIFY_TYPES,
-};

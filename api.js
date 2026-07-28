@@ -1,49 +1,40 @@
 /* ══════════════════════════════════════════════════════
-   api.js — بوابة موحّدة للتواصل مع api/index.js
-   كل نداء: apiCall(type, data) → POST /api { type, data, initData }
+   api.js — Unified API gateway
+   Usage: fetchApi({ type: 'actionName', data: { ... } })
 ══════════════════════════════════════════════════════ */
 
-  async function apiCall(type, data){
-    data = data || {};
-    if (startParam && type === 'init') data.startParam = startParam;
-    data.ts = Math.floor(Date.now() / 1000);
-    try{
-      const res = await fetch(API_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, data, initData })
-      });
-      let json = null;
-      try { json = await res.json(); } catch(e){}
-      if (!res.ok) {
-        const err = new Error((json && json.error) || ('Request failed: ' + res.status));
-        if (json && json.retryAfterSec != null) err.retryAfterSec = json.retryAfterSec;
-        throw err;
-      }
-      return json || { ok: true };
-    } catch(err){
-      throw err;
-    }
-  }
+async function fetchApi({ type, data = {} }) {
+  try {
+    const res = await fetch('/api', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type,
+        data,
+        initData: window.Telegram?.WebApp?.initData || '',
+        fp: typeof secFingerprint === 'function' ? secFingerprint() : null
+      })
+    });
 
-  function friendlyError(err){
-    const map = {
-      daily_limit_reached: 'وصلت للحد الأقصى من الإعلانات اليوم',
-      cooldown: 'استنى شوي قبل الإعلان التالي',
-      insufficient_points: 'نقاطك غير كافية',
-      insufficient_balance: 'رصيدك غير كافٍ',
-      wallet_not_connected: 'اربط محفظة TON أولًا',
-      min_withdraw: 'المبلغ أقل من الحد الأدنى للسحب',
-      not_member: 'لازم تنضم للقناة أولًا',
-      referrals_required: 'تحتاج عدد إحالات نشطة أكبر قبل السحب',
-      Unauthorized: 'تعذر التحقق من الحساب — أعد فتح التطبيق من تيليجرام',
-      banned: 'حسابك محظور من استخدام التطبيق',
-      watched_too_fast: 'لازم تشاهد الإعلان كاملاً للحصول على المكافأة',
-      token_expired: 'انتهت صلاحية الجلسة — حاول مشاهدة الإعلان من جديد',
-      token_already_used: 'تم احتساب هذا الإعلان مسبقاً',
-      invalid_token: 'حدث خطأ ما — حاول مشاهدة الإعلان من جديد',
-      pending_confirmation: 'جاري التأكيد — أعد المحاولة خلال لحظات',
-    };
-    const code = err && err.message;
-    return map[code] || code || 'تعذر الاتصال بالخادم';
+    // 🛡️ ما عاد نرمي على status غير 2xx — السيرفر برجع body مفيد
+    // (error, waitSec, retryAfterMs...) حتى على 400/401/403/429.
+    // كان `if (!res.ok) throw` يبلع هذا الـ body كامل ويحوله لـ "HTTP 429" عام.
+    let body = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+
+    if (!body || typeof body !== 'object') {
+      return { ok: false, error: `HTTP ${res.status}`, status: res.status };
+    }
+
+    if (body.ok === undefined) body.ok = res.ok;
+    body.status = res.status;
+    return body;
+  } catch (err) {
+    console.error(`[fetchApi] ${type} failed:`, err);
+    return { ok: false, error: 'Network error', status: 0 };
   }
+}
