@@ -62,7 +62,7 @@ const APP_CFG = {
   // 👥 الإحالات
   REFERRAL_REWARD_USD:          0,     // لا جائزة فورية — فقط نسبة 10% مدى الحياة (تحت)
   REFERRAL_REWARD_POINTS:       500,
-  REFERRAL_ACTIVATION_ADS:      5,     // عدد الإعلانات المطلوبة من المُحال حتى تُفعَّل إحالته
+  REFERRAL_ACTIVATION_ADS:      0,     // 0 = تفعيل فوري بدون أي شروط عند انضمام الصديق عبر رابط الإحالة
   REFERRAL_LIFETIME_PERCENT:    0.10,  // نسبة تُضاف للمُحيل من كل أرباح إعلانات المُحال، مدى الحياة
   REFERRAL_MILESTONE_FRIENDS:   3,     // عدد الأصدقاء المطلوب لمهمة "ادعُ 3 أصدقاء"
   REFERRAL_MILESTONE_REWARD_USD: 0.005,
@@ -74,7 +74,7 @@ const APP_CFG = {
 
   // 🏆 المسابقة الأسبوعية (نفس نمط "competition" في BigLeague لكن مدتها أسبوع بدل 20 يوم)
   CONTEST_DURATION_DAYS: 7,
-  CONTEST_PRIZES_USD: { 1: 25, 2: 10, 3: 5 }, // جوائز المراكز 1/2/3 بالدولار، تُصرف تلقائياً عند انتهاء الأسبوع
+  CONTEST_PRIZES_USD: { 1: 0.5, 2: 0.3, 3: 0.2 }, // جوائز المراكز 1/2/3 بالدولار، تُصرف تلقائياً عند انتهاء الأسبوع
 
   // 🎁 متجر النقاط (صفحة المكافآت) — النقاط عملة منفصلة عن رصيد الدولار
   // ⚠️ ملاحظة أمان: الاستبدال يخصم فقط من عمود points، ولا يمسّ contest_score إطلاقاً —
@@ -376,6 +376,8 @@ async function upsertUser(tgUser, startParam) {
   if (referredBy) {
     await sql(`INSERT INTO activity_logs (user_id, action, meta) VALUES ($1, 'referred', $2)`,
       [newUser.id, JSON.stringify({ referred_by: referredBy })]);
+    // 🎯 تفعيل فوري بدون شروط — ما في حاجة ننتظر أول إعلان يشاهده الصديق
+    await maybeActivateReferral(newUser).catch(err => console.error('[instant referral activation]', err.message));
   }
 
   return newUser;
@@ -659,7 +661,7 @@ module.exports = async function handler(req, res) {
              FROM users WHERE referred_by = $1`, [dbUser.telegram_id]),
           sql(
             `SELECT first_name, username, photo_url, referral_activated, total_ads_watched, created_at
-             FROM users WHERE referred_by = $1 ORDER BY created_at DESC LIMIT 30`, [dbUser.telegram_id]),
+             FROM users WHERE referred_by = $1 ORDER BY created_at DESC LIMIT 4`, [dbUser.telegram_id]),
           getActiveContest(),
           sql(
             `SELECT COALESCE(SUM(amount_usd),0)::FLOAT AS today_earn
