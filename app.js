@@ -106,6 +106,27 @@
     return _adsgramController;
   }
 
+  // ⏱️ يعرض عداد ثواني حي على الزر أثناء فترة الانتظار (cooldown) بين مشاهدتين، ويرجعه طبيعي تلقائياً
+  function startBtnCooldown(btn, seconds, idleLabel){
+    if (btn._cooldownTimer) clearInterval(btn._cooldownTimer);
+    let remaining = Math.max(1, Math.ceil(seconds));
+    btn.disabled = true;
+    btn.classList.add('is-cooldown');
+    btn.textContent = `${remaining}s`;
+    btn._cooldownTimer = setInterval(() => {
+      remaining--;
+      if (remaining <= 0){
+        clearInterval(btn._cooldownTimer);
+        btn._cooldownTimer = null;
+        btn.classList.remove('is-cooldown');
+        btn.disabled = false;
+        btn.textContent = idleLabel;
+      } else {
+        btn.textContent = `${remaining}s`;
+      }
+    }, 1000);
+  }
+
   async function handleAdTask(btn){
     setBtnLoading(btn, true);
 
@@ -114,8 +135,13 @@
     try{
       start = await apiCall('tasks.startAd', { adType: 'adsgram' });
     } catch(err){
-      showToast(friendlyError(err), 'error');
-      setBtnLoading(btn, false, 'ابدأ');
+      if (err.message === 'cooldown' && err.retryAfterSec){
+        btn.innerHTML = '';
+        startBtnCooldown(btn, err.retryAfterSec, 'ابدأ');
+      } else {
+        showToast(friendlyError(err), 'error');
+        setBtnLoading(btn, false, 'ابدأ');
+      }
       return;
     }
 
@@ -222,7 +248,9 @@
   }
 
   function renderRewards(){
-    const catalog = appState?.config?.rewards_catalog || {};
+    const s = appState;
+    document.getElementById('pointsBalance').textContent = Number(s.user.points).toLocaleString('en-US');
+    const catalog = s?.config?.rewards_catalog || {};
     const list = document.getElementById('rewardsList');
     list.innerHTML = Object.entries(catalog).map(([id, r]) => `
       <div class="task-card">
@@ -382,6 +410,8 @@
       container.innerHTML = `<div style="padding:16px 4px; color:var(--text-3); font-size:12.5px; text-align:center;">لا يوجد إحالات بعد</div>`;
       return;
     }
+    const ICON_CHECK = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.3l2.4 2.4L15.8 9.6"/></svg>`;
+    const ICON_CLOCK = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 3.2"/></svg>`;
     container.innerHTML = list.map(f => {
       const statusText = f.activated
         ? 'نشط — تكسب 10% من أرباحه'
@@ -389,7 +419,7 @@
       return `<div class="ref-list-item">
         <div class="ref-avatar">${avatarHtml(f.name, f.photo_url)}</div>
         <div class="ri"><div class="rn">${f.name}</div><div class="rd">${statusText}</div></div>
-        <div class="rv">${f.activated ? '✅' : '⏳'}</div>
+        <div class="rv" style="display:flex; align-items:center; gap:4px; color:${f.activated ? 'var(--mint)' : 'var(--text-3)'}">${f.activated ? ICON_CHECK : ICON_CLOCK}</div>
       </div>`;
     }).join('');
   }
@@ -405,16 +435,19 @@
       document.getElementById('ctMinutes').textContent = String(Math.floor(diff % 3600000 / 60000)).padStart(2,'0');
     }
     const lb = s.leaderboard || [];
+    const prizes = s.config?.contest_prizes_usd || {};
     const podiumOrder = [lb[1], lb[0], lb[2]]; // فضي - ذهبي - برونزي بصرياً
     const cls = ['silver', 'gold', 'bronze'];
     document.getElementById('contestPodium').innerHTML = podiumOrder.map((p, i) => {
       if (!p) return '';
       const crown = cls[i] === 'gold' ? '<svg class="crown" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18l-1.5-9-4.5 4-3-6-3 6-4.5-4z"/></svg>' : '';
+      const prize = prizes[p.rank];
       return `<div class="pod-item ${cls[i]}">
         ${crown}
         <div class="pod-avatar">${avatarHtml(p.name, p.photo_url)}</div>
         <div class="pod-name">${p.name}</div>
         <div class="pod-score anim-num">${p.score} نقطة</div>
+        ${prize ? `<div class="pod-prize">جائزة ${prize.toFixed(2)}$</div>` : ''}
         <div class="pod-bar">${p.rank}</div>
       </div>`;
     }).join('');

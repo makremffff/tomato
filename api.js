@@ -15,7 +15,11 @@
       });
       let json = null;
       try { json = await res.json(); } catch(e){}
-      if (!res.ok) throw new Error((json && json.error) || ('Request failed: ' + res.status));
+      if (!res.ok) {
+        const err = new Error((json && json.error) || ('Request failed: ' + res.status));
+        if (json && json.retryAfterSec != null) err.retryAfterSec = json.retryAfterSec;
+        throw err;
+      }
       return json || { ok: true };
     } catch(err){
       throw err;
