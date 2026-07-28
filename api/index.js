@@ -61,7 +61,7 @@ const APP_CFG = {
 
   // 👥 الإحالات
   REFERRAL_REWARD_USD:          0,     // لا جائزة فورية — فقط نسبة 10% مدى الحياة (تحت)
-  REFERRAL_REWARD_POINTS:       500,
+  REFERRAL_REWARD_POINTS:       500,   // تُضاف مباشرة لنقاط المسابقة (contest_score) للمُحيل، وليست نقاط المتجر
   REFERRAL_ACTIVATION_ADS:      0,     // 0 = تفعيل فوري بدون أي شروط عند انضمام الصديق عبر رابط الإحالة
   REFERRAL_LIFETIME_PERCENT:    0.10,  // نسبة تُضاف للمُحيل من كل أرباح إعلانات المُحال، مدى الحياة
   REFERRAL_MILESTONE_FRIENDS:   3,     // عدد الأصدقاء المطلوب لمهمة "ادعُ 3 أصدقاء"
@@ -425,7 +425,7 @@ async function maybeActivateReferral(dbUser) {
   );
   if (!claimed.length) return;
 
-  await sql(`UPDATE users SET balance_usd = balance_usd + $1, points = points + $2 WHERE id = $3`,
+  await sql(`UPDATE users SET balance_usd = balance_usd + $1, contest_score = contest_score + $2 WHERE id = $3`,
     [APP_CFG.REFERRAL_REWARD_USD, APP_CFG.REFERRAL_REWARD_POINTS, referrer.id]);
   await logTx(referrer.id, 'referral', `إحالة جديدة — ${dbUser.first_name || 'صديق'}`, APP_CFG.REFERRAL_REWARD_USD);
 
