@@ -441,7 +441,7 @@
     document.getElementById('contestPodium').innerHTML = podiumOrder.map((p, i) => {
       if (!p) return '';
       const crown = cls[i] === 'gold' ? '<svg class="crown" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18l-1.5-9-4.5 4-3-6-3 6-4.5-4z"/></svg>' : '';
-      const prize = prizes[p.rank];
+      const prize = p.score > 0 ? prizes[p.rank] : null;
       return `<div class="pod-item ${cls[i]}">
         ${crown}
         <div class="pod-avatar">${avatarHtml(p.name, p.photo_url)}</div>
