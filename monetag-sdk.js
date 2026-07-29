@@ -1,31 +1,39 @@
 // ══════════════════════════════════════════════════════════
-// monetag-sdk.js — Monetag SDK Loader
-// النظام: _monetagShowAd() تعرض إعلانَين متتاليَين ثم تـresolve
+// monetag-sdk.js — Monetag SDK Loader (Rewarded Interstitial)
+// ══════════════════════════════════════════════════════════
+// نوع الإعلان: Rewarded Interstitial — أعلى CPM ومكافأة حقيقية
+// يُحمَّل بشكل lazy وهو مستقل تماماً عن Adsgram
 // ══════════════════════════════════════════════════════════
 
 (function () {
     'use strict';
 
-    const ZONE_ID  = '10245709';
-    const SHOW_FN  = `show_${ZONE_ID}`;
-    const SDK_URL  = `https://partner.privatepush.com/sdk.js?zone=${ZONE_ID}&sdk=${SHOW_FN}`;
+    // ─── إعدادات Monetag ──────────────────────────────────
+    // استبدل ZONE_ID بالرقم الحقيقي من لوحة تحكم Monetag
+    const MONETAG_ZONE_ID = '10245709'; // ← عدّل هذا
 
-    window._monetagStatus = 'idle'; // idle | loading | loaded | failed
-    window._monetagQueue  = [];
+    // اسم الدالة العالمية التي يولّدها الـ SDK: show_<ZONE_ID>
+    // مثال: إذا كان الـ zone ID هو 12345، ستكون: show_12345
+    const MONETAG_SHOW_FN  = `show_${MONETAG_ZONE_ID}`;
+    const MONETAG_SDK_URL  = `https://partner.privatepush.com/sdk.js?zone=${MONETAG_ZONE_ID}&sdk=${MONETAG_SHOW_FN}`;
+
+    window._monetagStatus  = 'idle';   // idle | loading | loaded | failed
+    window._monetagQueue   = [];       // callbacks تنتظر تحميل الـ SDK
 
     // ─── تحميل الـ SDK ────────────────────────────────────
     function _loadSdk() {
         if (window._monetagStatus !== 'idle') return;
         window._monetagStatus = 'loading';
 
-        const script        = document.createElement('script');
-        script.src          = SDK_URL;
-        script.async        = true;
-        script.dataset.zone = ZONE_ID;
-        script.dataset.sdk  = SHOW_FN;
+        const script    = document.createElement('script');
+        script.src      = MONETAG_SDK_URL;
+        script.async    = true;
+        script.dataset.zone = MONETAG_ZONE_ID;
+        script.dataset.sdk  = MONETAG_SHOW_FN;
 
         script.onload = () => {
             window._monetagStatus = 'loaded';
+            // استدعاء كل الـ callbacks المنتظِرة
             window._monetagQueue.forEach(fn => fn());
             window._monetagQueue = [];
             console.log('[Monetag] SDK loaded ✓');
@@ -41,7 +49,7 @@
         document.head.appendChild(script);
     }
 
-    // ─── انتظر حتى يكتمل التحميل ─────────────────────────
+    // ─── انتظر حتى يكتمل تحميل الـ SDK ──────────────────
     function _whenReady(cb) {
         if (window._monetagStatus === 'loaded') { cb(); return; }
         if (window._monetagStatus === 'failed') { cb(new Error('SDK not loaded')); return; }
@@ -49,28 +57,40 @@
         if (window._monetagStatus === 'idle') _loadSdk();
     }
 
-    // ─── عرض إعلان واحد (داخلي) ──────────────────────────
-    function _showSingle(userId) {
+    // ─── Preload ──────────────────────────────────────────
+    window._monetagPreload = function (userId) {
         return new Promise((resolve, reject) => {
             _whenReady((err) => {
                 if (err) return reject(err);
-                const showFn = window[SHOW_FN];
+                const showFn = window[MONETAG_SHOW_FN];
                 if (typeof showFn !== 'function') return reject(new Error('show fn missing'));
-                showFn({ ymid: String(userId || '') }).then(resolve).catch(reject);
+                showFn({ type: 'preload', ymid: String(userId || '') })
+                    .then(resolve)
+                    .catch(reject);
             });
         });
-    }
-
-    // ─── _monetagShowAd: إعلانَين متتاليَين ثم resolve ───
-    window._monetagShowAd = async function (userId) {
-        await _showSingle(userId); // إعلان 1
-        await _showSingle(userId); // إعلان 2 — تلقائي
     };
 
-    // ─── init ─────────────────────────────────────────────
+    // ─── عرض الإعلان (Rewarded Interstitial) ─────────────
+    // يعيد Promise يُحَلّ بعد مشاهدة الإعلان → منح المكافأة
+    window._monetagShowAd = function (userId) {
+        return new Promise((resolve, reject) => {
+            _whenReady((err) => {
+                if (err) return reject(err);
+                const showFn = window[MONETAG_SHOW_FN];
+                if (typeof showFn !== 'function') return reject(new Error('show fn missing'));
+                showFn({ ymid: String(userId || '') })
+                    .then(resolve)
+                    .catch(reject);
+            });
+        });
+    };
+
+    // ─── تحميل مبكر عند دخول صفحة الربح ────────────────
+    // يُطلق التحميل عند أول استخدام (lazy)
     window._monetagInit = function () {
         if (window._monetagStatus === 'idle') _loadSdk();
     };
 
-    console.log('[Monetag] monetag-sdk.js ready');
+    console.log('[Monetag] monetag-sdk.js initialized (Rewarded Interstitial)');
 })();

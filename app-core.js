@@ -10,6 +10,7 @@ export const APP_STATE = {
     level:   1,
     usdt_balance: 0,
     tickets: 0,
+    is_shadow_banned: false,
     first_withdraw_done: false,
 
     ads: {
@@ -65,7 +66,7 @@ export function _applyConfigToUI() {
         el.href = APP_CONFIG.telegram.channel_url;
     });
     document.querySelectorAll('.referral-reward-badge').forEach(el => {
-        el.textContent = '+' + (APP_CONFIG.rewards.referral||100).toLocaleString('en-US');
+        el.textContent = '+$' + (APP_CONFIG.rewards.referral||0.01).toFixed(2);
     });
     document.querySelectorAll('.tg-task-reward-badge').forEach(el => {
         el.textContent = '+' + (APP_CONFIG.rewards.telegram_task||200).toLocaleString('en-US');
@@ -80,12 +81,12 @@ export function _applyConfigToUI() {
         el.textContent = '+' + (APP_CONFIG.rewards.daily_referrals_3||3000).toLocaleString('en-US');
     });
     document.querySelectorAll('.inv-referral-pts-badge').forEach(el => {
-        const pts = APP_CONFIG.rewards.referral || 100;
+        const pts = APP_CONFIG.rewards.referral || 0.01;
         // الـ chip في صفحة earn يبدأ بـ + ، الـ pill في invite يحتوي على "نقطة"
         if (el.textContent.startsWith('+')) {
             el.textContent = '+' + pts.toLocaleString('en-US');
         } else {
-            el.textContent = pts.toLocaleString('en-US') + ' تذكره';
+            el.textContent = pts.toLocaleString('en-US') + ' usdt';
         }
     });
     // ── قيمة تذاكر + USDT الإعلانات اليومية الديناميكية ──
@@ -277,7 +278,7 @@ export async function _createSession() {
             clearTimeout(_sessionTimeout);
             const result = await res.json();
             if (result.is_banned) { showSecurityWall(); return false; }
-            if (result.error === 'account_review') return false;
+            if (result._is_shadow_banned) APP_STATE.is_shadow_banned = true; // يرى الرصيد لكن المكافآت محجوبة
             if (result.ok && result._session_token) {
                 _sessionId = result._session_token;
                 window._APP_SESSION = _sessionId; // bridge for non-module scripts (app-social.js)
