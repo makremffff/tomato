@@ -842,7 +842,7 @@ module.exports = async function handler(req, res) {
            WHERE id = $4`,
           [reward, APP_CFG.AD_REWARD_POINTS, today, dbUser.id]
         );
-        await logTx(dbUser.id, 'earn', 'مشاهدة إعلان', reward, 'tx.watchAd');
+        if (reward > 0) await logTx(dbUser.id, 'earn', 'مشاهدة إعلان', reward, 'tx.watchAd');
 
         const newDailyCount = isNewDay ? 1 : dbUser.daily_ads + 1;
         let batchBonus = 0;
