@@ -494,12 +494,16 @@ async function getActiveContest() {
   return rows[0] || null;
 }
 
+// 🛡️ نستخدم ROW_NUMBER بدل RANK: بها كل المستخدمين اللي نقاطهم صفر (أو متعادلين) كانوا ياخذوا
+// نفس الترتيب (مثلاً الكل "المركز 2")، لأن RANK() يعطي نفس الرقم للمتعادلين بالضبط.
+// الحل: عند تعادل النقاط، الفيصل يكون توقيت الدخول (created_at) — الأقدم انضمامًا ياخذ الترتيب الأفضل،
+// فيصير كل مستخدم له رقم ترتيب فريد ومتسلسل بدون أي تكرار.
 async function getLeaderboard(limit = 20) {
   return await sql(
     `SELECT telegram_id, first_name, photo_url, contest_score,
-            RANK() OVER (ORDER BY contest_score DESC) AS rank
+            ROW_NUMBER() OVER (ORDER BY contest_score DESC, created_at ASC) AS rank
      FROM users WHERE banned = FALSE AND shadow_banned = FALSE
-     ORDER BY contest_score DESC LIMIT $1`,
+     ORDER BY contest_score DESC, created_at ASC LIMIT $1`,
     [limit]
   );
 }
@@ -507,7 +511,7 @@ async function getLeaderboard(limit = 20) {
 async function getUserRank(userId) {
   const rows = await sql(
     `SELECT rnk FROM (
-       SELECT id, RANK() OVER (ORDER BY contest_score DESC) AS rnk FROM users
+       SELECT id, ROW_NUMBER() OVER (ORDER BY contest_score DESC, created_at ASC) AS rnk FROM users
        WHERE banned = FALSE AND shadow_banned = FALSE
      ) t WHERE id = $1`,
     [userId]
@@ -531,9 +535,9 @@ async function distributeContestPrizesIfNeeded() {
 
   const top = await sql(
     `SELECT id, telegram_id, first_name, contest_score,
-            RANK() OVER (ORDER BY contest_score DESC) AS rnk
+            ROW_NUMBER() OVER (ORDER BY contest_score DESC, created_at ASC) AS rnk
      FROM users WHERE contest_score > 0
-     ORDER BY contest_score DESC LIMIT 3`
+     ORDER BY contest_score DESC, created_at ASC LIMIT 3`
   );
 
   for (const w of top) {
@@ -855,6 +859,7 @@ module.exports = async function handler(req, res) {
         return res.json({
           ok: true, reward, batchBonus, newBalance: parseFloat(refreshed.balance_usd),
           newPoints: Number(refreshed.points), dailyAdsProgress: newDailyCount,
+          batchRequired: APP_CFG.AD_BATCH_REQUIRED,
         });
       }
 
