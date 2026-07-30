@@ -192,6 +192,8 @@
 
       if (typeof claim.newBalance === 'number') updateBalanceDisplay(claim.newBalance);
       loadHome();
+      loadWalletTx();
+      loadHistory('all');
     } catch(err){
       showToast(friendlyError(err), 'error');
     } finally {
@@ -211,6 +213,8 @@
       showToast(res.alreadyDone ? t('toast.alreadyDone') : t('toast.joinRecorded', { amount: (res.reward || 0).toFixed(3) }), 'success');
       if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
       loadHome();
+      loadWalletTx();
+      loadHistory('all');
     } catch(err){
       showToast(friendlyError(err), 'error');
     } finally {
@@ -229,6 +233,8 @@
         updateBalanceDisplay(res.newBalance);
       }
       loadHome();
+      loadWalletTx();
+      loadHistory('all');
     } catch(err){
       showToast(friendlyError(err), 'error');
     } finally {
