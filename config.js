@@ -11,8 +11,8 @@
 
   const API_ENDPOINT = '/api'; // يشير لـ api/index.js على Vercel
   const TON_MANIFEST_URL = location.origin + '/tonconnect-manifest.json';
-  const HELP_CHANNEL_LINK = 'https://t.me/YOUR_HELP_CHANNEL'; // TODO: استبدله بقناة الدعم
-  const SUPPORT_USERNAME  = 'YOUR_SUPPORT_USERNAME';          // TODO: بدون @
+  const HELP_CHANNEL_LINK = 'https://t.me/+QmHr-Ny5Ow4wNzA8'; // TODO: استبدله بقناة الدعم
+  const SUPPORT_USERNAME  = 'Marakakakak';          // TODO: بدون @
   const ADSGRAM_BLOCK_ID  = '40439';                          // نفس Block ID المستخدم في BigLeague
 
   // 🔗 رابط الإحالة الرسمي — Mini App deep link عبر startapp (وليس start العادي)
