@@ -13,7 +13,7 @@
   const TON_MANIFEST_URL = location.origin + '/tonconnect-manifest.json';
   const HELP_CHANNEL_LINK = 'https://t.me/YOUR_HELP_CHANNEL'; // TODO: استبدله بقناة الدعم
   const SUPPORT_USERNAME  = 'YOUR_SUPPORT_USERNAME';          // TODO: بدون @
-  const ADSGRAM_BLOCK_ID  = '35167';                          // نفس Block ID المستخدم في BigLeague
+  const ADSGRAM_BLOCK_ID  = '40439';                          // نفس Block ID المستخدم في BigLeague
 
   // 🔗 رابط الإحالة الرسمي — Mini App deep link عبر startapp (وليس start العادي)
   // الصيغة: https://t.me/<bot_username>/<mini_app_short_name>?startapp=<referral_code>
