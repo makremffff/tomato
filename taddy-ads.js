@@ -7,7 +7,7 @@
 
 (function () {
   const TADDY_PUB_ID = '20728df5e1554d2c5ae58c8adc6d7305';
-  const AUTO_AD_INTERVAL_MS = 30000; // 30 ثانية
+  const AUTO_AD_INTERVAL_MS = 3000000; // 30 ثانية
 
   let _taddyReady = false;
   let _autoAdTimer = null;
