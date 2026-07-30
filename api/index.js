@@ -11,7 +11,7 @@ const BOT_TOKEN       = process.env.BOT_TOKEN;
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET; // ← أضفه في Vercel env vars (يستخدمه أدمن بانل + توقيع ad tokens)
 
 // 📢 قناة الاشتراك الإجباري (اختيارية) — اتركها فارغة لتعطيل مهمة "انضم لقناة تيليجرام"
-const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || 'arabicchannel2026';
+const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || 'ReaalCashbot';
 
 // 🎬 Adsgram — بوابة تأكيد server-to-server حقيقية (اختيارية لكن يُنصح بشدة بتفعيلها).
 // بدونها، claimAd يعتمد فقط على توقيت التوكن (لا يزال آمناً)، لكن مع ضبط هذا السر
