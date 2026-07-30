@@ -17,10 +17,17 @@
 
   // 🔗 رابط الإحالة الرسمي — Mini App deep link عبر startapp (وليس start العادي)
   // الصيغة: https://t.me/<bot_username>/<mini_app_short_name>?startapp=<referral_code>
-  const REFERRAL_LINK_BASE = 'https://t.me/real_cash0Bot/play?startapp=';
+  const REFERRAL_LINK_BASE = 'https://t.me/tamatoFarm_bot/earn?startapp=';
 
   const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-  if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
+  if (tg) {
+    try { tg.ready(); tg.expand(); } catch(e){}
+    // 🖥️ فتح التطبيق بوضع ملء الشاشة تلقائياً عند بدء التشغيل (Bot API 8.0+)
+    try { if (typeof tg.requestFullscreen === 'function' && !tg.isFullscreen) tg.requestFullscreen(); } catch(e){}
+    // امنع السحب العمودي من إغلاق التطبيق بالخطأ أثناء وضع ملء الشاشة
+    try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch(e){}
+    try { tg.lockOrientation && tg.lockOrientation(); } catch(e){}
+  }
   const initData = tg ? tg.initData : '';
 
   // 🔗 يلتقط start_param (ref_<telegram_id>) من رابط الدعوة عند أول فتح للتطبيق

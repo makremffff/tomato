@@ -177,8 +177,20 @@
       }
       if (claim?.error) throw new Error(claim.error);
 
-      showToast(t('toast.adWatched', { amount: claim.reward.toFixed(3) }) + (claim.batchBonus ? t('toast.batchBonus') : ''), 'success');
-      updateBalanceDisplay(claim.newBalance);
+      // 📢 إشعار تقدّم بدل عرض "+0.000$" على كل إعلان — المكافأة الفعلية تُمنح فقط عند إكمال الدفعة كاملة
+      const required = claim.batchRequired ?? appState?.tasks?.watch_ads_5?.required ?? claim.dailyAdsProgress;
+      const progress = claim.dailyAdsProgress ?? 0;
+      const remaining = Math.max(0, required - progress);
+
+      if (claim.batchBonus > 0) {
+        showToast(t('toast.batchComplete', { amount: claim.batchBonus.toFixed(3) }), 'success');
+      } else if (remaining <= 0) {
+        showToast(t('toast.adWatchedPlain'), 'success');
+      } else {
+        showToast(t('toast.adProgress', { progress, required, remaining }), 'info');
+      }
+
+      if (typeof claim.newBalance === 'number') updateBalanceDisplay(claim.newBalance);
       loadHome();
     } catch(err){
       showToast(friendlyError(err), 'error');
