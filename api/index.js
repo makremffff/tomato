@@ -64,8 +64,8 @@ const APP_CFG = {
   REFERRAL_REWARD_POINTS:       500,   // تُضاف مباشرة لنقاط المسابقة (contest_score) للمُحيل، وليست نقاط المتجر
   REFERRAL_ACTIVATION_ADS:      0,     // 0 = تفعيل فوري بدون أي شروط عند انضمام الصديق عبر رابط الإحالة
   REFERRAL_LIFETIME_PERCENT:    0.10,  // نسبة تُضاف للمُحيل من كل أرباح إعلانات المُحال، مدى الحياة
-  REFERRAL_MILESTONE_FRIENDS:   3,     // عدد الأصدقاء المطلوب لمهمة "ادعُ 3 أصدقاء"
-  REFERRAL_MILESTONE_REWARD_USD: 0.005,
+  REFERRAL_MILESTONE_FRIENDS:   3,     // عدد الأصدقاء المطلوب يوميًا لمهمة "ادعُ 3 أصدقاء" (مهمة يومية تتصفر كل يوم)
+  REFERRAL_MILESTONE_REWARD_USD: 0.007,
 
   // 💰 السحب
   WITHDRAW_MIN_USD:              0.025,
@@ -144,6 +144,8 @@ async function ensureSchema() {
     last_ad_watch         TIMESTAMPTZ,
     daily_login_streak    INT NOT NULL DEFAULT 0,
     last_daily_login       DATE,
+    daily_invites          INT NOT NULL DEFAULT 0,
+    last_invite_date        DATE,
     wallet_address        TEXT,
     notify_tasks          BOOLEAN NOT NULL DEFAULT TRUE,
     notify_earnings       BOOLEAN NOT NULL DEFAULT TRUE,
@@ -172,6 +174,8 @@ async function ensureSchema() {
     ['shadow_banned', 'BOOLEAN NOT NULL DEFAULT FALSE'],
     ['risk_score', 'INT NOT NULL DEFAULT 0'],
     ['last_seen_at', 'TIMESTAMPTZ'],
+    ['daily_invites', 'INT NOT NULL DEFAULT 0'],
+    ['last_invite_date', 'DATE'],
   ];
   for (const [col, def] of backfillCols) {
     await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -227,13 +231,17 @@ async function ensureSchema() {
 
   // سجل المعاملات — المصدر الموحّد لصفحتي "السجل" و"المحفظة"
   await sql(`CREATE TABLE IF NOT EXISTS transactions (
-    id          SERIAL PRIMARY KEY,
-    user_id     INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    category    TEXT NOT NULL,   -- earn | withdraw | referral | task | reward
-    title       TEXT NOT NULL,
-    amount_usd  NUMERIC(14,6) NOT NULL DEFAULT 0,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id            SERIAL PRIMARY KEY,
+    user_id       INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category      TEXT NOT NULL,   -- earn | withdraw | referral | task | reward
+    title         TEXT NOT NULL,   -- نص احتياطي (عربي) — يُستخدم فقط إن ما وُجد title_key
+    title_key     TEXT,            -- مفتاح ترجمة للعرض بلغة المستخدم الحالية (i18n.js)
+    title_params  JSONB,           -- متغيرات الترجمة، مثال: {"name":"أحمد"}
+    amount_usd    NUMERIC(14,6) NOT NULL DEFAULT 0,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  await sql(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS title_key TEXT`);
+  await sql(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS title_params JSONB`);
   await sql(`CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id, created_at DESC)`);
 
   // استبدال المكافآت بالنقاط
@@ -383,10 +391,10 @@ async function upsertUser(tgUser, startParam) {
   return newUser;
 }
 
-async function logTx(userId, category, title, amountUsd) {
+async function logTx(userId, category, title, amountUsd, titleKey, titleParams) {
   await sql(
-    `INSERT INTO transactions (user_id, category, title, amount_usd) VALUES ($1,$2,$3,$4)`,
-    [userId, category, title, amountUsd]
+    `INSERT INTO transactions (user_id, category, title, amount_usd, title_key, title_params) VALUES ($1,$2,$3,$4,$5,$6)`,
+    [userId, category, title, amountUsd, titleKey || null, titleParams ? JSON.stringify(titleParams) : null]
   );
 }
 
@@ -427,21 +435,24 @@ async function maybeActivateReferral(dbUser) {
 
   await sql(`UPDATE users SET balance_usd = balance_usd + $1, contest_score = contest_score + $2 WHERE id = $3`,
     [APP_CFG.REFERRAL_REWARD_USD, APP_CFG.REFERRAL_REWARD_POINTS, referrer.id]);
-  await logTx(referrer.id, 'referral', `إحالة جديدة — ${dbUser.first_name || 'صديق'}`, APP_CFG.REFERRAL_REWARD_USD);
+  await logTx(referrer.id, 'referral', `إحالة جديدة — ${dbUser.first_name || 'صديق'}`, APP_CFG.REFERRAL_REWARD_USD, 'tx.newReferral', { name: dbUser.first_name || '—' });
 
-  // 🎯 معلم "دعوة 3 أصدقاء" — يُمنح مرة واحدة عند وصول عدد الإحالات المفعّلة للحد المطلوب
-  const cntRows = await sql(
-    `SELECT COUNT(*)::INT AS c FROM users WHERE referred_by = $1 AND referral_activated = TRUE`,
-    [referrer.telegram_id]
+  // 🎯 مهمة "ادعُ 3 أصدقاء" — يوميّة: تتصفر كل يوم، وتُمنح المكافأة عند وصول 3 إحالات مُفعّلة
+  // في نفس اليوم التقويمي (لا علاقة لها بإجمالي الإحالات مدى الحياة — ذاك محسوب بشكل منفصل)
+  const today = toDateStr(new Date());
+  const inviteRows = await sql(
+    `UPDATE users
+     SET daily_invites = CASE WHEN last_invite_date = $2 THEN daily_invites + 1 ELSE 1 END,
+         last_invite_date = $2
+     WHERE id = $1
+     RETURNING daily_invites`,
+    [referrer.id, today]
   );
-  if (cntRows[0].c >= APP_CFG.REFERRAL_MILESTONE_FRIENDS) {
-    const already = await sql(`SELECT 1 FROM user_tasks WHERE user_id = $1 AND task_id = 'invite_3_friends'`, [referrer.id]);
-    if (!already.length) {
-      await sql(`INSERT INTO user_tasks (user_id, task_id) VALUES ($1, 'invite_3_friends')`, [referrer.id]);
-      await sql(`UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2`,
-        [APP_CFG.REFERRAL_MILESTONE_REWARD_USD, referrer.id]);
-      await logTx(referrer.id, 'task', 'مكافأة: دعوة 3 أصدقاء', APP_CFG.REFERRAL_MILESTONE_REWARD_USD);
-    }
+  const newDailyCount = inviteRows[0]?.daily_invites ?? 0;
+  if (newDailyCount === APP_CFG.REFERRAL_MILESTONE_FRIENDS) {
+    await sql(`UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2`,
+      [APP_CFG.REFERRAL_MILESTONE_REWARD_USD, referrer.id]);
+    await logTx(referrer.id, 'task', 'مكافأة: دعوة 3 أصدقاء اليوم', APP_CFG.REFERRAL_MILESTONE_REWARD_USD, 'tx.inviteMilestone');
   }
 
   sendTelegramMessage(
@@ -465,7 +476,7 @@ async function creditReferralCommission(referredDbUser, earnedAmountUsd) {
 
   await sql(`UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2`, [commission, referrer.id]);
   const friendName = referredDbUser.first_name || referredDbUser.username || 'صديقك';
-  await logTx(referrer.id, 'referral', `حصة من ربح صديقك ${friendName}`, commission);
+  await logTx(referrer.id, 'referral', `حصة من ربح صديقك ${friendName}`, commission, 'tx.referralCommission', { name: friendName });
 
   if (referrer.notify_earnings) {
     sendTelegramMessage(
@@ -529,7 +540,7 @@ async function distributeContestPrizesIfNeeded() {
     const prize = APP_CFG.CONTEST_PRIZES_USD[w.rnk];
     if (!prize) continue;
     await sql(`UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2`, [prize, w.id]);
-    await logTx(w.id, 'earn', `جائزة المسابقة — المركز ${w.rnk}`, prize);
+    await logTx(w.id, 'earn', `جائزة المسابقة — المركز ${w.rnk}`, prize, 'tx.contestPrize', { rank: w.rnk });
     sendTelegramMessage(
       Number(w.telegram_id),
       `🏆 *انتهت المسابقة الأسبوعية!*\n\nحصلت على المركز *#${w.rnk}* وربحت *${prize.toFixed(2)}$* 🎉\nتمت إضافتها لرصيدك — بالتوفيق بالأسبوع الجديد!`
@@ -672,6 +683,12 @@ module.exports = async function handler(req, res) {
         const today = new Date().toISOString().slice(0, 10);
         const doneTaskIds = tasksDone.map(r => r.task_id);
         const watchAdsDoneToday = toDateStr(dbUser.last_ad_date) === today ? dbUser.daily_ads : 0;
+        const inviteProgressToday = toDateStr(dbUser.last_invite_date) === today ? dbUser.daily_invites : 0;
+
+        const watchDone = watchAdsDoneToday >= APP_CFG.AD_BATCH_REQUIRED;
+        const joinDone = doneTaskIds.includes('join_channel');
+        const dailyLoginDone = toDateStr(dbUser.last_daily_login) === today;
+        const inviteDone = inviteProgressToday >= APP_CFG.REFERRAL_MILESTONE_FRIENDS;
 
         return res.json({
           ok: true,
@@ -694,13 +711,13 @@ module.exports = async function handler(req, res) {
           stats: {
             today_earn_usd: todayRows[0]?.today_earn ?? 0,
             referrals_count: refStats[0]?.ref_count ?? 0,
-            tasks_done_today: (watchAdsDoneToday >= APP_CFG.AD_BATCH_REQUIRED ? 1 : 0) + doneTaskIds.length,
+            tasks_done_today: [watchDone, joinDone, dailyLoginDone, inviteDone].filter(Boolean).length,
             tasks_total: 4,
           },
           tasks: {
-            watch_ads_5: { progress: watchAdsDoneToday, required: APP_CFG.AD_BATCH_REQUIRED, done: watchAdsDoneToday >= APP_CFG.AD_BATCH_REQUIRED },
-            join_channel: { done: doneTaskIds.includes('join_channel'), enabled: !!CHANNEL_USERNAME },
-            invite_3_friends: { progress: refStats[0]?.active_count ?? 0, required: APP_CFG.REFERRAL_MILESTONE_FRIENDS, done: doneTaskIds.includes('invite_3_friends') },
+            watch_ads_5: { progress: watchAdsDoneToday, required: APP_CFG.AD_BATCH_REQUIRED, done: watchDone },
+            join_channel: { done: joinDone, enabled: !!CHANNEL_USERNAME },
+            invite_3_friends: { progress: inviteProgressToday, required: APP_CFG.REFERRAL_MILESTONE_FRIENDS, done: inviteDone },
             daily_login: { streak: dbUser.daily_login_streak, required: APP_CFG.DAILY_LOGIN_STREAK_DAYS, done: toDateStr(dbUser.last_daily_login) === today },
           },
           leaderboard: leaderboard.map(r => ({
@@ -724,6 +741,7 @@ module.exports = async function handler(req, res) {
             ad_batch_bonus_usd: APP_CFG.AD_BATCH_BONUS_USD,
             daily_login_reward_usd: APP_CFG.DAILY_LOGIN_REWARD_USD,
             join_channel_reward_usd: APP_CFG.JOIN_CHANNEL_REWARD_USD,
+            invite_milestone_reward_usd: APP_CFG.REFERRAL_MILESTONE_REWARD_USD,
             contest_prizes_usd: APP_CFG.CONTEST_PRIZES_USD,
             withdraw_min_usd: APP_CFG.WITHDRAW_MIN_USD, rewards_catalog: APP_CFG.REWARDS_CATALOG,
             channel_username: CHANNEL_USERNAME || null,
@@ -820,14 +838,14 @@ module.exports = async function handler(req, res) {
            WHERE id = $4`,
           [reward, APP_CFG.AD_REWARD_POINTS, today, dbUser.id]
         );
-        await logTx(dbUser.id, 'earn', 'مشاهدة إعلان', reward);
+        await logTx(dbUser.id, 'earn', 'مشاهدة إعلان', reward, 'tx.watchAd');
 
         const newDailyCount = isNewDay ? 1 : dbUser.daily_ads + 1;
         let batchBonus = 0;
         if (newDailyCount === APP_CFG.AD_BATCH_REQUIRED) {
           batchBonus = APP_CFG.AD_BATCH_BONUS_USD;
           await sql(`UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2`, [batchBonus, dbUser.id]);
-          await logTx(dbUser.id, 'task', 'مكافأة: إكمال 5 إعلانات', batchBonus);
+          await logTx(dbUser.id, 'task', 'مكافأة: إكمال 5 إعلانات', batchBonus, 'tx.adBatchBonus');
         }
 
         const refreshed = (await sql(`SELECT * FROM users WHERE id = $1`, [dbUser.id]))[0];
@@ -852,7 +870,7 @@ module.exports = async function handler(req, res) {
         await sql(`INSERT INTO user_tasks (user_id, task_id) VALUES ($1, 'join_channel') ON CONFLICT DO NOTHING`, [dbUser.id]);
         await sql(`UPDATE users SET balance_usd = balance_usd + $1, points = points + $2 WHERE id = $3`,
           [APP_CFG.JOIN_CHANNEL_REWARD_USD, APP_CFG.JOIN_CHANNEL_REWARD_POINTS, dbUser.id]);
-        await logTx(dbUser.id, 'task', 'انضمام لقناة تيليجرام', APP_CFG.JOIN_CHANNEL_REWARD_USD);
+        await logTx(dbUser.id, 'task', 'انضمام لقناة تيليجرام', APP_CFG.JOIN_CHANNEL_REWARD_USD, 'tx.joinChannel');
         await creditReferralCommission(dbUser, APP_CFG.JOIN_CHANNEL_REWARD_USD);
 
         const refreshed = (await sql(`SELECT balance_usd, points FROM users WHERE id = $1`, [dbUser.id]))[0];
@@ -877,7 +895,7 @@ module.exports = async function handler(req, res) {
            WHERE id = $5 AND last_daily_login IS DISTINCT FROM $2`,
           [newStreak, today, reward, APP_CFG.DAILY_LOGIN_REWARD_POINTS, dbUser.id]
         );
-        await logTx(dbUser.id, 'task', hitMilestone ? `مكافأة تسجيل الدخول — ${newStreak} أيام متتالية 🎉` : 'تسجيل دخول يومي', reward);
+        await logTx(dbUser.id, 'task', hitMilestone ? `مكافأة تسجيل الدخول — ${newStreak} أيام متتالية 🎉` : 'تسجيل دخول يومي', reward, hitMilestone ? 'tx.dailyLoginMilestone' : 'tx.dailyLogin', hitMilestone ? { streak: newStreak } : null);
         await creditReferralCommission(dbUser, reward);
 
         const refreshed = (await sql(`SELECT balance_usd, points FROM users WHERE id = $1`, [dbUser.id]))[0];
@@ -902,7 +920,7 @@ module.exports = async function handler(req, res) {
 
         if (reward.type === 'balance') {
           await sql(`UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2`, [reward.amountUsd, dbUser.id]);
-          await logTx(dbUser.id, 'reward', `استبدال: ${reward.title}`, reward.amountUsd);
+          await logTx(dbUser.id, 'reward', `استبدال: ${reward.title}`, reward.amountUsd, 'tx.redeem', { title: reward.title });
         } else if (reward.type === 'badge') {
           await sql(`UPDATE users SET is_elite = TRUE WHERE id = $1`, [dbUser.id]);
         } else if (reward.type === 'boost') {
@@ -961,7 +979,7 @@ module.exports = async function handler(req, res) {
         if (!claimed.length) return res.status(400).json({ ok: false, error: 'insufficient_balance' });
 
         await sql(`INSERT INTO withdrawals (user_id, address, amount) VALUES ($1,$2,$3)`, [dbUser.id, dbUser.wallet_address, amount]);
-        await logTx(dbUser.id, 'withdraw', 'سحب TON', -amount);
+        await logTx(dbUser.id, 'withdraw', 'سحب TON', -amount, 'tx.withdrawTon');
 
         sendTelegramMessage(
           Number(dbUser.telegram_id),
@@ -986,8 +1004,8 @@ module.exports = async function handler(req, res) {
         const filter = ['earn', 'withdraw', 'referral', 'task', 'reward'].includes(data.filter) ? data.filter : null;
         const limit = Math.min(parseInt(data.limit, 10) || 30, 100);
         const rows = filter
-          ? await sql(`SELECT category, title, amount_usd, created_at FROM transactions WHERE user_id = $1 AND category = $2 ORDER BY created_at DESC LIMIT $3`, [dbUser.id, filter, limit])
-          : await sql(`SELECT category, title, amount_usd, created_at FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`, [dbUser.id, limit]);
+          ? await sql(`SELECT category, title, title_key, title_params, amount_usd, created_at FROM transactions WHERE user_id = $1 AND category = $2 ORDER BY created_at DESC LIMIT $3`, [dbUser.id, filter, limit])
+          : await sql(`SELECT category, title, title_key, title_params, amount_usd, created_at FROM transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`, [dbUser.id, limit]);
         return res.json({ ok: true, transactions: rows.map(r => ({ ...r, amount_usd: parseFloat(r.amount_usd) })) });
       }
 
