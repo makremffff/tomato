@@ -61,8 +61,9 @@ const RC_STRINGS = {
     'tasks.watch': 'شاهد',
     'tasks.watchProgress': 'أكمل الإعلانات اليومية للحصول على {amount}$ ({progress}/{required})',
     'tasks.joinProgress': 'انضم واحصل على {amount}$ فوراً',
-    'tasks.inviteProgress': 'تقدمك: {progress} من {required}',
+    'tasks.inviteProgress': 'تقدم اليوم: {progress} من {required} — احصل على {amount}$',
     'tasks.dailyProgress': 'سلسلة {streak}/{required} يوم — احصل على {amount}$ اليوم',
+    'tasks.oneTime': 'مهمة دائمة — لا تتجدد يوميًا',
 
     'rewards.eyebrow': 'رصيدك من النقاط',
     'rewards.cost': 'يكلف {cost} نقطة',
@@ -176,6 +177,18 @@ const RC_STRINGS = {
     'time.hoursAgo': 'منذ {n} ساعة',
     'time.yesterday': 'أمس',
     'time.daysAgo': 'منذ {n} أيام',
+
+    'tx.newReferral': 'إحالة جديدة — {name}',
+    'tx.inviteMilestone': 'مكافأة: دعوة 3 أصدقاء اليوم',
+    'tx.referralCommission': 'حصة من ربح صديقك {name}',
+    'tx.contestPrize': 'جائزة المسابقة — المركز {rank}',
+    'tx.watchAd': 'مشاهدة إعلان',
+    'tx.adBatchBonus': 'مكافأة: إكمال 5 إعلانات',
+    'tx.joinChannel': 'انضمام لقناة تيليجرام',
+    'tx.dailyLoginMilestone': 'مكافأة تسجيل الدخول — {streak} أيام متتالية 🎉',
+    'tx.dailyLogin': 'تسجيل دخول يومي',
+    'tx.redeem': 'استبدال: {title}',
+    'tx.withdrawTon': 'سحب TON',
   },
 
   en: {
@@ -230,8 +243,9 @@ const RC_STRINGS = {
     'tasks.watch': 'Watch',
     'tasks.watchProgress': 'Finish today\'s ads to get ${amount} ({progress}/{required})',
     'tasks.joinProgress': 'Join and get ${amount} instantly',
-    'tasks.inviteProgress': 'Progress: {progress} of {required}',
+    'tasks.inviteProgress': "Today's progress: {progress} of {required} — get ${amount}",
     'tasks.dailyProgress': 'Streak {streak}/{required} days — get ${amount} today',
+    'tasks.oneTime': "One-time task — doesn't reset daily",
 
     'rewards.eyebrow': 'Your Points Balance',
     'rewards.cost': 'Costs {cost} points',
@@ -345,6 +359,18 @@ const RC_STRINGS = {
     'time.hoursAgo': '{n}h ago',
     'time.yesterday': 'Yesterday',
     'time.daysAgo': '{n}d ago',
+
+    'tx.newReferral': 'New referral — {name}',
+    'tx.inviteMilestone': 'Bonus: invited 3 friends today',
+    'tx.referralCommission': "Share of {name}'s earnings",
+    'tx.contestPrize': 'Contest prize — rank {rank}',
+    'tx.watchAd': 'Watched an ad',
+    'tx.adBatchBonus': 'Bonus: completed 5 ads',
+    'tx.joinChannel': 'Joined Telegram channel',
+    'tx.dailyLoginMilestone': 'Check-in bonus — {streak} days in a row 🎉',
+    'tx.dailyLogin': 'Daily check-in',
+    'tx.redeem': 'Redeemed: {title}',
+    'tx.withdrawTon': 'TON withdrawal',
   },
 };
 

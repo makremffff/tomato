@@ -386,7 +386,7 @@
     } else { channelCard.style.display = 'none'; }
 
     const inv = s.tasks.invite_3_friends;
-    document.getElementById('inviteFriendsProgress').textContent = t('tasks.inviteProgress', { progress: inv.progress, required: inv.required });
+    document.getElementById('inviteFriendsProgress').textContent = t('tasks.inviteProgress', { progress: inv.progress, required: inv.required, amount: (s.config.invite_milestone_reward_usd ?? 0.007).toFixed(3) });
     const invBtn = document.getElementById('taskBtn-invite_3_friends');
     const invStatus = document.getElementById('inviteFriendsStatus');
     if (inv.done){ invBtn.style.display='none'; invStatus.style.display='flex'; } else { invBtn.style.display='inline-flex'; invStatus.style.display='none'; }
@@ -484,9 +484,10 @@
     }
     container.innerHTML = txs.map(tx => {
       const up = tx.amount_usd >= 0;
+      const displayTitle = tx.title_key ? t(tx.title_key, tx.title_params || {}) : tx.title;
       return `<div class="tx-row">
         <div class="tx-ic"><svg viewBox="0 0 24 24" fill="none" stroke="${up ? 'var(--mint)' : 'var(--danger)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${up ? '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>' : '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'}</svg></div>
-        <div class="tx-info"><div class="tn">${tx.title}</div><div class="td">${timeAgo(tx.created_at)}</div></div>
+        <div class="tx-info"><div class="tn">${displayTitle}</div><div class="td">${timeAgo(tx.created_at)}</div></div>
         <div class="tx-v anim-num" style="color:${up ? 'var(--mint)' : 'var(--danger)'}">${up ? '+' : ''}${tx.amount_usd.toFixed(3)}$</div>
       </div>`;
     }).join('');
