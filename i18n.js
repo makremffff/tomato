@@ -261,7 +261,7 @@ const RC_STRINGS = {
     'tasks.dailyProgress': 'Streak {streak}/{required} days — get ${amount} today',
     'tasks.oneTime': "One-time task — doesn't reset daily",
     'tasks.taskAds': 'Quick Tasks',
-    'tasks.taskAdProgress': 'Complete short tasks and earn ${amount} each ({progress}/{required} today)',
+    'tasks.taskAdProgress': 'short tasks ${amount} each ({progress}/{required} today)',
     'tasks.taskAdRewardTag': '+$0.001',
     'tasks.go': 'Go',
     'tasks.claimTask': 'Claim',
