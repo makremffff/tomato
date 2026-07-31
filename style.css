@@ -362,16 +362,15 @@
   .quick-item .ic img{width:60px;height:60px; object-fit:contain;}
   .quick-item span{font-size:11px; color:var(--text-2); text-align:center;}
 
-  /* نبضة scale خفيفة مستمرة على كل أيقونة، الواحدة بعد الثانية بتسلسل،
-     تبدأ بعد ما ينتهي انزلاق الدخول عشان تحس التطبيق حي طول الوقت
-     بدون ما تكسر أنيميشن الدخول أو تزعج العين */
-  .quick-item:nth-child(1) .ic{animation:quickPulse 2.6s ease-in-out infinite; animation-delay:1s;}
-  .quick-item:nth-child(2) .ic{animation:quickPulse 2.6s ease-in-out infinite; animation-delay:1.2s;}
-  .quick-item:nth-child(3) .ic{animation:quickPulse 2.6s ease-in-out infinite; animation-delay:1.4s;}
-  .quick-item:nth-child(4) .ic{animation:quickPulse 2.6s ease-in-out infinite; animation-delay:1.6s;}
-  @keyframes quickPulse{
-    0%,100%{transform:scale(1);}
-    50%{transform:scale(1.09);}
+  /* نبضة مضيئة (Glow) مستمرة على كل أيقونة — تكبير خفيف مع هالة ضوء
+     بنفسجية حولها، بتسلسل وفارق نصف ثانية بين كل أيقونة والتانية */
+  .quick-item:nth-child(1) .ic{animation:quickGlow 2.6s ease-in-out infinite; animation-delay:1s;}
+  .quick-item:nth-child(2) .ic{animation:quickGlow 2.6s ease-in-out infinite; animation-delay:1.5s;}
+  .quick-item:nth-child(3) .ic{animation:quickGlow 2.6s ease-in-out infinite; animation-delay:2s;}
+  .quick-item:nth-child(4) .ic{animation:quickGlow 2.6s ease-in-out infinite; animation-delay:2.5s;}
+  @keyframes quickGlow{
+    0%,100%{transform:scale(1); filter:drop-shadow(0 0 0px rgba(124,92,255,0));}
+    50%{transform:scale(1.36); filter:drop-shadow(0 0 14px rgba(124,92,255,0.7));}
   }
 
   /* ===== Timeline ===== */
@@ -451,7 +450,7 @@
     display:flex;align-items:center;justify-content:center;
     box-shadow:0 4px 18px rgba(124,92,255,0.35);
   }
-  .sb-brand .mark img{width:22px;height:22px;object-fit:contain;border-radius:6px;}
+  .sb-brand .mark img{width:22px;height:22px;object-fit:contain;border-radius:16px;}
   .sb-brand b{font-family:'Tajawal',sans-serif; font-size:16px; font-weight:800; display:block;}
   .sb-brand small{font-size:10.5px; color:var(--text-3);}
 
