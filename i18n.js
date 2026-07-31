@@ -64,6 +64,13 @@ const RC_STRINGS = {
     'tasks.inviteProgress': 'تقدم اليوم: {progress} من {required} — احصل على {amount}$',
     'tasks.dailyProgress': 'سلسلة {streak}/{required} يوم — احصل على {amount}$ اليوم',
     'tasks.oneTime': 'مهمة دائمة — لا تتجدد يوميًا',
+    'tasks.taskAds': 'مهام سريعة',
+    'tasks.taskAdProgress': 'أنجز مهام قصيرة واربح {amount}$ لكل مهمة ({progress}/{required} اليوم)',
+    'tasks.taskAdRewardTag': '+0.001$',
+    'tasks.go': 'اذهب',
+    'tasks.claimTask': 'استلام',
+    'tasks.noTaskAvailable': 'لا توجد مهام متاحة الآن — حاول بعد قليل',
+    'tasks.dailyLimitReached': 'اكتمل الحد اليومي — عد غدًا',
 
     'rewards.eyebrow': 'رصيدك من النقاط',
     'rewards.cost': 'يكلف {cost} نقطة',
@@ -157,6 +164,8 @@ const RC_STRINGS = {
     'toast.comeBackTomorrow': 'رجع بكرة تاخد مكافأة تسجيل الدخول',
     'toast.dailyClaimed': 'تم استلام مكافأة اليوم +{amount}$',
     'toast.streakComplete': ' 🎉 سلسلة كاملة!',
+    'toast.taskAdReward': 'تم استلام المهمة +{amount}$',
+    'toast.sessionTooLong': 'الجلسة طويلة جدًا — أعد فتح التطبيق للحصول على مهام جديدة',
 
     'errors.daily_limit_reached': 'وصلت للحد الأقصى من الإعلانات اليوم',
     'errors.cooldown': 'استنى شوي قبل الإعلان التالي',
@@ -173,6 +182,7 @@ const RC_STRINGS = {
     'errors.token_already_used': 'تم احتساب هذا الإعلان مسبقاً',
     'errors.invalid_token': 'حدث خطأ ما — حاول مشاهدة الإعلان من جديد',
     'errors.pending_confirmation': 'جاري التأكيد — أعد المحاولة خلال لحظات',
+    'errors.not_configured': 'هذه الميزة غير مفعّلة حالياً',
     'errors.default': 'تعذر الاتصال بالخادم',
 
     'time.now': 'الآن',
@@ -192,6 +202,7 @@ const RC_STRINGS = {
     'tx.dailyLogin': 'تسجيل دخول يومي',
     'tx.redeem': 'استبدال: {title}',
     'tx.withdrawTon': 'سحب TON',
+    'tx.taskAd': 'إنجاز مهمة سريعة',
   },
 
   en: {
@@ -249,6 +260,13 @@ const RC_STRINGS = {
     'tasks.inviteProgress': "Today's progress: {progress} of {required} — get ${amount}",
     'tasks.dailyProgress': 'Streak {streak}/{required} days — get ${amount} today',
     'tasks.oneTime': "One-time task — doesn't reset daily",
+    'tasks.taskAds': 'Quick Tasks',
+    'tasks.taskAdProgress': 'Complete short tasks and earn ${amount} each ({progress}/{required} today)',
+    'tasks.taskAdRewardTag': '+$0.001',
+    'tasks.go': 'Go',
+    'tasks.claimTask': 'Claim',
+    'tasks.noTaskAvailable': 'No tasks available right now — try again shortly',
+    'tasks.dailyLimitReached': "Daily limit reached — come back tomorrow",
 
     'rewards.eyebrow': 'Your Points Balance',
     'rewards.cost': 'Costs {cost} points',
@@ -342,6 +360,8 @@ const RC_STRINGS = {
     'toast.comeBackTomorrow': 'Come back tomorrow for the check-in reward',
     'toast.dailyClaimed': "Today's reward claimed +${amount}",
     'toast.streakComplete': ' 🎉 Full streak!',
+    'toast.taskAdReward': 'Task claimed +${amount}',
+    'toast.sessionTooLong': 'Session too long — reopen the app to get new tasks',
 
     'errors.daily_limit_reached': "You've reached today's ad limit",
     'errors.cooldown': 'Please wait a bit before the next ad',
@@ -358,6 +378,7 @@ const RC_STRINGS = {
     'errors.token_already_used': 'This ad has already been counted',
     'errors.invalid_token': 'Something went wrong — try watching the ad again',
     'errors.pending_confirmation': 'Confirming — try again in a moment',
+    'errors.not_configured': 'This feature is not enabled right now',
     'errors.default': 'Could not reach the server',
 
     'time.now': 'now',
@@ -377,6 +398,7 @@ const RC_STRINGS = {
     'tx.dailyLogin': 'Daily check-in',
     'tx.redeem': 'Redeemed: {title}',
     'tx.withdrawTon': 'TON withdrawal',
+    'tx.taskAd': 'Completed a quick task',
   },
 };
 

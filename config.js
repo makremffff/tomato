@@ -14,6 +14,7 @@
   const HELP_CHANNEL_LINK = 'https://t.me/+QmHr-Ny5Ow4wNzA8'; // TODO: استبدله بقناة الدعم
   const SUPPORT_USERNAME  = 'Marakakakak';          // TODO: بدون @
   const ADSGRAM_BLOCK_ID  = '40439';                          // نفس Block ID المستخدم في BigLeague
+  const ADSGRAM_TASK_BLOCK_ID = 'task-40539';                  // Block ID لإعلانات Task (نوعه Task في partner.adsgram.ai) — دائمًا بصيغة task-xxx
 
   // 🔗 رابط الإحالة الرسمي — Mini App deep link عبر startapp (وليس start العادي)
   // الصيغة: https://t.me/<bot_username>/<mini_app_short_name>?startapp=<referral_code>

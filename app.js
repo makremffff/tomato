@@ -97,6 +97,63 @@
     });
   }
 
+  /* ===== Tasks: Adsgram Task block (مهام سريعة — حصة منفصلة تمامًا عن حصة إعلانات الفيديو أعلاه) =====
+     العنصر <adsgram-task> يدير عرض المهمة وزر go/claim بنفسه، ويطلق حدث 'reward' فقط بعد
+     أن يتأكد هو من إتمام المهمة فعليًا — نحن فقط نستجيب لهذا الحدث بمطالبة السيرفر بالمكافأة،
+     والسيرفر بدوره لا يمنحها إلا بعد وصول تأكيد server-to-server حقيقي من Adsgram (راجع claimTaskAd). */
+  let _taskAdClaiming = false;
+
+  function initAdsgramTaskWidget(){
+    const widget = document.getElementById('adsgramTaskWidget');
+    if (!widget) return;
+
+    widget.addEventListener('reward', () => { handleTaskAdReward(); });
+
+    widget.addEventListener('onError', (event) => {
+      console.warn('[adsgram-task] load/render error', event?.detail);
+    });
+
+    widget.addEventListener('onBannerNotFound', () => {
+      const el = document.getElementById('taskAdProgress');
+      if (el) el.textContent = t('tasks.noTaskAvailable');
+    });
+
+    widget.addEventListener('onTooLongSession', () => {
+      showToast(t('toast.sessionTooLong'), 'info');
+    });
+  }
+
+  async function handleTaskAdReward(){
+    if (_taskAdClaiming) return; // 🛡️ يمنع استدعاءات مكررة لو أطلق العنصر الحدث أكثر من مرة
+    _taskAdClaiming = true;
+    try{
+      let claim = await apiCall('tasks.claimTaskAd', {});
+      let retries = 0;
+      while (claim?.error === 'pending_confirmation' && retries < 5){
+        if (retries === 0) showToast(t('toast.confirming'), 'info');
+        await new Promise(r => setTimeout(r, claim.retryAfterMs || 1500));
+        claim = await apiCall('tasks.claimTaskAd', {}).catch(e => ({ error: e.message }));
+        retries++;
+      }
+      if (claim?.error) throw new Error(claim.error);
+
+      showToast(t('toast.taskAdReward', { amount: claim.reward.toFixed(3) }), 'success');
+      if (typeof claim.newBalance === 'number') updateBalanceDisplay(claim.newBalance);
+
+      if (appState?.tasks?.task_ad){
+        appState.tasks.task_ad.progress = claim.dailyTaskAdsProgress;
+        appState.tasks.task_ad.done = claim.dailyTaskAdsProgress >= claim.dailyTaskAdsMax;
+        renderTasks();
+      }
+      loadWalletTx();
+      loadHistory('all');
+    } catch(err){
+      showToast(friendlyError(err), 'error');
+    } finally {
+      _taskAdClaiming = false;
+    }
+  }
+
   /* ===== Tasks: ads (Adsgram — نفس تدفق BigLeague: startAd → عرض حقيقي → claimAd) ===== */
   let _adsgramController = null;
   function getAdsgramController(){
@@ -414,6 +471,28 @@
     const dlStatus = document.getElementById('dailyLoginStatus');
     document.getElementById('dailyLoginProgress').textContent = t('tasks.dailyProgress', { streak: dl.streak, required: dl.required, amount: s.config.daily_login_reward_usd.toFixed(3) });
     if (dl.done){ dlBtn.style.display='none'; dlStatus.style.display='flex'; } else { dlBtn.style.display='inline-flex'; dlStatus.style.display='none'; }
+
+    const ta = s.tasks.task_ad;
+    const taWidget = document.getElementById('adsgramTaskWidget');
+    const taStatus = document.getElementById('taskAdLimitStatus');
+    const taProgressEl = document.getElementById('taskAdProgress');
+    if (ta && ta.enabled){
+      if (taProgressEl) taProgressEl.textContent = t('tasks.taskAdProgress', { amount: s.config.task_ad_reward_usd.toFixed(3), progress: ta.progress, required: ta.required });
+      if (ta.done){
+        if (taWidget) taWidget.style.display = 'none';
+        if (taProgressEl) taProgressEl.style.display = 'none';
+        if (taStatus) taStatus.style.display = 'flex';
+      } else {
+        if (taWidget) taWidget.style.display = 'block';
+        if (taProgressEl) taProgressEl.style.display = 'block';
+        if (taStatus) taStatus.style.display = 'none';
+      }
+    } else {
+      // ADSGRAM_REWARD_SECRET غير مضبوط على السيرفر بعد — أخفِ القسم كاملاً بدل عرض ميزة معطّلة
+      if (taWidget) taWidget.style.display = 'none';
+      if (taProgressEl) taProgressEl.style.display = 'none';
+      if (taStatus) taStatus.style.display = 'none';
+    }
   }
 
   function renderReferral(){
@@ -548,6 +627,7 @@
 
   async function bootstrap(){
     initTonConnect();
+    initAdsgramTaskWidget();
     await loadHome();
     loadWalletTx();
     loadHistory('all');

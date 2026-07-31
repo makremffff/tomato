@@ -218,6 +218,21 @@
       <button class="task-btn" id="taskBtn-watch_ads_5" onclick="handleAdTask(this)" data-i18n="tasks.start">ابدأ</button>
     </div>
 
+    <div class="task-section-label" id="taskAdProgress" data-i18n="common.loading">تحميل...</div>
+    <div class="task-status" id="taskAdLimitStatus" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span data-i18n="tasks.dailyLimitReached">اكتمل الحد اليومي — عد غدًا</span></div>
+    <adsgram-task
+      id="adsgramTaskWidget"
+      class="task-card-adsgram"
+      data-block-id="task-40539"
+      data-debug="false"
+      data-debug-console="false"
+    >
+      <span slot="reward" data-i18n="tasks.taskAdRewardTag">+0.001$</span>
+      <div slot="button" data-i18n="tasks.go">اذهب</div>
+      <div slot="claim" data-i18n="tasks.claimTask">استلام</div>
+      <div slot="done" data-i18n="tasks.done">مكتمل</div>
+    </adsgram-task>
+
     <div class="task-card" id="taskCard-join_channel" style="display:none;">
       <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9"/></svg></div>
       <div class="task-mid">
