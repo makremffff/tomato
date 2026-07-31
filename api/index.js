@@ -49,6 +49,12 @@ const APP_CFG = {
   // ⏱️ مدة المشاهدة الحقيقية المطلوبة — لكل شبكة إعلانات مدتها الخاصة (عدّلها حسب شبكتك)
   AD_DURATIONS: { adsgram: 15, monetag: 16, default: 15 },
 
+  // 🎯 مهمة "Task Ads" (Adsgram Block من نوع Task، بصيغة blockId مثل task-40539)
+  // حصة منفصلة تمامًا عن حصة إعلانات الفيديو أعلاه — لا تؤثر على AD_DAILY_MAX ولا العكس
+  TASK_AD_REWARD_USD:   0.001, // مكافأة كل مهمة Task مكتملة
+  TASK_AD_DAILY_MAX:    30,    // أقصى عدد مهام Task مسموح بها باليوم لكل مستخدم — عدّله بحرية
+  TASK_AD_COOLDOWN_SEC: 60,    // أقل فاصل زمني بين مطالبتين (دقيقة واحدة)
+
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.005,
   JOIN_CHANNEL_REWARD_POINTS: 50,
@@ -176,6 +182,11 @@ async function ensureSchema() {
     ['last_seen_at', 'TIMESTAMPTZ'],
     ['daily_invites', 'INT NOT NULL DEFAULT 0'],
     ['last_invite_date', 'DATE'],
+    // 🎯 حصة Task Ads — منفصلة تمامًا عن daily_ads / last_ad_date الخاصة بإعلانات الفيديو
+    ['daily_task_ads', 'INT NOT NULL DEFAULT 0'],
+    ['last_task_ad_date', 'DATE'],
+    ['last_task_ad_watch', 'TIMESTAMPTZ'],
+    ['total_task_ads', 'INT NOT NULL DEFAULT 0'],
   ];
   for (const [col, def] of backfillCols) {
     await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -398,22 +409,23 @@ async function logTx(userId, category, title, amountUsd, titleKey, titleParams) 
   );
 }
 
-// 🛡️ يستهلك تأكيد Adsgram (إن وُجد) لهذا المستخدم — يُستدعى من tasks.claimAd
+// 🛡️ يستهلك تأكيد Adsgram (إن وُجد) لهذا المستخدم — يُستدعى من tasks.claimAd و tasks.claimTaskAd
 // يعيد true فقط لو وصل تأكيد server-to-server حقيقي من Adsgram لم يُستهلك بعد
 // (الصف يُنشَأ عبر api/adsgram-reward.js — endpoint منفصل تستدعيه سيرفرات Adsgram مباشرة)
-async function consumeAdsgramConfirmation(telegramId) {
+// kind: 'reward' لإعلان الفيديو (الافتراضي) أو 'task' لإعلان Task — كل نوع له حوض تأكيدات منفصل
+async function consumeAdsgramConfirmation(telegramId, kind = 'reward') {
   await sql(`DELETE FROM ad_reward_confirmations WHERE created_at < NOW() - INTERVAL '10 minutes'`);
   const rows = await sql(`
     UPDATE ad_reward_confirmations
     SET consumed = TRUE
     WHERE id = (
       SELECT id FROM ad_reward_confirmations
-      WHERE telegram_id = $1 AND consumed = FALSE
+      WHERE telegram_id = $1 AND kind = $2 AND consumed = FALSE
       ORDER BY created_at ASC
       LIMIT 1
     )
     RETURNING id
-  `, [telegramId]);
+  `, [telegramId, kind]);
   return rows.length > 0;
 }
 
@@ -693,6 +705,8 @@ module.exports = async function handler(req, res) {
         const joinDone = doneTaskIds.includes('join_channel');
         const dailyLoginDone = toDateStr(dbUser.last_daily_login) === today;
         const inviteDone = inviteProgressToday >= APP_CFG.REFERRAL_MILESTONE_FRIENDS;
+        const taskAdsDoneToday = toDateStr(dbUser.last_task_ad_date) === today ? dbUser.daily_task_ads : 0;
+        const taskAdDone = taskAdsDoneToday >= APP_CFG.TASK_AD_DAILY_MAX;
 
         return res.json({
           ok: true,
@@ -723,6 +737,7 @@ module.exports = async function handler(req, res) {
             join_channel: { done: joinDone, enabled: !!CHANNEL_USERNAME },
             invite_3_friends: { progress: inviteProgressToday, required: APP_CFG.REFERRAL_MILESTONE_FRIENDS, done: inviteDone },
             daily_login: { streak: dbUser.daily_login_streak, required: APP_CFG.DAILY_LOGIN_STREAK_DAYS, done: toDateStr(dbUser.last_daily_login) === today },
+            task_ad: { progress: taskAdsDoneToday, required: APP_CFG.TASK_AD_DAILY_MAX, done: taskAdDone, enabled: !!ADSGRAM_REWARD_SECRET },
           },
           leaderboard: leaderboard.map(r => ({
             telegram_id: Number(r.telegram_id), name: r.first_name || 'مستخدم', photo_url: r.photo_url || null,
@@ -743,6 +758,7 @@ module.exports = async function handler(req, res) {
           config: {
             ad_reward_usd: APP_CFG.AD_REWARD_USD, ad_daily_max: APP_CFG.AD_DAILY_MAX,
             ad_batch_bonus_usd: APP_CFG.AD_BATCH_BONUS_USD,
+            task_ad_reward_usd: APP_CFG.TASK_AD_REWARD_USD, task_ad_daily_max: APP_CFG.TASK_AD_DAILY_MAX,
             daily_login_reward_usd: APP_CFG.DAILY_LOGIN_REWARD_USD,
             join_channel_reward_usd: APP_CFG.JOIN_CHANNEL_REWARD_USD,
             invite_milestone_reward_usd: APP_CFG.REFERRAL_MILESTONE_REWARD_USD,
@@ -860,6 +876,58 @@ module.exports = async function handler(req, res) {
           ok: true, reward, batchBonus, newBalance: parseFloat(refreshed.balance_usd),
           newPoints: Number(refreshed.points), dailyAdsProgress: newDailyCount,
           batchRequired: APP_CFG.AD_BATCH_REQUIRED,
+        });
+      }
+
+      // ═══════════ المهام: Task Ads (Adsgram Block من نوع Task) — حصة مستقلة عن إعلانات الفيديو ═══════════
+      case 'tasks.claimTaskAd': {
+        // 🛡️ إعلانات Task تُنجَز عبر عنصر واجهة من Adsgram (وليس token بتوقيت ثابت مثل الفيديو)،
+        // فالتأكيد server-to-server هو الحماية الوحيدة الممكنة هنا — fail-closed بدونه
+        if (!ADSGRAM_REWARD_SECRET) {
+          return res.status(503).json({ ok: false, error: 'not_configured' });
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const dailyCount = toDateStr(dbUser.last_task_ad_date) === today ? dbUser.daily_task_ads : 0;
+        if (dailyCount >= APP_CFG.TASK_AD_DAILY_MAX) {
+          return res.status(429).json({ ok: false, error: 'daily_limit_reached' });
+        }
+        if (dbUser.last_task_ad_watch) {
+          const secsSince = (Date.now() - new Date(dbUser.last_task_ad_watch).getTime()) / 1000;
+          if (secsSince < APP_CFG.TASK_AD_COOLDOWN_SEC) {
+            return res.status(429).json({ ok: false, error: 'cooldown', retryAfterSec: Math.ceil(APP_CFG.TASK_AD_COOLDOWN_SEC - secsSince) });
+          }
+        }
+
+        const confirmed = await consumeAdsgramConfirmation(dbUser.telegram_id, 'task');
+        if (!confirmed) {
+          // قد يكون تأكيد Adsgram لم يصل بعد (تأخير شبكة) — اطلب من العميل إعادة المحاولة بهدوء
+          return res.status(202).json({ ok: false, error: 'pending_confirmation', retryAfterMs: 1500 });
+        }
+
+        const isNewDay = toDateStr(dbUser.last_task_ad_date) !== today;
+        const doubleActive = dbUser.double_earn_until && new Date(dbUser.double_earn_until) > new Date();
+        const reward = APP_CFG.TASK_AD_REWARD_USD * (doubleActive ? 2 : 1);
+
+        await sql(
+          `UPDATE users SET
+             balance_usd = balance_usd + $1,
+             total_task_ads = total_task_ads + 1,
+             daily_task_ads = CASE WHEN last_task_ad_date = $2 THEN daily_task_ads + 1 ELSE 1 END,
+             last_task_ad_date = $2,
+             last_task_ad_watch = NOW()
+           WHERE id = $3`,
+          [reward, today, dbUser.id]
+        );
+        await logTx(dbUser.id, 'task', 'مهمة إعلان (Task Ad)', reward, 'tx.taskAd');
+
+        const refreshed = (await sql(`SELECT * FROM users WHERE id = $1`, [dbUser.id]))[0];
+        await creditReferralCommission(refreshed, reward);
+
+        const newDailyCount = isNewDay ? 1 : dbUser.daily_task_ads + 1;
+        return res.json({
+          ok: true, reward, newBalance: parseFloat(refreshed.balance_usd),
+          dailyTaskAdsProgress: newDailyCount, dailyTaskAdsMax: APP_CFG.TASK_AD_DAILY_MAX,
         });
       }
 
