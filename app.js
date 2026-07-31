@@ -583,7 +583,7 @@
       const up = tx.amount_usd >= 0;
       const displayTitle = tx.title_key ? t(tx.title_key, tx.title_params || {}) : tx.title;
       return `<div class="tx-row">
-        <div class="tx-ic"><svg viewBox="0 0 24 24" fill="none" stroke="${up ? 'var(--mint)' : 'var(--danger)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${up ? '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>' : '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'}</svg></div>
+        <div class="tx-ic"><img src="asesst/ic-history.png" alt=""></div>
         <div class="tx-info"><div class="tn">${displayTitle}</div><div class="td">${timeAgo(tx.created_at)}</div></div>
         <div class="tx-v anim-num" style="color:${up ? 'var(--mint)' : 'var(--danger)'}">${up ? '+' : ''}${tx.amount_usd.toFixed(3)}$</div>
       </div>`;

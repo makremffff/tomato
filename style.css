@@ -130,6 +130,32 @@
     100%{opacity:1; transform:scale(1);}
   }
 
+  /* Buttons slide in from the right (RTL start edge) shortly after their
+     parent card fades up — inherits --reveal-delay from the ancestor
+     .reveal-item so it stays in sync with the rest of the page without
+     any extra JS. Runs once per element; re-renders that only change
+     text/innerHTML won't retrigger it. */
+  .task-btn, .btn-primary, .btn-ghost{
+    animation:slideInRTL .45s cubic-bezier(.16,.84,.32,1) backwards;
+    animation-delay:calc(var(--reveal-delay, 0s) + .1s);
+  }
+  @keyframes slideInRTL{
+    0%{opacity:0; transform:translateX(16px);}
+    100%{opacity:1; transform:translateX(0);}
+  }
+
+  /* الأربع أيقونات بالإجراءات السريعة بالرئيسية — انزلاق أبطأ وأوضح
+     من اليمين لليسار بدل التأثير العام (fade+up) المستخدم بباقي البطاقات */
+  .quick-item.reveal-item{
+    animation:quickSlideIn .7s cubic-bezier(.22,.9,.32,1) forwards;
+    animation-delay:var(--reveal-delay, 0s);
+  }
+  @keyframes quickSlideIn{
+    0%{opacity:0; transform:translateX(42px) scale(.92); filter:blur(2px);}
+    65%{filter:blur(0);}
+    100%{opacity:1; transform:translateX(0) scale(1); filter:blur(0);}
+  }
+
   .eyebrow{
     font-size:12px;
     color:var(--text-3);
@@ -327,16 +353,26 @@
     cursor:pointer;
   }
   .quick-item .ic{
-    width:52px;height:52px;
-    border-radius:16px;
-    background:var(--glass);
-    border:1px solid var(--border-soft);
+    width:60px;height:60px;
     display:flex;align-items:center;justify-content:center;
-    transition:background .2s ease, transform .15s ease;
+    transition:transform .15s ease;
   }
-  .quick-item:active .ic{transform:scale(.9); background:var(--violet-soft);}
+  .quick-item:active .ic{transform:scale(.9);}
   .quick-item .ic svg{width:22px;height:22px; color:var(--text-1);}
+  .quick-item .ic img{width:60px;height:60px; object-fit:contain;}
   .quick-item span{font-size:11px; color:var(--text-2); text-align:center;}
+
+  /* نبضة scale خفيفة مستمرة على كل أيقونة، الواحدة بعد الثانية بتسلسل،
+     تبدأ بعد ما ينتهي انزلاق الدخول عشان تحس التطبيق حي طول الوقت
+     بدون ما تكسر أنيميشن الدخول أو تزعج العين */
+  .quick-item:nth-child(1) .ic{animation:quickPulse 2.6s ease-in-out infinite; animation-delay:1s;}
+  .quick-item:nth-child(2) .ic{animation:quickPulse 2.6s ease-in-out infinite; animation-delay:1.2s;}
+  .quick-item:nth-child(3) .ic{animation:quickPulse 2.6s ease-in-out infinite; animation-delay:1.4s;}
+  .quick-item:nth-child(4) .ic{animation:quickPulse 2.6s ease-in-out infinite; animation-delay:1.6s;}
+  @keyframes quickPulse{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(1.09);}
+  }
 
   /* ===== Timeline ===== */
   .timeline{
@@ -472,9 +508,6 @@
     bottom:26px; left:50%;
     transform:translateX(-50%);
     width:52px;height:52px;
-    border-radius:50%;
-    background:linear-gradient(135deg,var(--violet),#5A3FD9);
-    box-shadow:0 10px 28px rgba(124,92,255,0.45);
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;
     z-index:30;
@@ -482,6 +515,7 @@
   }
   .fab:active{transform:translateX(-50%) scale(.9);}
   .fab svg{width:22px;height:22px;color:#fff;}
+  .fab img{width:52px;height:52px;object-fit:contain;}
 
   /* ===== Generic panel / list card ===== */
   .panel{
@@ -550,6 +584,7 @@
     flex-shrink:0;
   }
   .tx-ic svg{width:16px;height:16px;}
+  .tx-ic img{width:26px;height:26px; object-fit:contain;}
   .tx-info{flex:1;}
   .tx-info .tn{font-size:13px; font-weight:700;}
   .tx-info .td{font-size:11px; color:var(--text-3); margin-top:1px;}
@@ -567,12 +602,12 @@
   }
   .task-card:active{transform:scale(.98); background:var(--glass-strong);}
   .task-ic{
-    width:46px;height:46px;border-radius:14px;
-    background:var(--violet-soft);
+    width:60px;height:60px;
     display:flex;align-items:center;justify-content:center;
     flex-shrink:0;
   }
   .task-ic svg{width:21px;height:21px; color:var(--violet);}
+  .task-ic img{width:60px;height:60px; object-fit:contain;}
   .task-mid{flex:1; min-width:0;}
   .task-mid .tn{font-size:14px; font-weight:700;}
   .tn-row{display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
@@ -663,6 +698,7 @@
     text-align:center;
   }
   .ref-card svg.big{width:40px;height:40px; color:var(--violet); margin-bottom:12px;}
+  .ref-card img.big{width:60px;height:60px; object-fit:contain; margin-bottom:12px;}
   .ref-card h3{font-size:16.5px; font-weight:800; margin-bottom:6px;}
   .ref-card p{font-size:12.5px; color:var(--text-3); line-height:1.7; margin-bottom:18px;}
 
@@ -964,12 +1000,12 @@
     font-size:12.5px; font-weight:600;
     backdrop-filter:blur(20px);
     box-shadow:0 12px 30px rgba(0,0,0,0.4);
-    opacity:0; transform:translateY(-12px);
-    animation:toastIn .25s ease forwards;
+    opacity:0; transform:translateY(-14px) scale(.94);
+    animation:toastIn .38s cubic-bezier(.16,.84,.32,1) forwards;
   }
   .toast.out{animation:toastOut .25s ease forwards;}
-  @keyframes toastIn{to{opacity:1; transform:translateY(0);}}
-  @keyframes toastOut{to{opacity:0; transform:translateY(-12px);}}
+  @keyframes toastIn{to{opacity:1; transform:translateY(0) scale(1);}}
+  @keyframes toastOut{to{opacity:0; transform:translateY(-10px) scale(.96);}}
   .toast.success{border-color:rgba(47,230,167,0.35);}
   .toast.error{border-color:rgba(255,92,122,0.4);}
   .toast .t-ic{width:18px;height:18px; flex-shrink:0;}

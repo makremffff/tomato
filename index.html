@@ -16,7 +16,7 @@
 
 <!-- ===== First-launch language selection ===== -->
 <div class="lang-select" id="langSelectScreen">
-  <div class="mark"><img src="asesst/icon.png" alt="RealCash"></div>
+  <img src="asesst/icon.png" alt="RealCash" style="width:60px;height:60px;object-fit:contain;margin-bottom:22px;">
   <h2 id="langTitle">اختر لغتك<br>Choose your language</h2>
   <p id="langSub">تقدر تغيّرها لاحقًا من الإعدادات · You can change this later in settings</p>
   <div class="lang-options">
@@ -39,9 +39,7 @@
 <nav class="sidebar" id="sidebar">
   <div class="sb-head">
     <div class="sb-brand">
-      <div class="mark">
-        <img src="asesst/icon.png" alt="RealCash">
-      </div>
+      <img src="asesst/icon.png" alt="RealCash" style="width:60px;height:60px;object-fit:contain;">
       <div>
         <b>ريل كاش</b>
         <small>RealCash</small>
@@ -105,7 +103,7 @@
     <div class="topbar">
       <div style="width:44px"></div>
       <div class="brand-mini">
-        <div class="mark"><img src="asesst/icon.png" alt="RealCash"></div>
+        <img src="asesst/icon.png" alt="RealCash" style="width:60px;height:60px;object-fit:contain;">
         <span>ريل كاش</span>
       </div>
       <div class="avatar-btn">
@@ -145,7 +143,7 @@
 
       <div class="balance-actions">
         <button class="btn-primary" onclick="goTo('wallet')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          <img src="asesst/ic-withdraw.png" alt="" style="width:18px;height:18px;object-fit:contain;">
           <span data-i18n="home.withdrawBtn">سحب الرصيد</span>
         </button>
         <button class="btn-ghost" onclick="goTo('history')">
@@ -178,19 +176,19 @@
     </div>
     <div class="quick-grid">
       <div class="quick-item" onclick="goTo('tasks')">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+        <div class="ic"><img src="asesst/ic-watch-ads.png" alt=""></div>
         <span data-i18n="home.quickWatchAd">مشاهدة إعلان</span>
       </div>
       <div class="quick-item" onclick="goTo('tasks')">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l2.5 2.5L16 9"/></svg></div>
+        <div class="ic"><img src="asesst/ic-do-task.png" alt=""></div>
         <span data-i18n="home.quickDoTask">إنجاز مهمة</span>
       </div>
       <div class="quick-item" onclick="goTo('referral')">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg></div>
+        <div class="ic"><img src="asesst/ic-invite.png" alt=""></div>
         <span data-i18n="home.quickInvite">دعوة صديق</span>
       </div>
       <div class="quick-item" onclick="goTo('wallet')">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></div>
+        <div class="ic"><img src="asesst/ic-withdraw.png" alt=""></div>
         <span data-i18n="home.quickWithdraw">سحب</span>
       </div>
     </div>
@@ -202,7 +200,10 @@
   <div class="page" id="page-tasks">
     <div class="topbar">
       <div style="width:44px"></div>
-      <div class="brand-mini"><span data-i18n="nav.tasks">المهام</span></div>
+      <div class="brand-mini">
+        <img src="asesst/ic-do-task.png" alt="" style="width:60px;height:60px;object-fit:contain;">
+        <span data-i18n="nav.tasks">المهام</span>
+      </div>
       <div style="width:44px"></div>
     </div>
 
@@ -210,7 +211,7 @@
     <div class="page-title" data-i18n="tasks.title">أنجز مهام واربح</div>
 
     <div class="task-card">
-      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+      <div class="task-ic"><img src="asesst/ic-watch-ads.png" alt=""></div>
       <div class="task-mid">
         <div class="tn" data-i18n="tasks.watchAds">شاهد إعلانات</div>
         <div class="td" id="watchAdsProgress" data-i18n="common.loading">تحميل...</div>
@@ -219,7 +220,7 @@
     </div>
 
     <div class="task-card" id="taskCard-join_channel" style="display:none;">
-      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9"/></svg></div>
+      <div class="task-ic"><img src="asesst/ic-join-channel.png" alt=""></div>
       <div class="task-mid">
         <div class="tn-row"><span class="tn" data-i18n="tasks.joinChannel">انضم لقناة تيليجرام</span></div>
         <div class="td" id="joinChannelProgress" data-i18n="tasks.instantReward">مكافأة فورية</div>
@@ -229,7 +230,7 @@
     </div>
 
     <div class="task-card">
-      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg></div>
+      <div class="task-ic"><img src="asesst/ic-invite.png" alt=""></div>
       <div class="task-mid">
         <div class="tn" data-i18n="tasks.invite3">ادعُ 3 أصدقاء</div>
         <div class="td" id="inviteFriendsProgress" data-i18n="common.loading">تحميل...</div>
@@ -239,7 +240,7 @@
     </div>
 
     <div class="task-card">
-      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+      <div class="task-ic"><img src="asesst/ic-daily-login.png" alt=""></div>
       <div class="task-mid">
         <div class="tn" data-i18n="tasks.dailyLogin">تسجيل دخول يومي</div>
         <div class="td" id="dailyLoginProgress" data-i18n="tasks.dailyLoginDesc">7 أيام متتالية = مكافأة كبرى</div>
@@ -270,7 +271,10 @@
   <div class="page" id="page-rewards">
     <div class="topbar">
       <div style="width:44px"></div>
-      <div class="brand-mini"><span data-i18n="nav.rewards">المكافآت</span></div>
+      <div class="brand-mini">
+        <img src="asesst/ic-rewards.png" alt="" style="width:60px;height:60px;object-fit:contain;">
+        <span data-i18n="nav.rewards">المكافآت</span>
+      </div>
       <div style="width:44px"></div>
     </div>
 
@@ -291,7 +295,7 @@
     </div>
 
     <div class="ref-card">
-      <svg class="big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8a3 3 0 100-6"/><path d="M21 20c0-2.6-1.7-4.8-4-5.6"/></svg>
+      <img class="big" src="asesst/ic-invite.png" alt="">
       <h3 data-i18n="referral.heading">ادعُ أصدقاءك واربح معًا</h3>
       <p data-i18n="referral.desc">احصل على 500 نقطة مسابقة فور تفعيل حساب صديقك، بالإضافة إلى 10% من أرباحه مدى الحياة</p>
       <div class="link-box">
@@ -333,7 +337,10 @@
   <div class="page" id="page-contest">
     <div class="topbar">
       <div style="width:44px"></div>
-      <div class="brand-mini"><span data-i18n="nav.contest">المسابقة</span></div>
+      <div class="brand-mini">
+        <img src="asesst/ic-contest.png" alt="" style="width:60px;height:60px;object-fit:contain;">
+        <span data-i18n="nav.contest">المسابقة</span>
+      </div>
       <div style="width:44px"></div>
     </div>
 
@@ -360,7 +367,10 @@
   <div class="page" id="page-wallet">
     <div class="topbar">
       <div style="width:44px"></div>
-      <div class="brand-mini"><span data-i18n="nav.wallet">المحفظة</span></div>
+      <div class="brand-mini">
+        <img src="asesst/ic-withdraw.png" alt="" style="width:60px;height:60px;object-fit:contain;">
+        <span data-i18n="nav.wallet">المحفظة</span>
+      </div>
       <div style="width:44px"></div>
     </div>
 
@@ -368,7 +378,6 @@
       <div class="lbl" data-i18n="wallet.totalBalance">إجمالي الرصيد</div>
       <div class="amt"><span class="anim-num" id="walletBalance">0.000</span> <span class="cur2">USD</span></div>
       <button class="withdraw-btn" id="withdrawBtn" onclick="openWithdrawModal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         <span data-i18n="wallet.withdrawToTon">سحب إلى TON</span>
       </button>
       <div class="wallet-chip" id="walletChipWallet" style="display:none;">
@@ -389,7 +398,10 @@
   <div class="page" id="page-history">
     <div class="topbar">
       <div style="width:44px"></div>
-      <div class="brand-mini"><span data-i18n="nav.history">السجل</span></div>
+      <div class="brand-mini">
+        <img src="asesst/ic-history.png" alt="" style="width:60px;height:60px;object-fit:contain;">
+        <span data-i18n="nav.history">السجل</span>
+      </div>
       <div style="width:44px"></div>
     </div>
 
@@ -410,7 +422,10 @@
   <div class="page" id="page-settings">
     <div class="topbar">
       <div style="width:44px"></div>
-      <div class="brand-mini"><span data-i18n="nav.settings">الإعدادات</span></div>
+      <div class="brand-mini">
+        <img src="asesst/ic-settings.png" alt="" style="width:60px;height:60px;object-fit:contain;">
+        <span data-i18n="nav.settings">الإعدادات</span>
+      </div>
       <div style="width:44px"></div>
     </div>
 
@@ -492,7 +507,7 @@
 </div>
 
 <div class="fab" onclick="openSidebar()">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
+  <img src="asesst/ic-menu.png" alt="">
 </div>
 
 <!-- ===== Toast container ===== -->
