@@ -561,6 +561,18 @@
   </div>
 </div>
 
+<!-- ===== Ad incomplete alert (centered, non-dismissable except OK) ===== -->
+<div class="modal-overlay ad-alert-overlay" id="adIncompleteOverlay">
+  <div class="ad-alert">
+    <div class="ad-alert-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12.01" y2="16.5"/></svg>
+    </div>
+    <div class="ad-alert-title" data-i18n="modal.adIncompleteTitle">الإعلان غير مكتمل</div>
+    <div class="ad-alert-sub" data-i18n="modal.adIncompleteSub">لازم تتفاعل مع الإعلان وتشاهده لآخره حتى تحصل على المكافأة. حاول مرة ثانية وكمّل المشاهدة كاملة.</div>
+    <button class="ad-alert-btn" onclick="closeModal('adIncompleteOverlay')" data-i18n="modal.ok">تمام</button>
+  </div>
+</div>
+
 <!-- ===== FAQ modal ===== -->
 <div class="modal-overlay" id="faqModalOverlay" onclick="if(event.target===this) closeModal('faqModalOverlay')">
   <div class="modal-sheet" style="max-height:80vh; overflow-y:auto;">

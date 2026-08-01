@@ -370,7 +370,7 @@
   .quick-item:nth-child(4) .ic{animation:quickGlow 2.6s ease-in-out infinite; animation-delay:2.5s;}
   @keyframes quickGlow{
     0%,100%{transform:scale(1); filter:drop-shadow(0 0 0px rgba(124,92,255,0));}
-    50%{transform:scale(1.46); filter:drop-shadow(0 0 14px rgba(124,92,255,0.7));}
+    50%{transform:scale(1.16); filter:drop-shadow(0 0 14px rgba(124,92,255,0.7));}
   }
 
   /* ===== Timeline ===== */
@@ -951,48 +951,6 @@
   }
   .modal-close svg{width:14px;height:14px;}
   .modal-sheet{position:relative;}
-
-  /* ===== Ad incomplete alert — centered card, not a bottom sheet ===== */
-  .ad-alert-overlay{align-items:center;}
-  .ad-alert{
-    width:90%; height:40%; max-width:480px;
-    background:linear-gradient(180deg, #14161F 0%, #0C0D14 100%);
-    border:1px solid var(--border);
-    border-radius:18px;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:14px; padding:22px 26px;
-    text-align:center;
-    transform:scale(.92); opacity:0;
-    transition:transform .3s cubic-bezier(.2,.85,.25,1), opacity .3s ease;
-  }
-  .ad-alert-overlay.show .ad-alert{transform:scale(1); opacity:1;}
-  .ad-alert-icon{
-    width:52px; height:52px; border-radius:50%;
-    background:rgba(255,92,122,0.12); border:1px solid rgba(255,92,122,0.3);
-    display:flex; align-items:center; justify-content:center;
-    position:relative; flex-shrink:0;
-  }
-  .ad-alert-icon::after{
-    content:''; position:absolute; inset:-6px; border-radius:50%;
-    border:1px solid rgba(255,92,122,0.25);
-    animation:adAlertRing 1.8s ease-out infinite;
-  }
-  @keyframes adAlertRing{
-    0%{transform:scale(0.9); opacity:1;}
-    100%{transform:scale(1.35); opacity:0;}
-  }
-  .ad-alert-icon svg{width:24px; height:24px; color:var(--danger);}
-  .ad-alert-title{font-family:var(--font-heading); font-weight:800; font-size:16.5px; color:var(--text-1);}
-  .ad-alert-sub{font-size:12.5px; color:var(--text-2); line-height:1.7; max-width:320px;}
-  .ad-alert-btn{
-    margin-top:4px; width:100%; max-width:260px;
-    padding:13px; border-radius:13px; border:none;
-    background:linear-gradient(135deg,var(--gold),#E6A200);
-    color:#1a1200; font-family:var(--font-heading); font-weight:800; font-size:14px;
-    box-shadow:0 8px 22px rgba(255,184,0,0.28);
-    cursor:pointer; transition:transform .15s;
-  }
-  .ad-alert-btn:active{transform:scale(.96);}
 
   /* ===== FAQ accordion ===== */
   .faq-list{display:flex; flex-direction:column; gap:8px; margin-top:6px;}

@@ -252,7 +252,12 @@
       loadWalletTx();
       loadHistory('all');
     } catch(err){
-      showToast(friendlyError(err), 'error');
+      // 🛡️ جلسة إعلان أقل من الحد الأدنى المطلوب (35 ثانية) — نافذة تنبيه مخصصة بدل التوست العادي
+      if (err.message === 'ad_incomplete') {
+        openModal('adIncompleteOverlay');
+      } else {
+        showToast(friendlyError(err), 'error');
+      }
     } finally {
       setBtnLoading(btn, false, t('tasks.start'));
     }
@@ -398,6 +403,7 @@
       task:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l2.5 2.5L16 9"/></svg>',
       reward:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M8.5 13L6 21l6-3 6 3-2.5-8"/></svg>',
       withdraw: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>',
+      penalty:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12.01" y2="16.5"/></svg>',
     };
     return icons[cat] || icons.earn;
   }

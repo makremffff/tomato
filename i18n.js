@@ -178,12 +178,16 @@ const RC_STRINGS = {
     'errors.Unauthorized': 'تعذر التحقق من الحساب — أعد فتح التطبيق من تيليجرام',
     'errors.banned': 'حسابك محظور من استخدام التطبيق',
     'errors.watched_too_fast': 'لازم تشاهد الإعلان كاملاً للحصول على المكافأة',
+    'errors.ad_incomplete': 'لازم تتفاعل مع الإعلان وتشاهده كاملاً (35 ثانية على الأقل) للحصول على المكافأة',
     'errors.token_expired': 'انتهت صلاحية الجلسة — حاول مشاهدة الإعلان من جديد',
     'errors.token_already_used': 'تم احتساب هذا الإعلان مسبقاً',
     'errors.invalid_token': 'حدث خطأ ما — حاول مشاهدة الإعلان من جديد',
     'errors.pending_confirmation': 'جاري التأكيد — أعد المحاولة خلال لحظات',
     'errors.not_configured': 'هذه الميزة غير مفعّلة حالياً',
     'errors.default': 'تعذر الاتصال بالخادم',
+    'modal.adIncompleteTitle': 'الإعلان غير مكتمل',
+    'modal.adIncompleteSub': 'لازم تتفاعل مع الإعلان وتشاهده لآخره حتى تحصل على المكافأة. حاول مرة ثانية وكمّل المشاهدة كاملة.',
+    'modal.ok': 'تمام',
 
     'time.now': 'الآن',
     'time.minutesAgo': 'منذ {n} دقيقة',
@@ -203,6 +207,7 @@ const RC_STRINGS = {
     'tx.redeem': 'استبدال: {title}',
     'tx.withdrawTon': 'سحب TON',
     'tx.taskAd': 'إنجاز مهمة سريعة',
+    'tx.channelLeftPenalty': 'خصم: غادرت القناة بعد الانضمام',
   },
 
   en: {
@@ -374,6 +379,10 @@ const RC_STRINGS = {
     'errors.Unauthorized': 'Could not verify your account — reopen the app from Telegram',
     'errors.banned': 'Your account is banned from using the app',
     'errors.watched_too_fast': 'You must watch the full ad to get the reward',
+    'errors.ad_incomplete': 'You must interact with the ad and watch it fully (at least 35 seconds) to get the reward',
+    'modal.adIncompleteTitle': 'Ad Not Completed',
+    'modal.adIncompleteSub': 'You need to interact with the ad and watch it to the end to get the reward. Try again and watch it fully.',
+    'modal.ok': 'OK',
     'errors.token_expired': 'Session expired — try watching the ad again',
     'errors.token_already_used': 'This ad has already been counted',
     'errors.invalid_token': 'Something went wrong — try watching the ad again',
@@ -399,6 +408,7 @@ const RC_STRINGS = {
     'tx.redeem': 'Redeemed: {title}',
     'tx.withdrawTon': 'TON withdrawal',
     'tx.taskAd': 'Completed a quick task',
+    'tx.channelLeftPenalty': 'Penalty: left the channel after joining',
   },
 };
 
