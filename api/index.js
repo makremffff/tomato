@@ -49,6 +49,11 @@ const APP_CFG = {
   // ⏱️ مدة المشاهدة الحقيقية المطلوبة — لكل شبكة إعلانات مدتها الخاصة (عدّلها حسب شبكتك)
   AD_DURATIONS: { adsgram: 15, monetag: 16, default: 15 },
 
+  // 🛡️ حد أدنى إضافي للتفاعل الفعلي مع الإعلان (منفصل عن مدة الشبكة أعلاه) —
+  // أي جلسة إعلان أقل من هالمدة تُعتبر "غير مكتملة" ولا تُمنح عنها أي مكافأة،
+  // حتى لو كانت مدة الشبكة نفسها (AD_DURATIONS) أقصر منها
+  AD_MIN_INTERACTION_SEC: 35,
+
   // 🎯 مهمة "Task Ads" (Adsgram Block من نوع Task، بصيغة blockId مثل task-40539)
   // حصة منفصلة تمامًا عن حصة إعلانات الفيديو أعلاه — لا تؤثر على AD_DAILY_MAX ولا العكس
   TASK_AD_REWARD_USD:   0.001, // مكافأة كل مهمة Task مكتملة
@@ -58,6 +63,7 @@ const APP_CFG = {
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.005,
   JOIN_CHANNEL_REWARD_POINTS: 50,
+  CHANNEL_RECHECK_HOURS:      6,     // كل قد إيش نعيد التحقق من عضوية القناة لمين أنجز المهمة
 
   // 📅 تسجيل الدخول اليومي
   DAILY_LOGIN_REWARD_USD:      0.002857, // 0.02$ مقسّمة على 7 أيام
@@ -187,6 +193,9 @@ async function ensureSchema() {
     ['last_task_ad_date', 'DATE'],
     ['last_task_ad_watch', 'TIMESTAMPTZ'],
     ['total_task_ads', 'INT NOT NULL DEFAULT 0'],
+    // 📢 تتبّع مغادرة القناة بعد إنجاز مهمة الانضمام — لخصم المكافأة مرة واحدة فقط
+    ['channel_penalized', 'BOOLEAN NOT NULL DEFAULT FALSE'],
+    ['last_channel_check_at', 'TIMESTAMPTZ'],
   ];
   for (const [col, def] of backfillCols) {
     await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -604,6 +613,46 @@ async function isChannelMember(telegramId) {
   }
 }
 
+// 📢 عقوبة مغادرة القناة — لأي مستخدم أنجز مهمة "انضمام لقناة" وطلع منها بعدين:
+// نخصم منه نفس مكافأة الانضمام (رصيد + نقاط) مرة واحدة بس عمرها (channel_penalized).
+// ما منستدعي getChatMember على كل طلب — بس كل CHANNEL_RECHECK_HOURS لكل مستخدم، لتفادي إبطاء init وضرب حدود تيليجرام.
+// ترجع dbUser محدّث إذا صار خصم، وإلا نفس dbUser الأصلي بدون تغيير.
+async function applyChannelLeavePenalty(dbUser) {
+  if (!CHANNEL_USERNAME || !BOT_TOKEN) return dbUser;
+  if (dbUser.channel_penalized) return dbUser;
+
+  const doneJoin = await sql(
+    `SELECT 1 FROM user_tasks WHERE user_id = $1 AND task_id = 'join_channel'`, [dbUser.id]
+  );
+  if (!doneJoin.length) return dbUser; // أصلاً ما أنجز مهمة الانضمام — لا شي للتحقق منه
+
+  const lastCheck = dbUser.last_channel_check_at ? new Date(dbUser.last_channel_check_at).getTime() : 0;
+  const dueForCheck = (Date.now() - lastCheck) / 3600000 >= APP_CFG.CHANNEL_RECHECK_HOURS;
+  if (!dueForCheck) return dbUser;
+
+  await sql(`UPDATE users SET last_channel_check_at = NOW() WHERE id = $1`, [dbUser.id]);
+
+  const isMember = await isChannelMember(dbUser.telegram_id);
+  if (isMember) return dbUser;
+
+  const penaltyUsd    = Math.min(parseFloat(dbUser.balance_usd), APP_CFG.JOIN_CHANNEL_REWARD_USD);
+  const penaltyPoints = Math.min(Number(dbUser.points), APP_CFG.JOIN_CHANNEL_REWARD_POINTS);
+
+  const rows = await sql(
+    `UPDATE users SET
+       balance_usd       = GREATEST(balance_usd - $1, 0),
+       points             = GREATEST(points - $2, 0),
+       channel_penalized  = TRUE
+     WHERE id = $3
+     RETURNING *`,
+    [penaltyUsd, penaltyPoints, dbUser.id]
+  );
+  if (penaltyUsd > 0) {
+    await logTx(dbUser.id, 'penalty', 'خصم: غادرت القناة بعد الانضمام', -penaltyUsd, 'tx.channelLeftPenalty');
+  }
+  return rows[0] || dbUser;
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  Main Export
 // ══════════════════════════════════════════════════════════════════════════════
@@ -677,6 +726,13 @@ module.exports = async function handler(req, res) {
 
       // ═══════════ الرئيسية ═══════════
       case 'init': {
+        // 📢 فحص دوري (بدون إبطاء محسوس) لمين أنجز مهمة الانضمام للقناة وطلع منها بعدين — خصم لمرة وحدة
+        try {
+          dbUser = await applyChannelLeavePenalty(dbUser);
+        } catch (err) {
+          console.error('[channel penalty check]', err.message);
+        }
+
         const [rank, leaderboard, refStats, refList, contest, todayRows, tasksDone] = await Promise.all([
           getUserRank(dbUser.id),
           getLeaderboard(20),
@@ -811,11 +867,15 @@ module.exports = async function handler(req, res) {
         }
 
         // 🛡️ مدة المشاهدة المطلوبة محسوبة من التوكن الموقّع نفسه — لا يتحكم بها العميل
-        const requiredDur = APP_CFG.AD_DURATIONS[payload.adType] || APP_CFG.AD_DURATIONS.default;
+        // نأخذ الأكبر بين مدة الشبكة الافتراضية والحد الأدنى العام للتفاعل (AD_MIN_INTERACTION_SEC)
+        const requiredDur = Math.max(
+          APP_CFG.AD_DURATIONS[payload.adType] || APP_CFG.AD_DURATIONS.default,
+          APP_CFG.AD_MIN_INTERACTION_SEC
+        );
         const elapsedSec   = (Date.now() - payload.iat) / 1000;
 
         if (elapsedSec < requiredDur - APP_CFG.AD_TIMING_TOLERANCE_SEC) {
-          return res.status(400).json({ ok: false, error: 'watched_too_fast' });
+          return res.status(400).json({ ok: false, error: 'ad_incomplete' });
         }
         if (elapsedSec > requiredDur + APP_CFG.AD_TOKEN_GRACE_SEC) {
           await sql(`DELETE FROM ad_sessions WHERE token = $1`, [data.token]);
