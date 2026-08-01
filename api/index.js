@@ -47,12 +47,18 @@ const APP_CFG = {
   AD_TIMING_TOLERANCE_SEC: 2,   // هامش صغير لفروق توقيت الشبكة/الجهاز
 
   // ⏱️ مدة المشاهدة الحقيقية المطلوبة — لكل شبكة إعلانات مدتها الخاصة (عدّلها حسب شبكتك)
-  AD_DURATIONS: { adsgram: 15, monetag: 16, default: 15 },
+  // ملاحظة: adsgram مدتها الفعلية بتتراوح، أحياناً بتطلع 17 ثانية بدل 15 — القيمة هون هي أقل حد مقبول
+  AD_DURATIONS: { adsgram: 17, monetag: 16, default: 15 },
 
   // 🛡️ حد أدنى إضافي للتفاعل الفعلي مع الإعلان (منفصل عن مدة الشبكة أعلاه) —
   // أي جلسة إعلان أقل من هالمدة تُعتبر "غير مكتملة" ولا تُمنح عنها أي مكافأة،
   // حتى لو كانت مدة الشبكة نفسها (AD_DURATIONS) أقصر منها
   AD_MIN_INTERACTION_SEC: 35,
+
+  // 🛡️ استثناء من عتبة AD_MIN_INTERACTION_SEC أعلاه — أي adType موجود هون بيتحاسب
+  // على مدته الخاصة من AD_DURATIONS بس (17 لـ adsgram)، وما بينضبط لـ 35 ثانية.
+  // أي adType غير مذكور هون (متل monetag أو أي شبكة جديدة) بيضل خاضع لعتبة الـ35 كاملة.
+  AD_MIN_INTERACTION_EXEMPT_TYPES: ['adsgram'],
 
   // 🎯 مهمة "Task Ads" (Adsgram Block من نوع Task، بصيغة blockId مثل task-40539)
   // حصة منفصلة تمامًا عن حصة إعلانات الفيديو أعلاه — لا تؤثر على AD_DAILY_MAX ولا العكس
@@ -867,17 +873,32 @@ module.exports = async function handler(req, res) {
         }
 
         // 🛡️ مدة المشاهدة المطلوبة محسوبة من التوكن الموقّع نفسه — لا يتحكم بها العميل
-        // نأخذ الأكبر بين مدة الشبكة الافتراضية والحد الأدنى العام للتفاعل (AD_MIN_INTERACTION_SEC)
-        const requiredDur = Math.max(
-          APP_CFG.AD_DURATIONS[payload.adType] || APP_CFG.AD_DURATIONS.default,
-          APP_CFG.AD_MIN_INTERACTION_SEC
-        );
-        const elapsedSec   = (Date.now() - payload.iat) / 1000;
+        // لـ adType المذكور بـ AD_MIN_INTERACTION_EXEMPT_TYPES (adsgram): في مسارين مقبولين لوحدهم —
+        //   1) قيمة خاصة وثابتة (17 ثانية بالضبط، بهامش AD_TIMING_TOLERANCE_SEC البسيط) — حالة منفصلة قائمة بذاتها
+        //   2) أو مسار الجلسات الطويلة العام: 35 ثانية أو أكثر (AD_MIN_INTERACTION_SEC)
+        // أي مدة بينهم (مثلاً 20 أو 25 ثانية) تعتبر جلسة غير مكتملة ومرفوضة.
+        // أي adType تاني (زي monetag أو شبكة جديدة) بيتحاسب على الأكبر بينها وبين عتبة AD_MIN_INTERACTION_SEC العامة فقط.
+        const networkDur = APP_CFG.AD_DURATIONS[payload.adType] || APP_CFG.AD_DURATIONS.default;
+        const isExempt   = APP_CFG.AD_MIN_INTERACTION_EXEMPT_TYPES.includes(payload.adType);
+        const elapsedSec = (Date.now() - payload.iat) / 1000;
 
-        if (elapsedSec < requiredDur - APP_CFG.AD_TIMING_TOLERANCE_SEC) {
+        const meetsExactSpecialCase = isExempt &&
+          Math.abs(elapsedSec - networkDur) <= APP_CFG.AD_TIMING_TOLERANCE_SEC;
+        const meetsGeneralLongSession = elapsedSec >= APP_CFG.AD_MIN_INTERACTION_SEC - APP_CFG.AD_TIMING_TOLERANCE_SEC;
+
+        if (!isExempt) {
+          // شبكات غير مستثناة: نفس القاعدة العامة القديمة (أكبر بين مدة الشبكة وAD_MIN_INTERACTION_SEC)
+          const requiredDur = Math.max(networkDur, APP_CFG.AD_MIN_INTERACTION_SEC);
+          if (elapsedSec < requiredDur - APP_CFG.AD_TIMING_TOLERANCE_SEC) {
+            return res.status(400).json({ ok: false, error: 'ad_incomplete' });
+          }
+        } else if (!meetsExactSpecialCase && !meetsGeneralLongSession) {
           return res.status(400).json({ ok: false, error: 'ad_incomplete' });
         }
-        if (elapsedSec > requiredDur + APP_CFG.AD_TOKEN_GRACE_SEC) {
+
+        // 🛡️ صلاحية التوكن (تنظيف/انتهاء) — نحسبها على أطول مسار مقبول (مسار الـ35) حتى ما نقفل الجلسات الطويلة قبل وقتها
+        const expiryBaseline = Math.max(networkDur, APP_CFG.AD_MIN_INTERACTION_SEC);
+        if (elapsedSec > expiryBaseline + APP_CFG.AD_TOKEN_GRACE_SEC) {
           await sql(`DELETE FROM ad_sessions WHERE token = $1`, [data.token]);
           return res.status(400).json({ ok: false, error: 'token_expired' });
         }
