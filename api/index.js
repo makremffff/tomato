@@ -56,9 +56,10 @@ const APP_CFG = {
   AD_MIN_INTERACTION_SEC: 35,
 
   // 🛡️ استثناء من عتبة AD_MIN_INTERACTION_SEC أعلاه — أي adType موجود هون بيتحاسب
-  // على مدته الخاصة من AD_DURATIONS بس (17 لـ adsgram)، وما بينضبط لـ 35 ثانية.
+  // على نطاق قصير خاص فيه (17 إلى AD_SHORT_INTERACTION_MAX_SEC) بدل عتبة الـ35، بدون أي هامش شبكة إضافي.
   // أي adType غير مذكور هون (متل monetag أو أي شبكة جديدة) بيضل خاضع لعتبة الـ35 كاملة.
   AD_MIN_INTERACTION_EXEMPT_TYPES: ['adsgram'],
+  AD_SHORT_INTERACTION_MAX_SEC: 20, // النطاق المقبول: من AD_DURATIONS[adType] (17) وحتى هالرقم — بالظبط، بدون هامش
 
   // 🎯 مهمة "Task Ads" (Adsgram Block من نوع Task، بصيغة blockId مثل task-40539)
   // حصة منفصلة تمامًا عن حصة إعلانات الفيديو أعلاه — لا تؤثر على AD_DAILY_MAX ولا العكس
@@ -873,26 +874,26 @@ module.exports = async function handler(req, res) {
         }
 
         // 🛡️ مدة المشاهدة المطلوبة محسوبة من التوكن الموقّع نفسه — لا يتحكم بها العميل
-        // لـ adType المذكور بـ AD_MIN_INTERACTION_EXEMPT_TYPES (adsgram): في مسارين مقبولين لوحدهم —
-        //   1) قيمة خاصة وثابتة (17 ثانية بالضبط، بهامش AD_TIMING_TOLERANCE_SEC البسيط) — حالة منفصلة قائمة بذاتها
-        //   2) أو مسار الجلسات الطويلة العام: 35 ثانية أو أكثر (AD_MIN_INTERACTION_SEC)
-        // أي مدة بينهم (مثلاً 20 أو 25 ثانية) تعتبر جلسة غير مكتملة ومرفوضة.
-        // أي adType تاني (زي monetag أو شبكة جديدة) بيتحاسب على الأكبر بينها وبين عتبة AD_MIN_INTERACTION_SEC العامة فقط.
+        // لـ adType المذكور بـ AD_MIN_INTERACTION_EXEMPT_TYPES (adsgram): في مسارين مقبولين لوحدهم، بالظبط بدون أي هامش شبكة —
+        //   1) نطاق قصير: من AD_DURATIONS[adType] (17) وحتى AD_SHORT_INTERACTION_MAX_SEC (20) — 17/18/19/20 كلها مقبولة
+        //   2) أو مسار الجلسات الطويلة: 35 ثانية أو أكثر (AD_MIN_INTERACTION_SEC) بالظبط، بدون هامش
+        // أي مدة بينهم (21 لـ34) تعتبر جلسة غير مكتملة ومرفوضة، وأقل من 17 كمان مرفوضة.
+        // أي adType تاني (زي monetag أو شبكة جديدة) بيتحاسب على الأكبر بينها وبين عتبة AD_MIN_INTERACTION_SEC العامة فقط (بهامش AD_TIMING_TOLERANCE_SEC العادي).
         const networkDur = APP_CFG.AD_DURATIONS[payload.adType] || APP_CFG.AD_DURATIONS.default;
         const isExempt   = APP_CFG.AD_MIN_INTERACTION_EXEMPT_TYPES.includes(payload.adType);
         const elapsedSec = (Date.now() - payload.iat) / 1000;
 
-        const meetsExactSpecialCase = isExempt &&
-          Math.abs(elapsedSec - networkDur) <= APP_CFG.AD_TIMING_TOLERANCE_SEC;
-        const meetsGeneralLongSession = elapsedSec >= APP_CFG.AD_MIN_INTERACTION_SEC - APP_CFG.AD_TIMING_TOLERANCE_SEC;
+        const meetsShortRange = isExempt &&
+          elapsedSec >= networkDur && elapsedSec <= APP_CFG.AD_SHORT_INTERACTION_MAX_SEC;
+        const meetsGeneralLongSession = elapsedSec >= APP_CFG.AD_MIN_INTERACTION_SEC;
 
         if (!isExempt) {
-          // شبكات غير مستثناة: نفس القاعدة العامة القديمة (أكبر بين مدة الشبكة وAD_MIN_INTERACTION_SEC)
+          // شبكات غير مستثناة: نفس القاعدة العامة القديمة (أكبر بين مدة الشبكة وAD_MIN_INTERACTION_SEC، بهامش بسيط)
           const requiredDur = Math.max(networkDur, APP_CFG.AD_MIN_INTERACTION_SEC);
           if (elapsedSec < requiredDur - APP_CFG.AD_TIMING_TOLERANCE_SEC) {
             return res.status(400).json({ ok: false, error: 'ad_incomplete' });
           }
-        } else if (!meetsExactSpecialCase && !meetsGeneralLongSession) {
+        } else if (!meetsShortRange && !meetsGeneralLongSession) {
           return res.status(400).json({ ok: false, error: 'ad_incomplete' });
         }
 
