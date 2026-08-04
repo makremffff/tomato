@@ -268,7 +268,7 @@
     try{
       const res = await apiCall('tasks.checkChannel', {});
       if (!res.ok){
-        showToast(t('toast.notJoinedYet'), 'error');
+        showToast(res.error === 'task_locked' ? t('toast.channelTaskLocked') : t('toast.notJoinedYet'), 'error');
         if (res.channel && tg?.openTelegramLink) tg.openTelegramLink('https://t.me/' + res.channel);
         return;
       }
