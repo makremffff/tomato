@@ -1028,15 +1028,19 @@ module.exports = async function handler(req, res) {
       // ═══════════ مهمة: الانضمام للقناة ═══════════
       case 'tasks.checkChannel': {
         if (!CHANNEL_USERNAME) return res.status(400).json({ ok: false, error: 'channel_not_configured' });
-        // 🔒 مستخدم سبق وانضم ثم غادر واتعاقب مرة — المهمة مقفولة نهائياً عنده لمنع تكرار
-        // (انضم → خذ مكافأة → غادر → المهمة ترجع فاضية → ينضم تاني → يستهلك مكافأة تانية...)
-        if (dbUser.channel_penalized) return res.json({ ok: false, error: 'task_locked', channel: CHANNEL_USERNAME });
 
         const already = await sql(`SELECT 1 FROM user_tasks WHERE user_id = $1 AND task_id = 'join_channel'`, [dbUser.id]);
         if (already.length) return res.json({ ok: true, alreadyDone: true });
 
         const isMember = await isChannelMember(dbUser.telegram_id);
         if (!isMember) return res.json({ ok: false, error: 'not_member', channel: CHANNEL_USERNAME });
+
+        // 🔒 مستخدم سبق وانضم ثم غادر واتعاقب مرة — زر "تحقق" لازم يشتغل ويأكد عضويته من جديد،
+        // بس بدون ما ياخد مكافأة تانية (لمنع: انضم → مكافأة → غادر → المهمة ترجع فاضية → ينضم تاني → مكافأة تانية...)
+        if (dbUser.channel_penalized) {
+          await sql(`INSERT INTO user_tasks (user_id, task_id) VALUES ($1, 'join_channel') ON CONFLICT DO NOTHING`, [dbUser.id]);
+          return res.json({ ok: true, alreadyDone: true, rewardWithheld: true });
+        }
 
         await sql(`INSERT INTO user_tasks (user_id, task_id) VALUES ($1, 'join_channel') ON CONFLICT DO NOTHING`, [dbUser.id]);
         await sql(`UPDATE users SET balance_usd = balance_usd + $1, points = points + $2 WHERE id = $3`,
