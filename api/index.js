@@ -70,7 +70,7 @@ const APP_CFG = {
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.005,
   JOIN_CHANNEL_REWARD_POINTS: 50,
-  CHANNEL_RECHECK_HOURS:      6,     // كل قد إيش نعيد التحقق من عضوية القناة لمين أنجز المهمة
+  CHANNEL_RECHECK_HOURS:      0,     // 0 = تحقق فوري من عضوية القناة في كل init (لمين أنجز مهمة الانضمام) — ارفعها لو صار ضغط على حدود تيليجرام
 
   // 📅 تسجيل الدخول اليومي
   DAILY_LOGIN_REWARD_USD:      0.002857, // 0.02$ مقسّمة على 7 أيام
@@ -89,7 +89,7 @@ const APP_CFG = {
   // 💰 السحب
   WITHDRAW_MIN_USD:              0.015,
   WITHDRAW_MIN_ACTIVE_REFERRALS: 0,    // 0 = الشرط معطّل، غيّرها لأي رقم لتفعيل شرط الإحالات قبل السحب
-  WITHDRAW_REQUIRE_CHANNEL:      false,// true لتفعيل اشتراط الانضمام للقناة قبل السحب
+  WITHDRAW_REQUIRE_CHANNEL:      true, // يمنع السحب إذا المستخدم مش عضو بالقناة حالياً
 
   // 🏆 المسابقة الأسبوعية (نفس نمط "competition" في BigLeague لكن مدتها أسبوع بدل 20 يوم)
   CONTEST_DURATION_DAYS: 7,
@@ -621,8 +621,10 @@ async function isChannelMember(telegramId) {
 }
 
 // 📢 عقوبة مغادرة القناة — لأي مستخدم أنجز مهمة "انضمام لقناة" وطلع منها بعدين:
-// نخصم منه نفس مكافأة الانضمام (رصيد + نقاط) مرة واحدة بس عمرها (channel_penalized).
-// ما منستدعي getChatMember على كل طلب — بس كل CHANNEL_RECHECK_HOURS لكل مستخدم، لتفادي إبطاء init وضرب حدود تيليجرام.
+// - تحقق فوري (مش دوري) من عضوية القناة في كل init لمين أنجز المهمة (CHANNEL_RECHECK_HOURS = 0).
+// - نخصم منه نفس مكافأة الانضمام (رصيد + نقاط) مرة واحدة بس عمرها (channel_penalized يمنع خصم متكرر).
+// - المهمة نفسها ترجع لحالتها الأصلية (غير منجزة) بمسح صف user_tasks — بترجع تنعرض بالواجهة كمهمة لسا ما تمت.
+// - إشعار تيليجرام فوري للمستخدم يوضح سبب الخصم.
 // ترجع dbUser محدّث إذا صار خصم، وإلا نفس dbUser الأصلي بدون تغيير.
 async function applyChannelLeavePenalty(dbUser) {
   if (!CHANNEL_USERNAME || !BOT_TOKEN) return dbUser;
@@ -654,9 +656,19 @@ async function applyChannelLeavePenalty(dbUser) {
      RETURNING *`,
     [penaltyUsd, penaltyPoints, dbUser.id]
   );
+
+  // 🔄 المهمة ترجع كأنها ما انصارت — تمسح من user_tasks فترجع تنعرض "غير منجزة" بالواجهة
+  await sql(`DELETE FROM user_tasks WHERE user_id = $1 AND task_id = 'join_channel'`, [dbUser.id]);
+
   if (penaltyUsd > 0) {
     await logTx(dbUser.id, 'penalty', 'خصم: غادرت القناة بعد الانضمام', -penaltyUsd, 'tx.channelLeftPenalty');
   }
+
+  sendTelegramMessage(
+    Number(dbUser.telegram_id),
+    `⚠️ *لاحظنا إنك غادرت القناة*\n\nتم خصم مكافأة مهمة الانضمام (${penaltyUsd.toFixed(3)}$) من رصيدك، وترجعت المهمة لحالتها الأصلية.\nانضم للقناة من جديد لو حابب تنجز المهمة وتاخد المكافأة.`
+  ).catch(e => console.error('[channel penalty notify]', e.message));
+
   return rows[0] || dbUser;
 }
 
@@ -1016,6 +1028,10 @@ module.exports = async function handler(req, res) {
       // ═══════════ مهمة: الانضمام للقناة ═══════════
       case 'tasks.checkChannel': {
         if (!CHANNEL_USERNAME) return res.status(400).json({ ok: false, error: 'channel_not_configured' });
+        // 🔒 مستخدم سبق وانضم ثم غادر واتعاقب مرة — المهمة مقفولة نهائياً عنده لمنع تكرار
+        // (انضم → خذ مكافأة → غادر → المهمة ترجع فاضية → ينضم تاني → يستهلك مكافأة تانية...)
+        if (dbUser.channel_penalized) return res.json({ ok: false, error: 'task_locked', channel: CHANNEL_USERNAME });
+
         const already = await sql(`SELECT 1 FROM user_tasks WHERE user_id = $1 AND task_id = 'join_channel'`, [dbUser.id]);
         if (already.length) return res.json({ ok: true, alreadyDone: true });
 
