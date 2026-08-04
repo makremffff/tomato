@@ -621,25 +621,17 @@ async function isChannelMember(telegramId) {
 }
 
 // 📢 عقوبة مغادرة القناة — لأي مستخدم أنجز مهمة "انضمام لقناة" وطلع منها بعدين:
-// - تحقق فوري (مش دوري) من عضوية القناة في كل init لمين أنجز المهمة (CHANNEL_RECHECK_HOURS = 0).
-// - نخصم منه نفس مكافأة الانضمام (رصيد + نقاط) مرة واحدة بس عمرها (channel_penalized يمنع خصم متكرر).
-// - المهمة نفسها ترجع لحالتها الأصلية (غير منجزة) بمسح صف user_tasks — بترجع تنعرض بالواجهة كمهمة لسا ما تمت.
+// - تحقق فوري بكل تسجيل دخول (init)، طالما المهمة معلّمة "منجزة" عنده حالياً — مش مرة وحدة بالعمر.
+// - كل مرة يطلع من القناة: يتخصم رصيد المكافأة، وترجع مهمة القناة لحالتها الأصلية (غير منجزة) عشان يقدر يعيد تنفيذها.
 // - إشعار تيليجرام فوري للمستخدم يوضح سبب الخصم.
 // ترجع dbUser محدّث إذا صار خصم، وإلا نفس dbUser الأصلي بدون تغيير.
 async function applyChannelLeavePenalty(dbUser) {
   if (!CHANNEL_USERNAME || !BOT_TOKEN) return dbUser;
-  if (dbUser.channel_penalized) return dbUser;
 
   const doneJoin = await sql(
     `SELECT 1 FROM user_tasks WHERE user_id = $1 AND task_id = 'join_channel'`, [dbUser.id]
   );
-  if (!doneJoin.length) return dbUser; // أصلاً ما أنجز مهمة الانضمام — لا شي للتحقق منه
-
-  const lastCheck = dbUser.last_channel_check_at ? new Date(dbUser.last_channel_check_at).getTime() : 0;
-  const dueForCheck = (Date.now() - lastCheck) / 3600000 >= APP_CFG.CHANNEL_RECHECK_HOURS;
-  if (!dueForCheck) return dbUser;
-
-  await sql(`UPDATE users SET last_channel_check_at = NOW() WHERE id = $1`, [dbUser.id]);
+  if (!doneJoin.length) return dbUser; // المهمة مو معلّمة منجزة حالياً — لا شي للتحقق منه
 
   const isMember = await isChannelMember(dbUser.telegram_id);
   if (isMember) return dbUser;
@@ -657,7 +649,7 @@ async function applyChannelLeavePenalty(dbUser) {
     [penaltyUsd, penaltyPoints, dbUser.id]
   );
 
-  // 🔄 المهمة ترجع كأنها ما انصارت — تمسح من user_tasks فترجع تنعرض "غير منجزة" بالواجهة
+  // 🔄 المهمة ترجع كأنها ما انصارت — تمسح من user_tasks فترجع تنعرض "غير منجزة" بالواجهة، وتصير قابلة لإعادة التنفيذ
   await sql(`DELETE FROM user_tasks WHERE user_id = $1 AND task_id = 'join_channel'`, [dbUser.id]);
 
   if (penaltyUsd > 0) {
@@ -1034,13 +1026,6 @@ module.exports = async function handler(req, res) {
 
         const isMember = await isChannelMember(dbUser.telegram_id);
         if (!isMember) return res.json({ ok: false, error: 'not_member', channel: CHANNEL_USERNAME });
-
-        // 🔒 مستخدم سبق وانضم ثم غادر واتعاقب مرة — زر "تحقق" لازم يشتغل ويأكد عضويته من جديد،
-        // بس بدون ما ياخد مكافأة تانية (لمنع: انضم → مكافأة → غادر → المهمة ترجع فاضية → ينضم تاني → مكافأة تانية...)
-        if (dbUser.channel_penalized) {
-          await sql(`INSERT INTO user_tasks (user_id, task_id) VALUES ($1, 'join_channel') ON CONFLICT DO NOTHING`, [dbUser.id]);
-          return res.json({ ok: true, alreadyDone: true, rewardWithheld: true });
-        }
 
         await sql(`INSERT INTO user_tasks (user_id, task_id) VALUES ($1, 'join_channel') ON CONFLICT DO NOTHING`, [dbUser.id]);
         await sql(`UPDATE users SET balance_usd = balance_usd + $1, points = points + $2 WHERE id = $3`,
