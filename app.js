@@ -532,13 +532,31 @@
     }
   }
 
-  function exitSurfPage(){
+  // 🛡️ ينهي الجلسة ويشيل سكربت الإعلان بس بدون تنقّل — تستخدم من زر الخروج، ومن أي مكان
+  // تاني بيقدر المستخدم يطلع من الصفحة منه (تنقّل لصفحة تانية، تصغير التطبيق، تبديل تبويب)
+  function endSurfSession(){
     if (surfState && surfState.timer) clearInterval(surfState.timer);
     surfState = null;
     document.getElementById('surfConsentOverlay').style.display = 'none';
-    unloadAdcashScript(); // 🛡️ نشيل سكربت Adcash تماماً أول ما يخرج المستخدم من الصفحة
+    unloadAdcashScript(); // 🛡️ نشيل سكربت Adcash تماماً أول ما تنتهي الجلسة
+  }
+
+  function exitSurfPage(){
+    endSurfSession();
     goTo(surfPreviousPageId || 'rewards');
   }
+
+  // 🛡️ لو المستخدم صغّر التطبيق أو بدّل تبويب/تطبيق ثاني وهو بصفحة "تصفح واربح"،
+  // منعتبرها خروج فوري: تنتهي الجلسة ويتشال سكربت الإعلان فوراً (ما منستنى رجوعه)
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden && surfState && document.getElementById('page-surf').classList.contains('active')){
+      endSurfSession();
+    }
+  });
+  // 🛡️ شبكة أمان إضافية لو انسحبت الصفحة فعلياً (تنقّل خارج التطبيق / إغلاق)
+  window.addEventListener('pagehide', function(){
+    if (surfState) endSurfSession();
+  });
 
   function renderRewards(){
     const s = appState;

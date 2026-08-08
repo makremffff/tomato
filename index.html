@@ -524,14 +524,16 @@
 
   <!-- ============ SURF & EARN (صفحة كاملة مستقلة) ============ -->
   <div class="page" id="page-surf">
-    <div class="topbar">
-      <div class="avatar-btn" onclick="exitSurfPage()" style="cursor:pointer;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      </div>
+    <!-- 🚪 زر خروج وحيد — ثابت على الشاشة (fixed) أعلى يمين، بأعلى طبقة (z-index) حتى يضل
+         ظاهر وقابل للنقر فوق أي إعلان قد يظهر بكامل الشاشة -->
+    <button id="surfExitBtn" onclick="exitSurfPage()" aria-label="خروج" style="position:fixed; top:14px; right:14px; z-index:99999; width:40px; height:40px; border-radius:50%; background:var(--glass-strong); backdrop-filter:blur(10px); border:1px solid var(--border); color:var(--text-1); display:flex; align-items:center; justify-content:center;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+
+    <div class="topbar" style="justify-content:center;">
       <div class="brand-mini">
         <span data-i18n="surf.title">تصفح واربح</span>
       </div>
-      <div style="width:44px"></div>
     </div>
 
     <!-- ⏱️ العداد الرئيسي — أعلى الصفحة، بمنتصفها، بأرقام كبيرة، يبدأ العد التنازلي فقط
@@ -551,11 +553,6 @@
     <div id="surfBannerZone" style="min-height:220px; display:flex; align-items:center; justify-content:center; background:var(--glass); border-radius:14px; margin:18px 0; color:var(--text-3); font-size:12px;">
       <span id="surfAdPlaceholderText" data-i18n="surf.adPlaceholder">مكان الإعلان</span>
     </div>
-
-    <!-- 🚪 زر خروج ثابت على جانب الشاشة — متاح طول وقت الجلسة لو المستخدم بدو يطلع بأي لحظة -->
-    <button id="surfExitSideBtn" onclick="exitSurfPage()" style="position:fixed; top:50%; transform:translateY(-50%); inset-inline-start:10px; z-index:75; width:44px; height:44px; border-radius:50%; background:var(--glass-strong); border:1px solid var(--border); color:var(--text-1); display:flex; align-items:center; justify-content:center;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-    </button>
 
     <div class="bottom-pad"></div>
   </div>
