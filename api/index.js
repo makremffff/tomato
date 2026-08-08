@@ -208,6 +208,10 @@ async function ensureSchema() {
     // 📢 تتبّع مغادرة القناة بعد إنجاز مهمة الانضمام — لخصم المكافأة مرة واحدة فقط
     ['channel_penalized', 'BOOLEAN NOT NULL DEFAULT FALSE'],
     ['last_channel_check_at', 'TIMESTAMPTZ'],
+    // 🛡️ عمولة الإحالة من مهمة "الانضمام للقناة" تُمنح مرة واحدة فقط مدى الحياة —
+    // مستقلة عن user_tasks لأن تلك الجدولة تُحذف عمداً عند مغادرة القناة (لإعادة تفعيل المهمة)،
+    // وبدون هذا العلم يقدر المستخدم يخرج من القناة ويرجع مرارًا ليمنح المُحيل عمولة مكررة كل مرة
+    ['join_channel_commission_paid', 'BOOLEAN NOT NULL DEFAULT FALSE'],
     // 🎬 كرت Taddy بصفحة المكافآت — حصة يومية مستقلة تمامًا عن daily_ads / daily_task_ads
     ['daily_taddy', 'INT NOT NULL DEFAULT 0'],
     ['last_taddy_date', 'DATE'],
@@ -1040,7 +1044,14 @@ module.exports = async function handler(req, res) {
         await sql(`UPDATE users SET balance_usd = balance_usd + $1, points = points + $2 WHERE id = $3`,
           [APP_CFG.JOIN_CHANNEL_REWARD_USD, APP_CFG.JOIN_CHANNEL_REWARD_POINTS, dbUser.id]);
         await logTx(dbUser.id, 'task', 'انضمام لقناة تيليجرام', APP_CFG.JOIN_CHANNEL_REWARD_USD, 'tx.joinChannel');
-        await creditReferralCommission(dbUser, APP_CFG.JOIN_CHANNEL_REWARD_USD);
+
+        // 🛡️ عمولة المُحيل من هذه المهمة تُصرف مرة واحدة فقط مدى الحياة — حتى لو المستخدم
+        // خرج من القناة ورجع عدة مرات (كل رجعة تعيد صرف مكافأة الانضمام نفسها للمستخدم،
+        // لكن عمولة المُحيل يجب ألا تتكرر معها)
+        if (!dbUser.join_channel_commission_paid) {
+          await sql(`UPDATE users SET join_channel_commission_paid = TRUE WHERE id = $1`, [dbUser.id]);
+          await creditReferralCommission(dbUser, APP_CFG.JOIN_CHANNEL_REWARD_USD);
+        }
 
         const refreshed = (await sql(`SELECT balance_usd, points FROM users WHERE id = $1`, [dbUser.id]))[0];
         return res.json({ ok: true, reward: APP_CFG.JOIN_CHANNEL_REWARD_USD, newBalance: parseFloat(refreshed.balance_usd), newPoints: Number(refreshed.points) });
