@@ -240,11 +240,11 @@
       const remaining = Math.max(0, required - progress);
 
       if (claim.batchBonus > 0) {
-        showToast(t('toast.batchComplete', { amount: claim.batchBonus.toFixed(3) }) + ' ' + t('toast.pointsEarned', { points: claim.rewardPoints }), 'success');
+        showToast(t('toast.batchComplete', { amount: claim.batchBonus.toFixed(3) }), 'success');
       } else if (remaining <= 0) {
-        showToast(t('toast.adWatchedPlain') + ' ' + t('toast.pointsEarned', { points: claim.rewardPoints }), 'success');
+        showToast(t('toast.adWatchedPlain'), 'success');
       } else {
-        showToast(t('toast.adProgress', { progress, required, remaining }) + ' ' + t('toast.pointsEarned', { points: claim.rewardPoints }), 'info');
+        showToast(t('toast.adProgress', { progress, required, remaining }), 'info');
       }
 
       if (typeof claim.newBalance === 'number') updateBalanceDisplay(claim.newBalance);
@@ -272,7 +272,7 @@
         if (res.channel && tg?.openTelegramLink) tg.openTelegramLink('https://t.me/' + res.channel);
         return;
       }
-      showToast(res.alreadyDone ? t('toast.alreadyDone') : t('toast.joinRecorded', { amount: (res.reward || 0).toFixed(3) }) + ' ' + t('toast.pointsEarned', { points: res.rewardPoints }), 'success');
+      showToast(res.alreadyDone ? t('toast.alreadyDone') : t('toast.joinRecorded', { amount: (res.reward || 0).toFixed(3) }), 'success');
       if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
       loadHome();
       loadWalletTx();
@@ -291,7 +291,7 @@
       if (res.alreadyDone){
         showToast(t('toast.comeBackTomorrow'), 'info');
       } else {
-        showToast(t('toast.dailyClaimed', { amount: res.reward.toFixed(3) }) + (res.milestone ? t('toast.streakComplete') : '') + ' ' + t('toast.pointsEarned', { points: res.rewardPoints }), 'success');
+        showToast(t('toast.dailyClaimed', { amount: res.reward.toFixed(3) }) + (res.milestone ? t('toast.streakComplete') : ''), 'success');
         updateBalanceDisplay(res.newBalance);
       }
       loadHome();
@@ -331,16 +331,32 @@
      زر واحد يشغّل إعلانين Taddy (interstitial) ورا بعض مباشرة عبر نفس Taddy SDK
      المُهيَّأ أصلاً في taddy-ads.js، ثم يطالب السيرفر بنقاط tasks.taddyReward
      فقط لو الاثنين انشاهدوا كاملين (onViewThrough) — إغلاق مبكر لا يُحتسب. */
+  const TADDY_LOAD_TIMEOUT_MS = 10000; // ⏱️ لو تأخر تحميل الإعلان أكثر من 10 ثواني نلغي العملية بدل التعليق للأبد
+
   function playTaddyAd(){
     return new Promise((resolve) => {
       let viewed = false;
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        resolve('timeout');
+      }, TADDY_LOAD_TIMEOUT_MS);
       try{
         window.Taddy.ads().interstitial({
-          onClosed: () => resolve(viewed),
+          onClosed: () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(viewed);
+          },
           onViewThrough: () => { viewed = true; }
         });
       } catch(e){
         console.warn('[taddy] interstitial failed', e);
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         resolve(false);
       }
     });
@@ -354,15 +370,18 @@
     setBtnLoading(btn, true);
     try{
       const v1 = await playTaddyAd();
+      if (v1 === 'timeout') throw new Error('taddy_timeout');
       if (!v1) throw new Error('taddy_incomplete');
       const v2 = await playTaddyAd();
+      if (v2 === 'timeout') throw new Error('taddy_timeout');
       if (!v2) throw new Error('taddy_incomplete');
 
       const res = await apiCall('tasks.taddyReward', {});
       document.getElementById('pointsBalance').textContent = Number(res.newPointsBalance).toLocaleString('en-US');
       showToast(t('rewards.taddySuccess', { points: res.reward }), 'success');
     } catch(err){
-      if (err && err.message === 'taddy_incomplete') showToast(t('rewards.taddyIncomplete'), 'error');
+      if (err && err.message === 'taddy_timeout') showToast(t('toast.noAdsAvailable'), 'error');
+      else if (err && err.message === 'taddy_incomplete') showToast(t('rewards.taddyIncomplete'), 'error');
       else showToast(friendlyError(err), 'error');
     } finally {
       setBtnLoading(btn, false, t('rewards.taddyWatch'));
@@ -377,16 +396,22 @@
     if (taddyDescEl && taddyPoints != null) taddyDescEl.textContent = t('rewards.taddyDesc', { points: taddyPoints });
     const catalog = s?.config?.rewards_catalog || {};
     const list = document.getElementById('rewardsList');
-    list.innerHTML = Object.entries(catalog).map(([id, r]) => `
+    list.innerHTML = Object.entries(catalog).map(([id, r]) => {
+      // 🌐 عنوان الجائزة يترجم حسب اللغة الحالية لو متوفر مفتاح له في i18n.js (rewards.item.<id>)،
+      // وإلا يرجع للعنوان الخام القادم من السيرفر (احتياطي لأي عنصر جديد بدون ترجمة بعد)
+      const titleKey = 'rewards.item.' + id;
+      const title = (RC_STRINGS[rcCurrentLang()] && RC_STRINGS[rcCurrentLang()][titleKey]) || r.title;
+      return `
       <div class="task-card">
         <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg></div>
         <div class="task-mid">
-          <div class="tn">${r.titleKey ? t(r.titleKey) : r.title}</div>
+          <div class="tn">${title}</div>
           <div class="td">${t('rewards.cost', { cost: r.cost.toLocaleString('en-US') })}</div>
         </div>
-        <button class="task-btn" onclick="redeemReward('${id}', ${r.cost}, '${r.titleKey ? t(r.titleKey) : r.title}')">${t('rewards.redeem')}</button>
+        <button class="task-btn" onclick="redeemReward('${id}', ${r.cost}, '${title.replace(/'/g, "\\'")}')">${t('rewards.redeem')}</button>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   /* ===== Referral ===== */
