@@ -84,6 +84,7 @@ const RC_STRINGS = {
     'rewards.taddySuccess': 'حصلت على {points} نقاط 🎉',
     'rewards.taddyIncomplete': 'لازم تشاهد الإعلانين كاملين للحصول على المكافأة',
     'rewards.taddyUnavailable': 'الإعلانات غير متاحة حالياً، حاول لاحقاً',
+    'rewards.catalog.balance_001usd': 'رصيد إضافي 0.01$',
 
     'referral.heading': 'ادعُ أصدقاءك واربح معًا',
     'referral.desc': 'احصل على 500 نقطة مسابقة فور تفعيل حساب صديقك، بالإضافة إلى 10% من أرباحه مدى الحياة',
@@ -169,6 +170,7 @@ const RC_STRINGS = {
     'toast.joinRecorded': 'تم رصد الانضمام +{amount}$',
     'toast.comeBackTomorrow': 'رجع بكرة تاخد مكافأة تسجيل الدخول',
     'toast.dailyClaimed': 'تم استلام مكافأة اليوم +{amount}$',
+    'toast.pointsEarned': '(+{points} نقطة)',
     'toast.streakComplete': ' 🎉 سلسلة كاملة!',
     'toast.taskAdReward': 'تم استلام المهمة +{amount}$',
     'toast.sessionTooLong': 'الجلسة طويلة جدًا — أعد فتح التطبيق للحصول على مهام جديدة',
@@ -293,6 +295,7 @@ const RC_STRINGS = {
     'rewards.taddySuccess': 'You earned {points} points 🎉',
     'rewards.taddyIncomplete': 'You need to watch both ads fully to get the reward',
     'rewards.taddyUnavailable': 'Ads are unavailable right now, try again later',
+    'rewards.catalog.balance_001usd': 'Extra balance $0.01',
 
     'referral.heading': 'Invite Friends & Earn Together',
     'referral.desc': "Get 500 contest points as soon as your friend's account is activated, plus 10% of their earnings for life",
@@ -378,6 +381,7 @@ const RC_STRINGS = {
     'toast.joinRecorded': 'Join recorded +${amount}',
     'toast.comeBackTomorrow': 'Come back tomorrow for the check-in reward',
     'toast.dailyClaimed': "Today's reward claimed +${amount}",
+    'toast.pointsEarned': '(+{points} points)',
     'toast.streakComplete': ' 🎉 Full streak!',
     'toast.taskAdReward': 'Task claimed +${amount}',
     'toast.sessionTooLong': 'Session too long — reopen the app to get new tasks',

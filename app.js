@@ -240,11 +240,11 @@
       const remaining = Math.max(0, required - progress);
 
       if (claim.batchBonus > 0) {
-        showToast(t('toast.batchComplete', { amount: claim.batchBonus.toFixed(3) }), 'success');
+        showToast(t('toast.batchComplete', { amount: claim.batchBonus.toFixed(3) }) + ' ' + t('toast.pointsEarned', { points: claim.rewardPoints }), 'success');
       } else if (remaining <= 0) {
-        showToast(t('toast.adWatchedPlain'), 'success');
+        showToast(t('toast.adWatchedPlain') + ' ' + t('toast.pointsEarned', { points: claim.rewardPoints }), 'success');
       } else {
-        showToast(t('toast.adProgress', { progress, required, remaining }), 'info');
+        showToast(t('toast.adProgress', { progress, required, remaining }) + ' ' + t('toast.pointsEarned', { points: claim.rewardPoints }), 'info');
       }
 
       if (typeof claim.newBalance === 'number') updateBalanceDisplay(claim.newBalance);
@@ -272,7 +272,7 @@
         if (res.channel && tg?.openTelegramLink) tg.openTelegramLink('https://t.me/' + res.channel);
         return;
       }
-      showToast(res.alreadyDone ? t('toast.alreadyDone') : t('toast.joinRecorded', { amount: (res.reward || 0).toFixed(3) }), 'success');
+      showToast(res.alreadyDone ? t('toast.alreadyDone') : t('toast.joinRecorded', { amount: (res.reward || 0).toFixed(3) }) + ' ' + t('toast.pointsEarned', { points: res.rewardPoints }), 'success');
       if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
       loadHome();
       loadWalletTx();
@@ -291,7 +291,7 @@
       if (res.alreadyDone){
         showToast(t('toast.comeBackTomorrow'), 'info');
       } else {
-        showToast(t('toast.dailyClaimed', { amount: res.reward.toFixed(3) }) + (res.milestone ? t('toast.streakComplete') : ''), 'success');
+        showToast(t('toast.dailyClaimed', { amount: res.reward.toFixed(3) }) + (res.milestone ? t('toast.streakComplete') : '') + ' ' + t('toast.pointsEarned', { points: res.rewardPoints }), 'success');
         updateBalanceDisplay(res.newBalance);
       }
       loadHome();
@@ -381,10 +381,10 @@
       <div class="task-card">
         <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg></div>
         <div class="task-mid">
-          <div class="tn">${r.title}</div>
+          <div class="tn">${r.titleKey ? t(r.titleKey) : r.title}</div>
           <div class="td">${t('rewards.cost', { cost: r.cost.toLocaleString('en-US') })}</div>
         </div>
-        <button class="task-btn" onclick="redeemReward('${id}', ${r.cost}, '${r.title}')">${t('rewards.redeem')}</button>
+        <button class="task-btn" onclick="redeemReward('${id}', ${r.cost}, '${r.titleKey ? t(r.titleKey) : r.title}')">${t('rewards.redeem')}</button>
       </div>
     `).join('');
   }
