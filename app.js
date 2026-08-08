@@ -335,22 +335,32 @@
 
   function playTaddyAd(){
     return new Promise((resolve) => {
-      let viewed = false;
       let settled = false;
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
         resolve('timeout');
       }, TADDY_LOAD_TIMEOUT_MS);
+
+      // 🛡️ الاعتماد الأساسي على الـ Promise الراجع من interstitial() نفسه (success: boolean)
+      // بدل onViewThrough فقط — حسب توثيق Taddy الرسمي هاد هو المصدر الموثوق لتأكيد أن
+      // الإعلان انعرض فعلاً كاملاً. onViewThrough أحياناً ما ينادى بشكل موثوق/بوقته فيعلّق المكافأة.
       try{
-        window.Taddy.ads().interstitial({
-          onClosed: () => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            resolve(viewed);
-          },
-          onViewThrough: () => { viewed = true; }
+        const result = window.Taddy.ads().interstitial({
+          onClosed: () => {},
+          onViewThrough: () => {}
+        });
+        Promise.resolve(result).then((success) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(!!success);
+        }).catch((e) => {
+          console.warn('[taddy] interstitial promise rejected', e);
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(false);
         });
       } catch(e){
         console.warn('[taddy] interstitial failed', e);

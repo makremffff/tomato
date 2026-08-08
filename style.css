@@ -606,8 +606,8 @@
     flex-shrink:0;
   }
   .task-ic svg{width:21px;height:21px; color:var(--violet);}
-  .task-ic img{width:60px;height:60px; object-fit:contain;
-  border-radius: 40%;}
+  .task-ic img{width:60px;height:60px; object-fit:contain;}
+  #taddyRewardCard .task-ic img{border-radius:40%;}
   .task-mid{flex:1; min-width:0;}
   .task-mid .tn{font-size:14px; font-weight:700;}
   .tn-row{display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
