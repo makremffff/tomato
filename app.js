@@ -327,9 +327,54 @@
     openModal('confirmModalOverlay');
   }
 
+  /* ===== Rewards: Taddy watch-to-earn card =====
+     زر واحد يشغّل إعلانين Taddy (interstitial) ورا بعض مباشرة عبر نفس Taddy SDK
+     المُهيَّأ أصلاً في taddy-ads.js، ثم يطالب السيرفر بنقاط tasks.taddyReward
+     فقط لو الاثنين انشاهدوا كاملين (onViewThrough) — إغلاق مبكر لا يُحتسب. */
+  function playTaddyAd(){
+    return new Promise((resolve) => {
+      let viewed = false;
+      try{
+        window.Taddy.ads().interstitial({
+          onClosed: () => resolve(viewed),
+          onViewThrough: () => { viewed = true; }
+        });
+      } catch(e){
+        console.warn('[taddy] interstitial failed', e);
+        resolve(false);
+      }
+    });
+  }
+
+  async function watchTaddyReward(btn){
+    if (!window.Taddy || typeof window.Taddy.ads !== 'function'){
+      showToast(t('rewards.taddyUnavailable'), 'error');
+      return;
+    }
+    setBtnLoading(btn, true);
+    try{
+      const v1 = await playTaddyAd();
+      if (!v1) throw new Error('taddy_incomplete');
+      const v2 = await playTaddyAd();
+      if (!v2) throw new Error('taddy_incomplete');
+
+      const res = await apiCall('tasks.taddyReward', {});
+      document.getElementById('pointsBalance').textContent = Number(res.newPointsBalance).toLocaleString('en-US');
+      showToast(t('rewards.taddySuccess', { points: res.reward }), 'success');
+    } catch(err){
+      if (err && err.message === 'taddy_incomplete') showToast(t('rewards.taddyIncomplete'), 'error');
+      else showToast(friendlyError(err), 'error');
+    } finally {
+      setBtnLoading(btn, false, t('rewards.taddyWatch'));
+    }
+  }
+
   function renderRewards(){
     const s = appState;
     document.getElementById('pointsBalance').textContent = Number(s.user.points).toLocaleString('en-US');
+    const taddyPoints = s?.config?.taddy_reward_points;
+    const taddyDescEl = document.getElementById('taddyRewardDesc');
+    if (taddyDescEl && taddyPoints != null) taddyDescEl.textContent = t('rewards.taddyDesc', { points: taddyPoints });
     const catalog = s?.config?.rewards_catalog || {};
     const list = document.getElementById('rewardsList');
     list.innerHTML = Object.entries(catalog).map(([id, r]) => `
