@@ -292,6 +292,15 @@
       <button class="task-btn" id="taddyWatchBtn" onclick="watchTaddyReward(this)" data-i18n="rewards.taddyWatch">مشاهدة</button>
     </div>
 
+    <div class="task-card" id="surfRewardCard">
+      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg></div>
+      <div class="task-mid">
+        <div class="tn" data-i18n="surf.cardTitle">تصفح واربح</div>
+        <div class="td" data-i18n="surf.cardDesc">دقيقة وحدة، دفعات صغيرة كل 5 ثواني</div>
+      </div>
+      <button class="task-btn" id="surfStartBtn" onclick="openSurfPage()" data-i18n="surf.start">ابدأ</button>
+    </div>
+
     <div class="bottom-pad"></div>
   </div>
 
@@ -511,6 +520,63 @@
     </div>
 
     <div class="bottom-pad"></div>
+  </div>
+
+  <!-- ============ SURF & EARN (صفحة كاملة مستقلة) ============ -->
+  <div class="page" id="page-surf">
+    <div class="topbar">
+      <div class="avatar-btn" onclick="exitSurfPage()" style="cursor:pointer;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </div>
+      <div class="brand-mini">
+        <span data-i18n="surf.title">تصفح واربح</span>
+      </div>
+      <div style="width:44px"></div>
+    </div>
+
+    <!-- ⏱️ العداد الرئيسي — أعلى الصفحة، بمنتصفها، بأرقام كبيرة، يبدأ العد التنازلي فقط
+         بعد ما يوافق المستخدم على تنبيه الإعلانات (surfConsentScreen) -->
+    <div style="text-align:center; margin-top:18px;">
+      <div id="surfCountdownDisplay" style="font-size:56px; font-weight:800; color:var(--text-1); line-height:1;">60</div>
+      <div style="color:var(--text-3); font-size:12px; margin-top:4px;" data-i18n="surf.secondsLeft">ثانية متبقية</div>
+    </div>
+
+    <div class="surf-progress-wrap" style="background:var(--glass); border-radius:20px; height:10px; overflow:hidden; margin:18px 0 8px;">
+      <div id="surfProgressBar" style="height:100%; width:0%; background:var(--violet); transition:width .4s ease;"></div>
+    </div>
+    <div class="eyebrow" style="text-align:center;"><span id="surfEarnedSoFar">+0.0000$</span></div>
+
+    <!-- 📌 مكان إعلان Adcash (Banner/In-Page) — عوّض المحتوى هون بسكربت الزون لما يتوفر zoneId.
+         التحميل يبدأ فقط بعد موافقة المستخدم بالشاشة المنبثقة، مو تلقائياً بمجرد فتح الصفحة -->
+    <div id="surfBannerZone" style="min-height:220px; display:flex; align-items:center; justify-content:center; background:var(--glass); border-radius:14px; margin:18px 0; color:var(--text-3); font-size:12px;">
+      <span id="surfAdPlaceholderText" data-i18n="surf.adPlaceholder">مكان الإعلان</span>
+    </div>
+
+    <!-- 🚪 زر خروج ثابت على جانب الشاشة — متاح طول وقت الجلسة لو المستخدم بدو يطلع بأي لحظة -->
+    <button id="surfExitSideBtn" onclick="exitSurfPage()" style="position:fixed; top:50%; transform:translateY(-50%); inset-inline-start:10px; z-index:75; width:44px; height:44px; border-radius:50%; background:var(--glass-strong); border:1px solid var(--border); color:var(--text-1); display:flex; align-items:center; justify-content:center;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+    </button>
+
+    <div class="bottom-pad"></div>
+  </div>
+
+  <!-- 🛡️ شاشة منبثقة إلزامية بمنتصف الصفحة — تنبيه محتوى الإعلانات، تظهر قبل أي تحميل -->
+  <div class="modal-overlay show" id="surfConsentOverlay" style="display:none;">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" data-i18n="surf.consentTitle">⚠️ تنبيه قبل المتابعة</div>
+      <div class="modal-sub" data-i18n="surf.consentBody">يجب أن تعرف أنه من الممكن أن تظهر إعلانات غير لائقة أثناء هذه الجلسة. نحن لا نعرض هذه الإعلانات ولا نتحكم بمحتواها — هي من طرف شبكات إعلانية خارجية.</div>
+
+      <label style="display:flex; align-items:center; gap:8px; margin:14px 2px; font-size:13px; color:var(--text-2); cursor:pointer;">
+        <input type="checkbox" id="surfDontRemindCheckbox" style="width:18px;height:18px;">
+        <span data-i18n="surf.dontRemind">لا تذكرني كل مرة</span>
+      </label>
+
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="exitSurfPage()" style="flex:1;" data-i18n="common.cancel">إلغاء</button>
+        <button class="btn-primary" onclick="agreeSurfConsent()" style="flex:2;" data-i18n="surf.agreeStart">أوافق وابدأ</button>
+      </div>
+    </div>
   </div>
 
 </div>
