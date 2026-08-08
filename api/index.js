@@ -72,6 +72,16 @@ const APP_CFG = {
   TADDY_REWARD_POINTS: 5,
   TADDY_DAILY_MAX:     200,   // أقصى عدد مرات يقدر المستخدم ياخد المكافأة فيها باليوم
 
+  // 🌊 "تصفح واربح" — صفحة فيها عداد 60 ثانية وإعلانات Adcash تحمّل بالخلفية، تُصرف دفعات
+  // صغيرة كل 5 ثواني. ⚠️ التحقق من الوقت يتم بالكامل من فرق الوقت المسجّل بالسيرفر
+  // (started_at بجدول ad_surf_sessions) وليس من عداد الواجهة — عشان ما ينقدر يتلاعب فيه أحد
+  // عبر تعديل الـ JS أو نداء API مباشرة بدون انتظار.
+  SURF_TICK_SECONDS:       10,      // طول كل دفعة بالثواني
+  SURF_TOTAL_TICKS:        12,     // 12 × 5 ثانية = 60 ثانية إجمالي
+  SURF_REWARD_PER_TICK_USD: 0.0001, // ⚠️ رقم مبدئي بسيط — غيّره حسب ما تحدد
+  SURF_DAILY_MAX_SESSIONS: 10,     // أقصى عدد جلسات (محاولات بدء) باليوم — يحد من استغلال بدء/هجر الجلسة لتكرار مكافأة أول دفعة فقط
+  SURF_SESSION_EXPIRE_MIN: 10,     // أي جلسة غير مكتملة تعتبر منتهية بعد هالمدة (تنظيف/أمان)
+
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.005,
   JOIN_CHANNEL_REWARD_POINTS: 50,
@@ -215,6 +225,10 @@ async function ensureSchema() {
     // 🎬 كرت Taddy بصفحة المكافآت — حصة يومية مستقلة تمامًا عن daily_ads / daily_task_ads
     ['daily_taddy', 'INT NOT NULL DEFAULT 0'],
     ['last_taddy_date', 'DATE'],
+    // 🌊 "تصفح واربح" — حصة يومية لعدد الجلسات (بدء الجلسة يُحتسب حتى لو ما اكتملت،
+    // عشان يمنع تكرار بدء/هجر الجلسة لاستغلال مكافأة الدفعة الأولى بلا حدود)
+    ['daily_surf', 'INT NOT NULL DEFAULT 0'],
+    ['last_surf_date', 'DATE'],
   ];
   for (const [col, def] of backfillCols) {
     await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -258,7 +272,19 @@ async function ensureSchema() {
     PRIMARY KEY (user_id, task_id)
   )`);
 
-  // السحوبات
+  // 🌊 جلسات "تصفح واربح" — كل جلسة لها nonce عشوائي غير قابل للتخمين، وكل التحقق من
+  // الوقت (هل فعلاً مرّت 5/10/15... ثانية) يتم من started_at المسجّل هون بالسيرفر، وليس
+  // من أي قيمة يبعتها الكلايند — هيك ما ينفع حد يتلاعب بالعداد بالواجهة أو ينادي API مباشرة
+  await sql(`CREATE TABLE IF NOT EXISTS ad_surf_sessions (
+    id            SERIAL PRIMARY KEY,
+    user_id       INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    nonce         TEXT NOT NULL UNIQUE,
+    started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    claimed_ticks INT NOT NULL DEFAULT 0,
+    completed     BOOLEAN NOT NULL DEFAULT FALSE
+  )`);
+  await sql(`CREATE INDEX IF NOT EXISTS idx_surf_sessions_nonce ON ad_surf_sessions(nonce)`);
+  await sql(`CREATE INDEX IF NOT EXISTS idx_surf_sessions_user ON ad_surf_sessions(user_id)`);  // السحوبات
   await sql(`CREATE TABLE IF NOT EXISTS withdrawals (
     id         SERIAL PRIMARY KEY,
     user_id    INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1134,6 +1160,95 @@ module.exports = async function handler(req, res) {
           newPointsBalance: Number(claimed[0].points),
           dailyTaddyProgress: Number(claimed[0].daily_taddy),
           dailyTaddyMax: APP_CFG.TADDY_DAILY_MAX,
+        });
+      }
+
+      // ═══════════ "تصفح واربح" — بدء جلسة (60 ثانية، 12 دفعة كل 5 ثواني) ═══════════
+      case 'ads.surfStart': {
+        const today = new Date().toISOString().slice(0, 10);
+        const dailyCount = toDateStr(dbUser.last_surf_date) === today ? dbUser.daily_surf : 0;
+        if (dailyCount >= APP_CFG.SURF_DAILY_MAX_SESSIONS) {
+          return res.status(429).json({ ok: false, error: 'daily_limit_reached' });
+        }
+
+        // بدء الجلسة يُحتسب من حصة اليوم فوراً (مش بس عند الاكتمال) — عشان يمنع
+        // حد يبدأ ويهجر الجلسة بشكل متكرر لاستغلال مكافأة أول دفعة فقط بلا حدود
+        await sql(
+          `UPDATE users SET
+             daily_surf = CASE WHEN last_surf_date = $1 THEN daily_surf + 1 ELSE 1 END,
+             last_surf_date = $1
+           WHERE id = $2`,
+          [today, dbUser.id]
+        );
+
+        const nonce = crypto.randomBytes(24).toString('hex');
+        await sql(`INSERT INTO ad_surf_sessions (user_id, nonce) VALUES ($1, $2)`, [dbUser.id, nonce]);
+
+        return res.json({
+          ok: true,
+          nonce,
+          tickSeconds: APP_CFG.SURF_TICK_SECONDS,
+          totalTicks: APP_CFG.SURF_TOTAL_TICKS,
+          rewardPerTick: APP_CFG.SURF_REWARD_PER_TICK_USD,
+        });
+      }
+
+      // ═══════════ "تصفح واربح" — تأكيد دفعة (كل 5 ثواني) ═══════════
+      case 'ads.surfClaim': {
+        const nonce = String(data.nonce || '');
+        const tick = parseInt(data.tick, 10);
+        if (!nonce || !Number.isInteger(tick) || tick < 1 || tick > APP_CFG.SURF_TOTAL_TICKS) {
+          return res.status(400).json({ ok: false, error: 'invalid_request' });
+        }
+
+        const rows = await sql(
+          `SELECT id, claimed_ticks, completed,
+                  EXTRACT(EPOCH FROM (NOW() - started_at)) AS elapsed_sec
+           FROM ad_surf_sessions
+           WHERE nonce = $1 AND user_id = $2
+             AND started_at > NOW() - INTERVAL '${APP_CFG.SURF_SESSION_EXPIRE_MIN} minutes'`,
+          [nonce, dbUser.id]
+        );
+        if (!rows.length) return res.status(400).json({ ok: false, error: 'invalid_session' });
+        const session = rows[0];
+        if (session.completed) return res.status(400).json({ ok: false, error: 'session_completed' });
+
+        // 🛡️ لازم تكون الدفعة التالية بالتسلسل بالظبط (يمنع تكرار/تخطي دفعات)
+        if (tick !== session.claimed_ticks + 1) {
+          return res.status(400).json({ ok: false, error: 'invalid_tick' });
+        }
+
+        // 🛡️ التحقق الحقيقي من الوقت: لازم يكون فعلاً مرّ الوقت المطلوب حسب started_at
+        // بالسيرفر (مو حسب عداد الواجهة) — هامش ثانية واحدة بس لتأخير الشبكة
+        const requiredSec = tick * APP_CFG.SURF_TICK_SECONDS;
+        if (Number(session.elapsed_sec) < requiredSec - 1) {
+          return res.status(400).json({ ok: false, error: 'too_early' });
+        }
+
+        const isLastTick = tick >= APP_CFG.SURF_TOTAL_TICKS;
+        const reward = APP_CFG.SURF_REWARD_PER_TICK_USD;
+
+        const updatedUser = await sql(
+          `UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2 RETURNING balance_usd`,
+          [reward, dbUser.id]
+        );
+        await sql(
+          `UPDATE ad_surf_sessions SET claimed_ticks = $1, completed = $2 WHERE id = $3`,
+          [tick, isLastTick, session.id]
+        );
+
+        if (isLastTick) {
+          const totalUsd = reward * APP_CFG.SURF_TOTAL_TICKS;
+          await logTx(dbUser.id, 'ads', 'تصفح وربح — جلسة إعلانات', totalUsd, 'tx.surfSession');
+          await creditReferralCommission(dbUser, totalUsd);
+        }
+
+        return res.json({
+          ok: true,
+          tick,
+          completed: isLastTick,
+          reward,
+          newBalance: parseFloat(updatedUser[0].balance_usd),
         });
       }
 
