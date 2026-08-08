@@ -2,31 +2,6 @@
 <html lang="ar" dir="rtl" id="htmlRoot">
 <head>
 <meta charset="UTF-8">
-<!-- ===== Adcash: مكتبة السكربت + AutoTag (يعرض إعلانات تلقائياً بالخلفية، بدون تفاعل من المستخدم) ===== -->
-<script id="aclib" type="text/javascript" src="//acscdn.com/script/aclib.js"></script>
-<script type="text/javascript">
-  // ⏳ سكربت aclib.js أحياناً يتأخر بالتحميل (شبكة بطيئة/Adblock)، فبدل ما ننادي
-  // runAutoTag فوراً ونطلع Uncaught TypeError، منتأكد إنه جاهز أول، ومنعيد المحاولة لين
-  // يوصل حد أقصى، وبعدين منستسلم بهدوء بدون ما نكسر باقي سكربتات الصفحة.
-  (function initAdcashAutoTag(){
-    var attempts = 0;
-    var maxAttempts = 20; // ~5 ثواني
-    function tryInit(){
-      if (window.aclib && typeof window.aclib.runAutoTag === 'function'){
-        try { window.aclib.runAutoTag({ zoneId: 'la4zewigtl' }); }
-        catch(e){ console.warn('[adcash] runAutoTag error', e); }
-        return;
-      }
-      attempts++;
-      if (attempts >= maxAttempts){
-        console.warn('[adcash] aclib لم يتحمّل — تم تخطي AutoTag');
-        return;
-      }
-      setTimeout(tryInit, 250);
-    }
-    tryInit();
-  })();
-</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
 <title>RealCash</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
