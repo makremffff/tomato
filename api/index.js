@@ -67,6 +67,11 @@ const APP_CFG = {
   TASK_AD_DAILY_MAX:    3,    // أقصى عدد مهام Task مسموح بها باليوم لكل مستخدم — عدّله بحرية
   TASK_AD_COOLDOWN_SEC: 60,    // أقل فاصل زمني بين مطالبتين (دقيقة واحدة)
 
+  // 🎬 كرت Taddy في صفحة المكافآت — إعلانين interstitial ورا بعض عبر Taddy SDK ثم نقاط مباشرة
+  // (بدون تأكيد server-to-server — نفس منطق الثقة بالعميل المستخدم أصلاً في taddy-ads.js)
+  TADDY_REWARD_POINTS: 5,
+  TADDY_DAILY_MAX:     200,   // أقصى عدد مرات يقدر المستخدم ياخد المكافأة فيها باليوم
+
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.005,
   JOIN_CHANNEL_REWARD_POINTS: 50,
@@ -203,6 +208,9 @@ async function ensureSchema() {
     // 📢 تتبّع مغادرة القناة بعد إنجاز مهمة الانضمام — لخصم المكافأة مرة واحدة فقط
     ['channel_penalized', 'BOOLEAN NOT NULL DEFAULT FALSE'],
     ['last_channel_check_at', 'TIMESTAMPTZ'],
+    // 🎬 كرت Taddy بصفحة المكافآت — حصة يومية مستقلة تمامًا عن daily_ads / daily_task_ads
+    ['daily_taddy', 'INT NOT NULL DEFAULT 0'],
+    ['last_taddy_date', 'DATE'],
   ];
   for (const [col, def] of backfillCols) {
     await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -832,6 +840,7 @@ module.exports = async function handler(req, res) {
             contest_prizes_usd: APP_CFG.CONTEST_PRIZES_USD,
             withdraw_min_usd: APP_CFG.WITHDRAW_MIN_USD, rewards_catalog: APP_CFG.REWARDS_CATALOG,
             channel_username: CHANNEL_USERNAME || null,
+            taddy_reward_points: APP_CFG.TADDY_REWARD_POINTS,
           },
         });
       }
@@ -1089,6 +1098,32 @@ module.exports = async function handler(req, res) {
 
         const refreshed = (await sql(`SELECT points, balance_usd FROM users WHERE id = $1`, [dbUser.id]))[0];
         return res.json({ ok: true, newPointsBalance: Number(refreshed.points), newBalance: parseFloat(refreshed.balance_usd) });
+      }
+
+      // ═══════════ كرت Taddy في صفحة المكافآت (إعلانين ورا بعض → نقاط) ═══════════
+      case 'tasks.taddyReward': {
+        const today = new Date().toISOString().slice(0, 10);
+        const dailyCount = toDateStr(dbUser.last_taddy_date) === today ? dbUser.daily_taddy : 0;
+        if (dailyCount >= APP_CFG.TADDY_DAILY_MAX) {
+          return res.status(429).json({ ok: false, error: 'daily_limit_reached' });
+        }
+
+        const claimed = await sql(
+          `UPDATE users SET
+             points = points + $1,
+             daily_taddy = CASE WHEN last_taddy_date = $2 THEN daily_taddy + 1 ELSE 1 END,
+             last_taddy_date = $2
+           WHERE id = $3
+           RETURNING points, daily_taddy`,
+          [APP_CFG.TADDY_REWARD_POINTS, today, dbUser.id]
+        );
+        return res.json({
+          ok: true,
+          reward: APP_CFG.TADDY_REWARD_POINTS,
+          newPointsBalance: Number(claimed[0].points),
+          dailyTaddyProgress: Number(claimed[0].daily_taddy),
+          dailyTaddyMax: APP_CFG.TADDY_DAILY_MAX,
+        });
       }
 
       // ═══════════ المحفظة: TON Connect ═══════════
