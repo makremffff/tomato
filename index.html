@@ -9,7 +9,6 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js"></script>
 <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
-<script src="https://sdk.taddy.pro/web/taddy.min.js?1315" data-pub-id="20728df5e1554d2c5ae58c8adc6d7305"></script>
 <link rel="stylesheet" href="style.css">
 <!-- Adsterra Popunder — حسب تعليمات Adsterra: وحدة وحدة بس لكل صفحة، قبل إغلاق </head> مباشرة -->
 <script src="https://pl29189522.effectivecpmnetwork.com/df/c2/ac/dfc2ac46938fa3284515588bf2f9203c.js"></script>
@@ -285,15 +284,6 @@
 
     <div id="rewardsList"></div>
 
-    <div class="task-card" id="taddyRewardCard">
-      <div class="task-ic"><img src="asesst/taddy.jpg" alt="Taddy"></div>
-      <div class="task-mid">
-        <div class="tn" data-i18n="rewards.taddyTitle">مشاهدة Taddy</div>
-        <div class="td" id="taddyRewardDesc" data-i18n="rewards.taddyDesc">شاهد إعلانين واحصل على 5 نقاط</div>
-      </div>
-      <button class="task-btn" id="taddyWatchBtn" onclick="watchTaddyReward(this)" data-i18n="rewards.taddyWatch">مشاهدة</button>
-    </div>
-
     <div class="task-card" id="smartlinkRewardCard">
       <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
       <div class="task-mid">
@@ -307,7 +297,7 @@
       <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg></div>
       <div class="task-mid">
         <div class="tn" data-i18n="surf.cardTitle">تصفح واربح</div>
-        <div class="td" data-i18n="surf.cardDesc">دقيقة وحدة، دفعات صغيرة كل 5 ثواني</div>
+        <div class="td" data-i18n="surf.cardDesc">دقيقة وحدة، دفعات صغيرة كل 10 ثواني</div>
       </div>
       <button class="task-btn" id="surfStartBtn" onclick="openSurfPage()" data-i18n="surf.start">ابدأ</button>
     </div>
@@ -537,7 +527,7 @@
   <div class="page" id="page-surf">
     <!-- 🚪 زر خروج وحيد — ثابت على الشاشة (fixed) أعلى يمين، بأعلى طبقة (z-index) حتى يضل
          ظاهر وقابل للنقر فوق أي إعلان قد يظهر بكامل الشاشة -->
-    <button id="surfExitBtn" onclick="exitSurfPage()" aria-label="خروج" style="position:fixed; top:44px; right:14px; z-index:99999; width:40px; height:40px; border-radius:50%; background:var(--glass-strong); backdrop-filter:blur(10px); border:1px solid var(--border); color:var(--text-1); display:flex; align-items:center; justify-content:center;">
+    <button id="surfExitBtn" onclick="exitSurfPage()" aria-label="خروج" style="position:fixed; top:64px; right:14px; z-index:99999; width:40px; height:40px; border-radius:50%; background:var(--glass-strong); backdrop-filter:blur(10px); border:1px solid var(--border); color:var(--text-1); display:flex; align-items:center; justify-content:center;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
 
@@ -571,13 +561,8 @@
   <div class="modal-overlay show" id="surfConsentOverlay" style="display:none;">
     <div class="modal-sheet">
       <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="surf.consentTitle">⚠️ تنبيه قبل المتابعة</div>
-      <div class="modal-sub" data-i18n="surf.consentBody">يجب أن تعرف أنه من الممكن أن تظهر إعلانات غير لائقة أثناء هذه الجلسة. نحن لا نعرض هذه الإعلانات ولا نتحكم بمحتواها — هي من طرف شبكات إعلانية خارجية.</div>
-
-      <label style="display:flex; align-items:center; gap:8px; margin:14px 2px; font-size:13px; color:var(--text-2); cursor:pointer;">
-        <input type="checkbox" id="surfDontRemindCheckbox" style="width:18px;height:18px;">
-        <span data-i18n="surf.dontRemind">لا تذكرني كل مرة</span>
-      </label>
+      <div class="modal-title" data-i18n="surf.consentTitle">⚠️ تنبيه هام قبل المتابعة</div>
+      <div class="modal-sub" data-i18n="surf.consentBody">قد تظهر خلال هذه الجلسة إعلانات غير لائقة. نحن لا نعرض هذه الإعلانات ولا نتحكم بمحتواها — هي من طرف شبكات إعلانية خارجية بالكامل. بالمتابعة، أنت تقر بأنك مسؤول بشكل كامل عن قرارك بالتصفح، وأنك غير مُجبر على مشاهدة أي محتوى لست مقتنعاً به، ويمكنك الخروج من الصفحة في أي لحظة.</div>
 
       <div class="modal-actions">
         <button class="btn-ghost" onclick="exitSurfPage()" style="flex:1;" data-i18n="common.cancel">إلغاء</button>
@@ -724,7 +709,6 @@
 <script src="api.js"></script>
 <script src="ui.js"></script>
 <script src="app.js"></script>
-<script src="taddy-ads.js"></script>
 
 </body>
 </html>

@@ -16,8 +16,8 @@
   const ADSGRAM_BLOCK_ID  = '40439';                          // نفس Block ID المستخدم في BigLeague
   const ADSGRAM_TASK_BLOCK_ID = 'task-40539';                  // Block ID لإعلانات Task (نوعه Task في partner.adsgram.ai) — دائمًا بصيغة task-xxx
 
-  // 🚧 "تصفح واربح" قيد التطوير — ظاهرة بس للأدمن (آيدي تليجرام تحت) لحد ما تخليها false
-  const SURF_UNDER_DEVELOPMENT = true;
+  // ✅ "تصفح واربح" صارت ظاهرة لكل المستخدمين (كانت سابقاً قيد التطوير وظاهرة للأدمن فقط)
+  const SURF_UNDER_DEVELOPMENT = false;
   const SURF_ADMIN_TELEGRAM_ID = '7741750541';
 
   // 🔗 رابط الإحالة الرسمي — Mini App deep link عبر startapp (وليس start العادي)

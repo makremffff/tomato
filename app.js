@@ -327,77 +327,6 @@
     openModal('confirmModalOverlay');
   }
 
-  /* ===== Rewards: Taddy watch-to-earn card =====
-     زر واحد يشغّل إعلانين Taddy (interstitial) ورا بعض مباشرة عبر نفس Taddy SDK
-     المُهيَّأ أصلاً في taddy-ads.js، ثم يطالب السيرفر بنقاط tasks.taddyReward
-     فقط لو الاثنين انشاهدوا كاملين (onViewThrough) — إغلاق مبكر لا يُحتسب. */
-  const TADDY_LOAD_TIMEOUT_MS = 10000; // ⏱️ لو تأخر تحميل الإعلان أكثر من 10 ثواني نلغي العملية بدل التعليق للأبد
-
-  function playTaddyAd(){
-    return new Promise((resolve) => {
-      let settled = false;
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        resolve('timeout');
-      }, TADDY_LOAD_TIMEOUT_MS);
-
-      // 🛡️ الاعتماد الأساسي على الـ Promise الراجع من interstitial() نفسه (success: boolean)
-      // بدل onViewThrough فقط — حسب توثيق Taddy الرسمي هاد هو المصدر الموثوق لتأكيد أن
-      // الإعلان انعرض فعلاً كاملاً. onViewThrough أحياناً ما ينادى بشكل موثوق/بوقته فيعلّق المكافأة.
-      try{
-        const result = window.Taddy.ads().interstitial({
-          onClosed: () => {},
-          onViewThrough: () => {}
-        });
-        Promise.resolve(result).then((success) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          resolve(!!success);
-        }).catch((e) => {
-          console.warn('[taddy] interstitial promise rejected', e);
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          resolve(false);
-        });
-      } catch(e){
-        console.warn('[taddy] interstitial failed', e);
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(false);
-      }
-    });
-  }
-
-  async function watchTaddyReward(btn){
-    if (!window.Taddy || typeof window.Taddy.ads !== 'function'){
-      showToast(t('rewards.taddyUnavailable'), 'error');
-      return;
-    }
-    setBtnLoading(btn, true);
-    try{
-      const v1 = await playTaddyAd();
-      if (v1 === 'timeout') throw new Error('taddy_timeout');
-      if (!v1) throw new Error('taddy_incomplete');
-      const v2 = await playTaddyAd();
-      if (v2 === 'timeout') throw new Error('taddy_timeout');
-      if (!v2) throw new Error('taddy_incomplete');
-
-      const res = await apiCall('tasks.taddyReward', {});
-      document.getElementById('pointsBalance').textContent = Number(res.newPointsBalance).toLocaleString('en-US');
-      showToast(t('rewards.taddySuccess', { points: res.reward }), 'success');
-    } catch(err){
-      if (err && err.message === 'taddy_timeout') showToast(t('toast.noAdsAvailable'), 'error');
-      else if (err && err.message === 'taddy_incomplete') showToast(t('rewards.taddyIncomplete'), 'error');
-      else showToast(friendlyError(err), 'error');
-    } finally {
-      setBtnLoading(btn, false, t('rewards.taddyWatch'));
-    }
-  }
-
   /* ===== Rewards: Adsterra Smart Link card =====
      زر بيفتح الرابط الذكي بتاب/متصفح خارجي، وبعدها انتظار 10 ثواني حقيقية (يتحقق منها
      السيرفر من started_at، مش من عداد الواجهة)، وبعدين يقدر يستلم النقاط. */
@@ -463,7 +392,6 @@
      كلها. الـ iframe بيعزل الـ document.write جوا صفحته الخاصة بس. */
   let surfState = null; // { nonce, tick, totalTicks, tickSeconds, timer, displayTimer, remainingSeconds, earned }
   let surfPreviousPageId = 'rewards';
-  const SURF_CONSENT_KEY = 'surfConsentAcknowledged';
 
   // Native Banner (يتمدد مع عرض الحاوية)
   const ADSTERRA_NATIVE_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
@@ -485,7 +413,7 @@
   let surfAdFrames = [];
   let surfSocialBarFrame = null;
   let surfAdRefreshTimer = null;
-  const SURF_AD_REFRESH_MS = 10000; // ⏱️ تحديث الإعلانات كل 10 ثواني
+  const SURF_AD_REFRESH_MS = 5000; // ⏱️ تحديث الإعلانات كل 5 ثواني
 
   function makeAdIframe(srcdocHtml, width, height){
     const f = document.createElement('iframe');
@@ -526,7 +454,7 @@
   function loadAdsterraAds(){
     if (surfAdFrames.length || surfAdRefreshTimer) return; // محمّلة أصلاً
     renderAdsterraAds();
-    // ⏱️ كل الوحدات الأربعة تتجدد سوا كل 10 ثواني طول ما الجلسة شغالة
+    // ⏱️ كل الوحدات الأربعة تتجدد سوا كل 5 ثواني طول ما الجلسة شغالة
     surfAdRefreshTimer = setInterval(renderAdsterraAds, SURF_AD_REFRESH_MS);
   }
 
@@ -563,19 +491,12 @@
     document.getElementById('surfEarnedSoFar').textContent = '+0.0000$';
     document.getElementById('surfCountdownDisplay').textContent = '60';
 
-    // 🛡️ التحميل ما يبلش أبداً إلا بعد موافقة المستخدم — لو سبق ووافق وحدد "لا تذكرني"،
-    // منتخطى الشاشة المنبثقة، وإلا لازم يوافق أول
-    if (localStorage.getItem(SURF_CONSENT_KEY) === '1'){
-      beginSurfSession();
-    } else {
-      document.getElementById('surfConsentOverlay').style.display = 'flex';
-    }
+    // 🛡️ التحميل ما يبلش أبداً إلا بعد موافقة المستخدم — التنبيه يظهر إلزامياً في كل مرة
+    // بدون أي استثناء أو خيار لتخطيه لاحقاً
+    document.getElementById('surfConsentOverlay').style.display = 'flex';
   }
 
   function agreeSurfConsent(){
-    if (document.getElementById('surfDontRemindCheckbox').checked){
-      localStorage.setItem(SURF_CONSENT_KEY, '1');
-    }
     document.getElementById('surfConsentOverlay').style.display = 'none';
     beginSurfSession();
   }
@@ -676,9 +597,6 @@
     const surfCard = document.getElementById('surfRewardCard');
     if (surfCard) surfCard.style.display = (SURF_UNDER_DEVELOPMENT && !isSurfAdmin()) ? 'none' : '';
     document.getElementById('pointsBalance').textContent = Number(s.user.points).toLocaleString('en-US');
-    const taddyPoints = s?.config?.taddy_reward_points;
-    const taddyDescEl = document.getElementById('taddyRewardDesc');
-    if (taddyDescEl && taddyPoints != null) taddyDescEl.textContent = t('rewards.taddyDesc', { points: taddyPoints });
     const catalog = s?.config?.rewards_catalog || {};
     const list = document.getElementById('rewardsList');
     list.innerHTML = Object.entries(catalog).map(([id, r]) => {
