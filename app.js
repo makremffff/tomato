@@ -478,10 +478,8 @@
     '</body></html>';
 
   // Social Bar (إعلان عائم فوق الصفحة كلها — بيحقن نفسه بمكانه بشكل تلقائي)
-  // ملاحظة: وحدتين Social Bar من Adsterra سوا بنفس الـ iframe — ما بيتعارضوا، كل وحدة بتحقن نفسها لحالها
   const ADSTERRA_SOCIALBAR_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
     '<script src="https://pl30769264.effectivecpmnetwork.com/96/90/da/9690da690d344e2579dffa12d4e2ac24.js"></script>' +
-    '<script src="https://pl29189522.effectivecpmnetwork.com/df/c2/ac/dfc2ac46938fa3284515588bf2f9203c.js"></script>' +
     '</body></html>';
 
   let surfAdFrames = [];
