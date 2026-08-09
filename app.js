@@ -398,6 +398,179 @@
     }
   }
 
+  /* ===== "تصفح واربح" — صفحة كاملة مستقلة، دفعات كل 5 ثواني (التحقق الفعلي من الوقت من السيرفر) =====
+     🛡️ وحدة إعلان AdSense ما تتحقن نهائياً بأي مكان تاني بالتطبيق — تتحقن فقط هون، ولحظة موافقة
+     المستخدم فعلياً، وتتشال من الصفحة تماماً أول ما يخرج المستخدم (زر الخروج أو انتهاء الجلسة) */
+  let surfState = null; // { nonce, tick, totalTicks, tickSeconds, timer, displayTimer, remainingSeconds, earned }
+  let surfPreviousPageId = 'rewards';
+  const SURF_CONSENT_KEY = 'surfConsentAcknowledged';
+  const ADSENSE_CLIENT = 'ca-pub-6574623923471894';
+  const ADSENSE_SLOT = '2716011836';
+  let adsenseLoaderScriptEl = null;
+  let adsenseInsEl = null;
+
+  function loadAdsenseAd(){
+    const container = document.getElementById('surfAdsenseContainer');
+    if (!container || adsenseInsEl) return; // محمّل أصلاً
+
+    // سكربت adsbygoogle.js نفسه — بيتحمّل مرة وحدة بس (لو موجود أصلاً منستخدمه)، وما بيعرض
+    // أي إعلان لحاله لحد ما نحقن وحدة <ins> ونعمل لها push
+    if (!document.getElementById('adsbygoogle-loader')){
+      const s = document.createElement('script');
+      s.id = 'adsbygoogle-loader';
+      s.async = true;
+      s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + ADSENSE_CLIENT;
+      s.crossOrigin = 'anonymous';
+      document.head.appendChild(s);
+      adsenseLoaderScriptEl = s;
+    }
+
+    const ins = document.createElement('ins');
+    ins.className = 'adsbygoogle';
+    ins.style.display = 'block';
+    ins.setAttribute('data-ad-format', 'autorelaxed');
+    ins.setAttribute('data-ad-client', ADSENSE_CLIENT);
+    ins.setAttribute('data-ad-slot', ADSENSE_SLOT);
+    container.appendChild(ins);
+    adsenseInsEl = ins;
+
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch(e){ console.warn('[adsense] push error', e); }
+  }
+
+  function unloadAdsenseAd(){
+    const container = document.getElementById('surfAdsenseContainer');
+    if (container) container.innerHTML = '';
+    adsenseInsEl = null;
+    // 🛡️ سكربت التحميل بنفسه بنسيبه (تحميله وحده ما بيعرض إعلان)، بس منشيل وحدة الـ ins
+    // فعلياً عشان ما يضل شغال بصفحة تانية
+  }
+
+  function openSurfPage(){
+    // نتذكر الصفحة الحالية عشان نرجع لها عند الإلغاء/الانتهاء
+    const activePage = document.querySelector('.page.active');
+    surfPreviousPageId = activePage ? activePage.id.replace('page-', '') : 'rewards';
+
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const pageEl = document.getElementById('page-surf');
+    pageEl.classList.add('active');
+    closeSidebar();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    revealPage(pageEl);
+
+    // إعادة ضبط الواجهة لأي جلسة سابقة
+    document.getElementById('surfProgressBar').style.width = '0%';
+    document.getElementById('surfEarnedSoFar').textContent = '+0.0000$';
+    document.getElementById('surfCountdownDisplay').textContent = '60';
+
+    // 🛡️ التحميل ما يبلش أبداً إلا بعد موافقة المستخدم — لو سبق ووافق وحدد "لا تذكرني"،
+    // منتخطى الشاشة المنبثقة، وإلا لازم يوافق أول
+    if (localStorage.getItem(SURF_CONSENT_KEY) === '1'){
+      beginSurfSession();
+    } else {
+      document.getElementById('surfConsentOverlay').style.display = 'flex';
+    }
+  }
+
+  function agreeSurfConsent(){
+    if (document.getElementById('surfDontRemindCheckbox').checked){
+      localStorage.setItem(SURF_CONSENT_KEY, '1');
+    }
+    document.getElementById('surfConsentOverlay').style.display = 'none';
+    beginSurfSession();
+  }
+
+  async function beginSurfSession(){
+    if (surfState) return; // جلسة شغالة أصلاً
+    try{
+      const res = await apiCall('ads.surfStart', {});
+      const totalSeconds = res.totalTicks * res.tickSeconds;
+      surfState = {
+        nonce: res.nonce,
+        tick: 0,
+        totalTicks: res.totalTicks,
+        tickSeconds: res.tickSeconds,
+        rewardPerTick: res.rewardPerTick,
+        earned: 0,
+        timer: null,
+        displayTimer: null,
+        remainingSeconds: totalSeconds,
+      };
+      document.getElementById('surfCountdownDisplay').textContent = totalSeconds;
+      loadAdsenseAd(); // 🛡️ التحميل يبلش هون بالضبط — بعد الموافقة وبدء الجلسة، وبهاي الصفحة فقط
+      // ⏱️ عداد ثانية-بثانية على الواجهة (منفصل عن مواعيد التحقق من السيرفر كل 5 ثواني)
+      // حتى يبان العداد فعلياً بينقص أول بأول، وما يضل واقف بين كل تحقق والثاني
+      surfState.displayTimer = setInterval(surfTickDisplay, 1000);
+      surfState.timer = setInterval(surfClaimNextTick, surfState.tickSeconds * 1000);
+    } catch(err){
+      if (err && err.message === 'daily_limit_reached') showToast(t('surf.dailyLimitReached'), 'error');
+      else showToast(friendlyError(err), 'error');
+      exitSurfPage();
+    }
+  }
+
+  function surfTickDisplay(){
+    if (!surfState) return;
+    surfState.remainingSeconds = Math.max(0, surfState.remainingSeconds - 1);
+    document.getElementById('surfCountdownDisplay').textContent = surfState.remainingSeconds;
+  }
+
+  async function surfClaimNextTick(){
+    if (!surfState) return;
+    const nextTick = surfState.tick + 1;
+    try{
+      const res = await apiCall('ads.surfClaim', { nonce: surfState.nonce, tick: nextTick });
+      surfState.tick = res.tick;
+      surfState.earned += res.reward;
+
+      const pct = Math.round((surfState.tick / surfState.totalTicks) * 100);
+      document.getElementById('surfProgressBar').style.width = pct + '%';
+      // 🔄 مزامنة العداد المرئي مع الحقيقة القادمة من السيرفر — يصحح أي انزياح بسيط
+      surfState.remainingSeconds = (surfState.totalTicks - surfState.tick) * surfState.tickSeconds;
+      document.getElementById('surfCountdownDisplay').textContent = surfState.remainingSeconds;
+      document.getElementById('surfEarnedSoFar').textContent = '+' + surfState.earned.toFixed(4) + '$';
+      if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
+
+      if (res.completed){
+        clearInterval(surfState.timer);
+        clearInterval(surfState.displayTimer);
+        showToast(t('surf.completed'), 'success');
+        setTimeout(() => { exitSurfPage(); loadHome(); }, 1200);
+      }
+    } catch(err){
+      // ⏳ لو انسحب الطلب مبكر شوي (تفاوت شبكة بسيط)، منجرب مرة ثانية بنفس الـ tick
+      // بدل ما نوقف الجلسة كلها لخطأ عابر
+      console.warn('[surf] claim error', err);
+    }
+  }
+
+  // 🛡️ ينهي الجلسة ويشيل سكربت الإعلان بس بدون تنقّل — تستخدم من زر الخروج، ومن أي مكان
+  // تاني بيقدر المستخدم يطلع من الصفحة منه (تنقّل لصفحة تانية، تصغير التطبيق، تبديل تبويب)
+  function endSurfSession(){
+    if (surfState && surfState.timer) clearInterval(surfState.timer);
+    if (surfState && surfState.displayTimer) clearInterval(surfState.displayTimer);
+    surfState = null;
+    document.getElementById('surfConsentOverlay').style.display = 'none';
+    unloadAdsenseAd(); // 🛡️ نشيل وحدة إعلان AdSense تماماً أول ما تنتهي الجلسة
+  }
+
+  function exitSurfPage(){
+    endSurfSession();
+    goTo(surfPreviousPageId || 'rewards');
+  }
+
+  // 🛡️ لو المستخدم صغّر التطبيق أو بدّل تبويب/تطبيق ثاني وهو بصفحة "تصفح واربح"،
+  // منعتبرها خروج فوري: تنتهي الجلسة ويتشال سكربت الإعلان فوراً (ما منستنى رجوعه)
+  // 🛡️ ملاحظة: تم تعمّد عدم إنهاء الجلسة عند visibilitychange — لأنه بيتفعّل كمان لما
+  // المستخدم يضغط رابط خارجي جوا الإعلان (تليجرام بيفتحه بمتصفح خارجي/داخلي فيختفي
+  // الـ WebView لحظياً)، وده كان يقفل الجلسة ويجمّد العداد بالغلط رغم إن المستخدم لسه
+  // بنفس الصفحة. الإنهاء الفعلي بيصير بس لما المستخدم يتنقّل فعلياً جوا التطبيق (goTo)
+  // أو يسكر/يهجر الصفحة فعلياً (pagehide).
+  window.addEventListener('pagehide', function(){
+    if (surfState) endSurfSession();
+  });
+
   function renderRewards(){
     const s = appState;
     document.getElementById('pointsBalance').textContent = Number(s.user.points).toLocaleString('en-US');
