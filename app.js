@@ -478,12 +478,16 @@
     '</body></html>';
 
   // Social Bar (إعلان عائم فوق الصفحة كلها — بيحقن نفسه بمكانه بشكل تلقائي)
+  // ملاحظة: وحدتين Social Bar من Adsterra سوا بنفس الـ iframe — ما بيتعارضوا، كل وحدة بتحقن نفسها لحالها
   const ADSTERRA_SOCIALBAR_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
     '<script src="https://pl30769264.effectivecpmnetwork.com/96/90/da/9690da690d344e2579dffa12d4e2ac24.js"></script>' +
+    '<script src="https://pl29189522.effectivecpmnetwork.com/df/c2/ac/dfc2ac46938fa3284515588bf2f9203c.js"></script>' +
     '</body></html>';
 
   let surfAdFrames = [];
   let surfSocialBarFrame = null;
+  let surfAdRefreshTimer = null;
+  const SURF_AD_REFRESH_MS = 10000; // ⏱️ تحديث الإعلانات كل 10 ثواني
 
   function makeAdIframe(srcdocHtml, width, height){
     const f = document.createElement('iframe');
@@ -496,10 +500,13 @@
     return f;
   }
 
-  function loadAdsterraAds(){
+  // 🔄 يعيد إنشاء كل الـ iframes من الصفر (Native + Banner + Social Bar) — استدعاء الإعلان
+  // من جديد بيولّد impression جديدة، وده اللي بيخلي الإعلانات "تتجدد"
+  function renderAdsterraAds(){
     const container = document.getElementById('surfAdContainer');
-    if (!container || surfAdFrames.length) return; // محمّلة أصلاً
+    if (!container) return;
 
+    container.innerHTML = '';
     const nativeFrame = makeAdIframe(ADSTERRA_NATIVE_HTML, '100%', '300px');
     const bannerFrame = makeAdIframe(ADSTERRA_BANNER_HTML, '160px', '300px');
     container.appendChild(nativeFrame);
@@ -508,6 +515,9 @@
 
     // 🛡️ Social Bar بيغطي الصفحة كلها عشان يقدر يحط نفسه بأي زاوية — بس z-index أوطى
     // من زر الخروج (99999) عشان الزر يضل فوقه دايماً وقابل للنقر
+    if (surfSocialBarFrame && surfSocialBarFrame.parentNode){
+      surfSocialBarFrame.parentNode.removeChild(surfSocialBarFrame);
+    }
     surfSocialBarFrame = makeAdIframe(ADSTERRA_SOCIALBAR_HTML, '100%', '100%');
     surfSocialBarFrame.style.position = 'fixed';
     surfSocialBarFrame.style.inset = '0';
@@ -515,7 +525,15 @@
     document.getElementById('page-surf').appendChild(surfSocialBarFrame);
   }
 
+  function loadAdsterraAds(){
+    if (surfAdFrames.length || surfAdRefreshTimer) return; // محمّلة أصلاً
+    renderAdsterraAds();
+    // ⏱️ كل الوحدات الأربعة تتجدد سوا كل 10 ثواني طول ما الجلسة شغالة
+    surfAdRefreshTimer = setInterval(renderAdsterraAds, SURF_AD_REFRESH_MS);
+  }
+
   function unloadAdsterraAds(){
+    if (surfAdRefreshTimer){ clearInterval(surfAdRefreshTimer); surfAdRefreshTimer = null; }
     const container = document.getElementById('surfAdContainer');
     if (container) container.innerHTML = '';
     surfAdFrames = [];
