@@ -72,6 +72,14 @@ const APP_CFG = {
   TADDY_REWARD_POINTS: 5,
   TADDY_DAILY_MAX:     200,   // أقصى عدد مرات يقدر المستخدم ياخد المكافأة فيها باليوم
 
+  // 🔗 كرت Adsterra Smart Link بصفحة المكافآت — يفتح رابط خارجي وبعد مدة انتظار حقيقية
+  // (يتحقق منها السيرفر من started_at، مش من عداد الواجهة) يقدر يستلم المكافأة
+  SMARTLINK_URL: 'https://www.effectivecpmnetwork.com/inub40da2a?key=04de7c417d2905d3cdaadecd873a5fb0',
+  SMARTLINK_WAIT_SECONDS:   10,
+  SMARTLINK_REWARD_POINTS:  5,    // ⚠️ رقم مبدئي — غيّره حسب ما تحدد
+  SMARTLINK_DAILY_MAX:      20,   // أقصى عدد مرات باليوم
+  SMARTLINK_SESSION_EXPIRE_MIN: 10, // أي جلسة غير مستلمة تعتبر منتهية بعد هالمدة
+
   // 🌊 "تصفح واربح" — صفحة فيها عداد 60 ثانية وإعلانات Adcash تحمّل بالخلفية، تُصرف دفعات
   // صغيرة كل 5 ثواني. ⚠️ التحقق من الوقت يتم بالكامل من فرق الوقت المسجّل بالسيرفر
   // (started_at بجدول ad_surf_sessions) وليس من عداد الواجهة — عشان ما ينقدر يتلاعب فيه أحد
@@ -229,6 +237,9 @@ async function ensureSchema() {
     // عشان يمنع تكرار بدء/هجر الجلسة لاستغلال مكافأة الدفعة الأولى بلا حدود)
     ['daily_surf', 'INT NOT NULL DEFAULT 0'],
     ['last_surf_date', 'DATE'],
+    // 🔗 كرت Adsterra Smart Link بصفحة المكافآت — حصة يومية مستقلة تماماً
+    ['daily_smartlink', 'INT NOT NULL DEFAULT 0'],
+    ['last_smartlink_date', 'DATE'],
   ];
   for (const [col, def] of backfillCols) {
     await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -284,7 +295,20 @@ async function ensureSchema() {
     completed     BOOLEAN NOT NULL DEFAULT FALSE
   )`);
   await sql(`CREATE INDEX IF NOT EXISTS idx_surf_sessions_nonce ON ad_surf_sessions(nonce)`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_surf_sessions_user ON ad_surf_sessions(user_id)`);  // السحوبات
+  await sql(`CREATE INDEX IF NOT EXISTS idx_surf_sessions_user ON ad_surf_sessions(user_id)`);
+
+  // 🔗 جلسات كرت Adsterra Smart Link — نفس منطق ad_surf_sessions: التحقق من مدة الانتظار
+  // (10 ثواني افتراضياً) يتم من started_at المسجّل بالسيرفر، مش من عداد الواجهة
+  await sql(`CREATE TABLE IF NOT EXISTS ad_smartlink_sessions (
+    id         SERIAL PRIMARY KEY,
+    user_id    INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    nonce      TEXT NOT NULL UNIQUE,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    claimed    BOOLEAN NOT NULL DEFAULT FALSE
+  )`);
+  await sql(`CREATE INDEX IF NOT EXISTS idx_smartlink_sessions_nonce ON ad_smartlink_sessions(nonce)`);
+  await sql(`CREATE INDEX IF NOT EXISTS idx_smartlink_sessions_user ON ad_smartlink_sessions(user_id)`);
+  // السحوبات
   await sql(`CREATE TABLE IF NOT EXISTS withdrawals (
     id         SERIAL PRIMARY KEY,
     user_id    INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1161,6 +1185,59 @@ module.exports = async function handler(req, res) {
           dailyTaddyProgress: Number(claimed[0].daily_taddy),
           dailyTaddyMax: APP_CFG.TADDY_DAILY_MAX,
         });
+      }
+
+      // ═══════════ كرت Adsterra Smart Link بصفحة المكافآت — بدء (10 ثواني انتظار) ═══════════
+      case 'tasks.smartlinkStart': {
+        const today = new Date().toISOString().slice(0, 10);
+        const dailyCount = toDateStr(dbUser.last_smartlink_date) === today ? dbUser.daily_smartlink : 0;
+        if (dailyCount >= APP_CFG.SMARTLINK_DAILY_MAX) {
+          return res.status(429).json({ ok: false, error: 'daily_limit_reached' });
+        }
+
+        // بدء المهمة يُحتسب من حصة اليوم فوراً — يمنع تكرار بدء/هجر لاستغلال أي ثغرة
+        await sql(
+          `UPDATE users SET
+             daily_smartlink = CASE WHEN last_smartlink_date = $1 THEN daily_smartlink + 1 ELSE 1 END,
+             last_smartlink_date = $1
+           WHERE id = $2`,
+          [today, dbUser.id]
+        );
+
+        const nonce = crypto.randomBytes(24).toString('hex');
+        await sql(`INSERT INTO ad_smartlink_sessions (user_id, nonce) VALUES ($1, $2)`, [dbUser.id, nonce]);
+
+        return res.json({ ok: true, nonce, waitSeconds: APP_CFG.SMARTLINK_WAIT_SECONDS, url: APP_CFG.SMARTLINK_URL });
+      }
+
+      // ═══════════ كرت Adsterra Smart Link بصفحة المكافآت — استلام المكافأة ═══════════
+      case 'tasks.smartlinkClaim': {
+        const nonce = String(data.nonce || '');
+        if (!nonce) return res.status(400).json({ ok: false, error: 'invalid_request' });
+
+        const rows = await sql(
+          `SELECT id, claimed, EXTRACT(EPOCH FROM (NOW() - started_at)) AS elapsed_sec
+           FROM ad_smartlink_sessions
+           WHERE nonce = $1 AND user_id = $2
+             AND started_at > NOW() - INTERVAL '${APP_CFG.SMARTLINK_SESSION_EXPIRE_MIN} minutes'`,
+          [nonce, dbUser.id]
+        );
+        if (!rows.length) return res.status(400).json({ ok: false, error: 'invalid_session' });
+        const session = rows[0];
+        if (session.claimed) return res.status(400).json({ ok: false, error: 'session_completed' });
+
+        // 🛡️ التحقق الحقيقي من الوقت من السيرفر (started_at) — هامش ثانية واحدة بس لتأخير الشبكة
+        if (Number(session.elapsed_sec) < APP_CFG.SMARTLINK_WAIT_SECONDS - 1) {
+          return res.status(400).json({ ok: false, error: 'too_early' });
+        }
+
+        await sql(`UPDATE ad_smartlink_sessions SET claimed = TRUE WHERE id = $1`, [session.id]);
+        const claimed = await sql(
+          `UPDATE users SET points = points + $1 WHERE id = $2 RETURNING points`,
+          [APP_CFG.SMARTLINK_REWARD_POINTS, dbUser.id]
+        );
+
+        return res.json({ ok: true, reward: APP_CFG.SMARTLINK_REWARD_POINTS, newPointsBalance: Number(claimed[0].points) });
       }
 
       // ═══════════ "تصفح واربح" — بدء جلسة (60 ثانية، 12 دفعة كل 5 ثواني) ═══════════
