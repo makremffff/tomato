@@ -437,6 +437,11 @@
   }
 
   function openSurfPage(){
+    // 🚧 شبكة أمان إضافية غير عرض/إخفاء الزر — حتى لو اتنادت الدالة مباشرة (كونسول مثلاً)
+    if (SURF_UNDER_DEVELOPMENT && !isSurfAdmin()){
+      showToast(t('surf.underDevelopment'), 'error');
+      return;
+    }
     // نتذكر الصفحة الحالية عشان نرجع لها عند الإلغاء/الانتهاء
     const activePage = document.querySelector('.page.active');
     surfPreviousPageId = activePage ? activePage.id.replace('page-', '') : 'rewards';
@@ -562,6 +567,9 @@
 
   function renderRewards(){
     const s = appState;
+    // 🚧 "تصفح واربح" قيد التطوير — تبان بس للأدمن لحد ما SURF_UNDER_DEVELOPMENT تصير false
+    const surfCard = document.getElementById('surfRewardCard');
+    if (surfCard) surfCard.style.display = (SURF_UNDER_DEVELOPMENT && !isSurfAdmin()) ? 'none' : '';
     document.getElementById('pointsBalance').textContent = Number(s.user.points).toLocaleString('en-US');
     const taddyPoints = s?.config?.taddy_reward_points;
     const taddyDescEl = document.getElementById('taddyRewardDesc');
