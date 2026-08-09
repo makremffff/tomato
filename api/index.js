@@ -64,7 +64,7 @@ const APP_CFG = {
   // 🎯 مهمة "Task Ads" (Adsgram Block من نوع Task، بصيغة blockId مثل task-40539)
   // حصة منفصلة تمامًا عن حصة إعلانات الفيديو أعلاه — لا تؤثر على AD_DAILY_MAX ولا العكس
   TASK_AD_REWARD_USD:   0.001, // مكافأة كل مهمة Task مكتملة
-  TASK_AD_DAILY_MAX:    3,    // أقصى عدد مهام Task مسموح بها باليوم لكل مستخدم — عدّله بحرية
+  TASK_AD_DAILY_MAX:    5,    // أقصى عدد مهام Task مسموح بها باليوم لكل مستخدم — عدّله بحرية
   TASK_AD_COOLDOWN_SEC: 60,    // أقل فاصل زمني بين مطالبتين (دقيقة واحدة)
 
   // 🎬 كرت Taddy في صفحة المكافآت — إعلانين interstitial ورا بعض عبر Taddy SDK ثم نقاط مباشرة
@@ -77,7 +77,7 @@ const APP_CFG = {
   SMARTLINK_URL: 'https://www.effectivecpmnetwork.com/inub40da2a?key=04de7c417d2905d3cdaadecd873a5fb0',
   SMARTLINK_WAIT_SECONDS:   10,
   SMARTLINK_REWARD_POINTS:  5,    // ⚠️ رقم مبدئي — غيّره حسب ما تحدد
-  SMARTLINK_DAILY_MAX:      20,   // أقصى عدد مرات باليوم
+  SMARTLINK_DAILY_MAX:      100,   // أقصى عدد مرات باليوم
   SMARTLINK_SESSION_EXPIRE_MIN: 10, // أي جلسة غير مستلمة تعتبر منتهية بعد هالمدة
 
   // 🌊 "تصفح واربح" — صفحة فيها عداد 60 ثانية وإعلانات Adcash تحمّل بالخلفية، تُصرف دفعات
@@ -85,13 +85,13 @@ const APP_CFG = {
   // (started_at بجدول ad_surf_sessions) وليس من عداد الواجهة — عشان ما ينقدر يتلاعب فيه أحد
   // عبر تعديل الـ JS أو نداء API مباشرة بدون انتظار.
   SURF_TICK_SECONDS:       5,      // طول كل دفعة بالثواني
-  SURF_TOTAL_TICKS:        12,     // 12 × 5 ثانية = 60 ثانية إجمالي
-  SURF_REWARD_PER_TICK_USD: 0.0002, // ⚠️ رقم مبدئي بسيط — غيّره حسب ما تحدد
-  SURF_DAILY_MAX_SESSIONS: 10,     // أقصى عدد جلسات (محاولات بدء) باليوم — يحد من استغلال بدء/هجر الجلسة لتكرار مكافأة أول دفعة فقط
+  SURF_TOTAL_TICKS:        20,     // 12 × 5 ثانية = 60 ثانية إجمالي
+  SURF_REWARD_PER_TICK_USD: 0.00005, // ⚠️ رقم مبدئي بسيط — غيّره حسب ما تحدد
+  SURF_DAILY_MAX_SESSIONS: 100,     // أقصى عدد جلسات (محاولات بدء) باليوم — يحد من استغلال بدء/هجر الجلسة لتكرار مكافأة أول دفعة فقط
   SURF_SESSION_EXPIRE_MIN: 10,     // أي جلسة غير مكتملة تعتبر منتهية بعد هالمدة (تنظيف/أمان)
 
   // 📢 مهمة الانضمام للقناة
-  JOIN_CHANNEL_REWARD_USD:    0.005,
+  JOIN_CHANNEL_REWARD_USD:    0.001,
   JOIN_CHANNEL_REWARD_POINTS: 50,
   CHANNEL_RECHECK_HOURS:      0,     // 0 = تحقق فوري من عضوية القناة في كل init (لمين أنجز مهمة الانضمام) — ارفعها لو صار ضغط على حدود تيليجرام
 
@@ -110,7 +110,7 @@ const APP_CFG = {
   REFERRAL_MILESTONE_REWARD_USD: 0.007,
 
   // 💰 السحب
-  WITHDRAW_MIN_USD:              0.015,
+  WITHDRAW_MIN_USD:              0.03,
   WITHDRAW_MIN_ACTIVE_REFERRALS: 0,    // 0 = الشرط معطّل، غيّرها لأي رقم لتفعيل شرط الإحالات قبل السحب
   WITHDRAW_REQUIRE_CHANNEL:      true, // يمنع السحب إذا المستخدم مش عضو بالقناة حالياً
 
