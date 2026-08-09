@@ -406,25 +406,14 @@
   const SURF_CONSENT_KEY = 'surfConsentAcknowledged';
   const ADSENSE_CLIENT = 'ca-pub-6574623923471894';
   const ADSENSE_SLOT = '2716011836';
-  let adsenseLoaderScriptEl = null;
   let adsenseInsEl = null;
 
   function loadAdsenseAd(){
     const container = document.getElementById('surfAdsenseContainer');
     if (!container || adsenseInsEl) return; // محمّل أصلاً
 
-    // سكربت adsbygoogle.js نفسه — بيتحمّل مرة وحدة بس (لو موجود أصلاً منستخدمه)، وما بيعرض
-    // أي إعلان لحاله لحد ما نحقن وحدة <ins> ونعمل لها push
-    if (!document.getElementById('adsbygoogle-loader')){
-      const s = document.createElement('script');
-      s.id = 'adsbygoogle-loader';
-      s.async = true;
-      s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + ADSENSE_CLIENT;
-      s.crossOrigin = 'anonymous';
-      document.head.appendChild(s);
-      adsenseLoaderScriptEl = s;
-    }
-
+    // 🛡️ سكربت adsbygoogle.js ثابت بالـ <head> (حسب تعليمات جوجل)، وما بيعرض أي إعلان لحاله —
+    // هون بس منحقن وحدة الإعلان <ins> ومنعمل لها push، وهاد الجزء اللي مرتبط بصفحة السيرفينج فقط
     const ins = document.createElement('ins');
     ins.className = 'adsbygoogle';
     ins.style.display = 'block';
