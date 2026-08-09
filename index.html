@@ -10,8 +10,6 @@
 <script src="https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js"></script>
 <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <script src="https://sdk.taddy.pro/web/taddy.min.js?1315" data-pub-id="20728df5e1554d2c5ae58c8adc6d7305"></script>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6574623923471894"
-     crossorigin="anonymous"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -294,6 +292,15 @@
       <button class="task-btn" id="taddyWatchBtn" onclick="watchTaddyReward(this)" data-i18n="rewards.taddyWatch">مشاهدة</button>
     </div>
 
+    <div class="task-card" id="smartlinkRewardCard">
+      <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+      <div class="task-mid">
+        <div class="tn" data-i18n="rewards.smartlinkTitle">رابط سريع</div>
+        <div class="td" id="smartlinkRewardDesc" data-i18n="rewards.smartlinkDesc">افتح الرابط، استنى 10 ثواني، واستلم نقاطك</div>
+      </div>
+      <button class="task-btn" id="smartlinkBtn" onclick="startSmartlinkTask(this)" data-i18n="rewards.smartlinkStart">ابدأ</button>
+    </div>
+
     <div class="task-card" id="surfRewardCard">
       <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg></div>
       <div class="task-mid">
@@ -550,9 +557,10 @@
     </div>
     <div class="eyebrow" style="text-align:center;"><span id="surfEarnedSoFar">+0.0000$</span></div>
 
-    <!-- 📌 وحدة إعلان Google AdSense — تُحقن ديناميكياً (script + ins + push) فقط لحظة
-         بدء الجلسة، وتُزال بالكامل أول ما تنتهي الجلسة أو يخرج المستخدم من الصفحة -->
-    <div id="surfAdsenseContainer" style="margin:14px 0;"></div>
+    <!-- 📌 وحدات إعلان Adsterra — تُحقن ديناميكياً جوا iframe معزول (حتى document.write اللي
+         بيستخدمه سكربت Adsterra ما يمسحش صفحة التطبيق كلها) فقط لحظة بدء الجلسة، وتُزال
+         بالكامل أول ما تنتهي الجلسة أو يخرج المستخدم من الصفحة -->
+    <div id="surfAdContainer" style="margin:14px 0; display:flex; flex-direction:column; align-items:center; gap:12px;"></div>
 
     <div class="bottom-pad"></div>
   </div>

@@ -398,42 +398,131 @@
     }
   }
 
+  /* ===== Rewards: Adsterra Smart Link card =====
+     زر بيفتح الرابط الذكي بتاب/متصفح خارجي، وبعدها انتظار 10 ثواني حقيقية (يتحقق منها
+     السيرفر من started_at، مش من عداد الواجهة)، وبعدين يقدر يستلم النقاط. */
+  let smartlinkState = null; // { nonce, timer, remaining }
+
+  function openExternalLink(url){
+    if (tg && tg.openLink) tg.openLink(url);
+    else window.open(url, '_blank');
+  }
+
+  async function startSmartlinkTask(btn){
+    if (smartlinkState) return; // مهمة شغالة أصلاً
+    setBtnLoading(btn, true);
+    try{
+      const res = await apiCall('tasks.smartlinkStart', {});
+      smartlinkState = { nonce: res.nonce, timer: null, remaining: res.waitSeconds };
+      openExternalLink(res.url);
+
+      setBtnLoading(btn, false);
+      btn.disabled = true;
+      btn.textContent = t('rewards.smartlinkWaiting', { sec: smartlinkState.remaining });
+
+      smartlinkState.timer = setInterval(() => {
+        smartlinkState.remaining -= 1;
+        if (smartlinkState.remaining <= 0){
+          clearInterval(smartlinkState.timer);
+          btn.disabled = false;
+          btn.textContent = t('rewards.smartlinkClaim');
+          btn.onclick = () => claimSmartlinkTask(btn);
+        } else {
+          btn.textContent = t('rewards.smartlinkWaiting', { sec: smartlinkState.remaining });
+        }
+      }, 1000);
+    } catch(err){
+      smartlinkState = null;
+      if (err && err.message === 'daily_limit_reached') showToast(t('rewards.smartlinkDailyLimit'), 'error');
+      else showToast(friendlyError(err), 'error');
+      setBtnLoading(btn, false, t('rewards.smartlinkStart'));
+    }
+  }
+
+  async function claimSmartlinkTask(btn){
+    if (!smartlinkState) return;
+    setBtnLoading(btn, true);
+    try{
+      const res = await apiCall('tasks.smartlinkClaim', { nonce: smartlinkState.nonce });
+      document.getElementById('pointsBalance').textContent = Number(res.newPointsBalance).toLocaleString('en-US');
+      showToast(t('rewards.smartlinkSuccess', { points: res.reward }), 'success');
+    } catch(err){
+      showToast(friendlyError(err), 'error');
+    } finally {
+      smartlinkState = null;
+      setBtnLoading(btn, false, t('rewards.smartlinkStart'));
+      btn.onclick = () => startSmartlinkTask(btn);
+    }
+  }
+
   /* ===== "تصفح واربح" — صفحة كاملة مستقلة، دفعات كل 5 ثواني (التحقق الفعلي من الوقت من السيرفر) =====
-     🛡️ وحدة إعلان AdSense ما تتحقن نهائياً بأي مكان تاني بالتطبيق — تتحقن فقط هون، ولحظة موافقة
-     المستخدم فعلياً، وتتشال من الصفحة تماماً أول ما يخرج المستخدم (زر الخروج أو انتهاء الجلسة) */
+     🛡️ وحدات إعلان Adsterra ما تتحقن نهائياً بأي مكان تاني بالتطبيق — تتحقن فقط هون، ولحظة موافقة
+     المستخدم فعلياً، وتتشال من الصفحة تماماً أول ما يخرج المستخدم (زر الخروج أو انتهاء الجلسة).
+     كل وحدة بتتحط جوا iframe معزول (srcdoc) — سكربتات Adsterra بتستخدم document.write، ولو
+     حقناها مباشرة بصفحة التطبيق بعد ما الصفحة خلصت تحميل، document.write هتمسح صفحة التطبيق
+     كلها. الـ iframe بيعزل الـ document.write جوا صفحته الخاصة بس. */
   let surfState = null; // { nonce, tick, totalTicks, tickSeconds, timer, displayTimer, remainingSeconds, earned }
   let surfPreviousPageId = 'rewards';
   const SURF_CONSENT_KEY = 'surfConsentAcknowledged';
-  const ADSENSE_CLIENT = 'ca-pub-6574623923471894';
-  const ADSENSE_SLOT = '2716011836';
-  let adsenseInsEl = null;
 
-  function loadAdsenseAd(){
-    const container = document.getElementById('surfAdsenseContainer');
-    if (!container || adsenseInsEl) return; // محمّل أصلاً
+  // Native Banner (يتمدد مع عرض الحاوية)
+  const ADSTERRA_NATIVE_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
+    '<div id="container-f2de86b0d8774fcfe15876af7dedef3a"></div>' +
+    '<script async data-cfasync="false" src="https://pl30769265.effectivecpmnetwork.com/f2de86b0d8774fcfe15876af7dedef3a/invoke.js"></script>' +
+    '</body></html>';
 
-    // 🛡️ سكربت adsbygoogle.js ثابت بالـ <head> (حسب تعليمات جوجل)، وما بيعرض أي إعلان لحاله —
-    // هون بس منحقن وحدة الإعلان <ins> ومنعمل لها push، وهاد الجزء اللي مرتبط بصفحة السيرفينج فقط
-    const ins = document.createElement('ins');
-    ins.className = 'adsbygoogle';
-    ins.style.display = 'block';
-    ins.setAttribute('data-ad-format', 'autorelaxed');
-    ins.setAttribute('data-ad-client', ADSENSE_CLIENT);
-    ins.setAttribute('data-ad-slot', ADSENSE_SLOT);
-    container.appendChild(ins);
-    adsenseInsEl = ins;
+  // Banner 160×300
+  const ADSTERRA_BANNER_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"c3b0b1cc8721647603856fec45b52ff5",format:"iframe",height:300,width:160,params:{}};</script>' +
+    '<script src="https://www.highperformanceformat.com/c3b0b1cc8721647603856fec45b52ff5/invoke.js"></script>' +
+    '</body></html>';
 
-    try {
-      (window.adsbygoogle = window.adsbygoogle || []).push({});
-    } catch(e){ console.warn('[adsense] push error', e); }
+  // Social Bar (إعلان عائم فوق الصفحة كلها — بيحقن نفسه بمكانه بشكل تلقائي)
+  const ADSTERRA_SOCIALBAR_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
+    '<script src="https://pl30769264.effectivecpmnetwork.com/96/90/da/9690da690d344e2579dffa12d4e2ac24.js"></script>' +
+    '</body></html>';
+
+  let surfAdFrames = [];
+  let surfSocialBarFrame = null;
+
+  function makeAdIframe(srcdocHtml, width, height){
+    const f = document.createElement('iframe');
+    f.srcdoc = srcdocHtml;
+    f.style.border = '0';
+    f.style.width = width;
+    f.style.height = height;
+    f.style.maxWidth = '100%';
+    f.scrolling = 'no';
+    return f;
   }
 
-  function unloadAdsenseAd(){
-    const container = document.getElementById('surfAdsenseContainer');
+  function loadAdsterraAds(){
+    const container = document.getElementById('surfAdContainer');
+    if (!container || surfAdFrames.length) return; // محمّلة أصلاً
+
+    const nativeFrame = makeAdIframe(ADSTERRA_NATIVE_HTML, '100%', '300px');
+    const bannerFrame = makeAdIframe(ADSTERRA_BANNER_HTML, '160px', '300px');
+    container.appendChild(nativeFrame);
+    container.appendChild(bannerFrame);
+    surfAdFrames = [nativeFrame, bannerFrame];
+
+    // 🛡️ Social Bar بيغطي الصفحة كلها عشان يقدر يحط نفسه بأي زاوية — بس z-index أوطى
+    // من زر الخروج (99999) عشان الزر يضل فوقه دايماً وقابل للنقر
+    surfSocialBarFrame = makeAdIframe(ADSTERRA_SOCIALBAR_HTML, '100%', '100%');
+    surfSocialBarFrame.style.position = 'fixed';
+    surfSocialBarFrame.style.inset = '0';
+    surfSocialBarFrame.style.zIndex = '9000';
+    document.getElementById('page-surf').appendChild(surfSocialBarFrame);
+  }
+
+  function unloadAdsterraAds(){
+    const container = document.getElementById('surfAdContainer');
     if (container) container.innerHTML = '';
-    adsenseInsEl = null;
-    // 🛡️ سكربت التحميل بنفسه بنسيبه (تحميله وحده ما بيعرض إعلان)، بس منشيل وحدة الـ ins
-    // فعلياً عشان ما يضل شغال بصفحة تانية
+    surfAdFrames = [];
+    if (surfSocialBarFrame && surfSocialBarFrame.parentNode){
+      surfSocialBarFrame.parentNode.removeChild(surfSocialBarFrame);
+    }
+    surfSocialBarFrame = null;
   }
 
   function openSurfPage(){
@@ -492,7 +581,7 @@
         remainingSeconds: totalSeconds,
       };
       document.getElementById('surfCountdownDisplay').textContent = totalSeconds;
-      loadAdsenseAd(); // 🛡️ التحميل يبلش هون بالضبط — بعد الموافقة وبدء الجلسة، وبهاي الصفحة فقط
+      loadAdsterraAds(); // 🛡️ التحميل يبلش هون بالضبط — بعد الموافقة وبدء الجلسة، وبهاي الصفحة فقط
       // ⏱️ عداد ثانية-بثانية على الواجهة (منفصل عن مواعيد التحقق من السيرفر كل 5 ثواني)
       // حتى يبان العداد فعلياً بينقص أول بأول، وما يضل واقف بين كل تحقق والثاني
       surfState.displayTimer = setInterval(surfTickDisplay, 1000);
@@ -546,7 +635,7 @@
     if (surfState && surfState.displayTimer) clearInterval(surfState.displayTimer);
     surfState = null;
     document.getElementById('surfConsentOverlay').style.display = 'none';
-    unloadAdsenseAd(); // 🛡️ نشيل وحدة إعلان AdSense تماماً أول ما تنتهي الجلسة
+    unloadAdsterraAds(); // 🛡️ نشيل وحدات إعلان Adsterra تماماً أول ما تنتهي الجلسة
   }
 
   function exitSurfPage(){
