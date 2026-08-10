@@ -90,6 +90,11 @@ const APP_CFG = {
   SURF_DAILY_MAX_SESSIONS: 1000,     // أقصى عدد جلسات (محاولات بدء) باليوم — يحد من استغلال بدء/هجر الجلسة لتكرار مكافأة أول دفعة فقط
   SURF_SESSION_EXPIRE_MIN: 10,     // أي جلسة غير مكتملة تعتبر منتهية بعد هالمدة (تنظيف/أمان)
 
+  // 🎯 مهمة يومية "تصفح 100 مرة" — تُحتسب من عدد جلسات "تصفح واربح" (SURF) المكتملة فعلياً اليوم
+  // (مو بدء الجلسة، حتى ما تنجز المهمة بجلسات مهجورة) — مكافأة إضافية لمرة وحدة باليوم عند الوصول للعدد
+  BROWSE_TASK_TARGET:      100,
+  BROWSE_TASK_REWARD_USD:  0.01,
+
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.001,
   JOIN_CHANNEL_REWARD_POINTS: 50,
@@ -240,6 +245,11 @@ async function ensureSchema() {
     // 🔗 كرت Adsterra Smart Link بصفحة المكافآت — حصة يومية مستقلة تماماً
     ['daily_smartlink', 'INT NOT NULL DEFAULT 0'],
     ['last_smartlink_date', 'DATE'],
+    // 🎯 مهمة "تصفح 100 مرة" — عداد الجلسات المكتملة فعلياً (منفصل عن daily_surf اللي يعد المحاولات)
+    // + تاريخ آخر مرة استُلمت فيها مكافأة المهمة (لمنعها من التكرار أكثر من مرة باليوم)
+    ['daily_surf_completed', 'INT NOT NULL DEFAULT 0'],
+    ['last_surf_completed_date', 'DATE'],
+    ['last_browse_reward_date', 'DATE'],
   ];
   for (const [col, def] of backfillCols) {
     await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -836,6 +846,8 @@ module.exports = async function handler(req, res) {
         const inviteDone = inviteProgressToday >= APP_CFG.REFERRAL_MILESTONE_FRIENDS;
         const taskAdsDoneToday = toDateStr(dbUser.last_task_ad_date) === today ? dbUser.daily_task_ads : 0;
         const taskAdDone = taskAdsDoneToday >= APP_CFG.TASK_AD_DAILY_MAX;
+        const browseProgressToday = toDateStr(dbUser.last_surf_completed_date) === today ? dbUser.daily_surf_completed : 0;
+        const browseDone = toDateStr(dbUser.last_browse_reward_date) === today;
 
         return res.json({
           ok: true,
@@ -867,6 +879,7 @@ module.exports = async function handler(req, res) {
             invite_3_friends: { progress: inviteProgressToday, required: APP_CFG.REFERRAL_MILESTONE_FRIENDS, done: inviteDone },
             daily_login: { streak: dbUser.daily_login_streak, required: APP_CFG.DAILY_LOGIN_STREAK_DAYS, done: toDateStr(dbUser.last_daily_login) === today },
             task_ad: { progress: taskAdsDoneToday, required: APP_CFG.TASK_AD_DAILY_MAX, done: taskAdDone, enabled: !!ADSGRAM_REWARD_SECRET },
+            browse_100: { progress: browseProgressToday, required: APP_CFG.BROWSE_TASK_TARGET, done: browseDone },
           },
           leaderboard: leaderboard.map(r => ({
             telegram_id: Number(r.telegram_id), name: r.first_name || 'مستخدم', photo_url: r.photo_url || null,
@@ -895,6 +908,8 @@ module.exports = async function handler(req, res) {
             withdraw_min_usd: APP_CFG.WITHDRAW_MIN_USD, rewards_catalog: APP_CFG.REWARDS_CATALOG,
             channel_username: CHANNEL_USERNAME || null,
             taddy_reward_points: APP_CFG.TADDY_REWARD_POINTS,
+            browse_task_reward_usd: APP_CFG.BROWSE_TASK_REWARD_USD,
+            browse_task_target: APP_CFG.BROWSE_TASK_TARGET,
           },
         });
       }
@@ -1314,18 +1329,48 @@ module.exports = async function handler(req, res) {
           [tick, isLastTick, session.id]
         );
 
+        let browseTaskReward = null;
         if (isLastTick) {
           const totalUsd = reward * APP_CFG.SURF_TOTAL_TICKS;
           await logTx(dbUser.id, 'ads', 'تصفح وربح — جلسة إعلانات', totalUsd, 'tx.surfSession');
           await creditReferralCommission(dbUser, totalUsd);
+
+          // 🎯 مهمة "تصفح 100 مرة" — عدّ هذه الجلسة كواحدة من العدد المطلوب (جلسة مكتملة فعلياً فقط)
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const wasNewDay = toDateStr(dbUser.last_surf_completed_date) !== todayStr;
+          const browseRows = await sql(
+            `UPDATE users SET
+               daily_surf_completed = CASE WHEN last_surf_completed_date = $1 THEN daily_surf_completed + 1 ELSE 1 END,
+               last_surf_completed_date = $1
+             WHERE id = $2
+             RETURNING daily_surf_completed, last_browse_reward_date`,
+            [todayStr, dbUser.id]
+          );
+          const browseProgress = browseRows[0]?.daily_surf_completed ?? (wasNewDay ? 1 : dbUser.daily_surf_completed + 1);
+          const alreadyRewardedToday = toDateStr(browseRows[0]?.last_browse_reward_date) === todayStr;
+
+          if (browseProgress >= APP_CFG.BROWSE_TASK_TARGET && !alreadyRewardedToday) {
+            await sql(
+              `UPDATE users SET balance_usd = balance_usd + $1, last_browse_reward_date = $2 WHERE id = $3`,
+              [APP_CFG.BROWSE_TASK_REWARD_USD, todayStr, dbUser.id]
+            );
+            await logTx(dbUser.id, 'task', 'مكافأة: تصفح 100 مرة', APP_CFG.BROWSE_TASK_REWARD_USD, 'tx.browseTask');
+            await creditReferralCommission(dbUser, APP_CFG.BROWSE_TASK_REWARD_USD);
+            browseTaskReward = APP_CFG.BROWSE_TASK_REWARD_USD;
+          }
         }
+
+        const finalBalance = browseTaskReward
+          ? await sql(`SELECT balance_usd FROM users WHERE id = $1`, [dbUser.id])
+          : null;
 
         return res.json({
           ok: true,
           tick,
           completed: isLastTick,
           reward,
-          newBalance: parseFloat(updatedUser[0].balance_usd),
+          newBalance: finalBalance ? parseFloat(finalBalance[0].balance_usd) : parseFloat(updatedUser[0].balance_usd),
+          browseTaskReward,
         });
       }
 
