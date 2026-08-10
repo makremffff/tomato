@@ -67,6 +67,8 @@ const RC_STRINGS = {
     'tasks.taskAds': 'مهام سريعة',
     'tasks.taskAdProgress': 'أنجز مهام قصيرة واربح {amount}$ لكل مهمة ({progress}/{required} اليوم)',
     'tasks.taskAdRewardTag': '+0.001$',
+    'tasks.browse100': 'تصفح 100 مرة',
+    'tasks.browseProgress': 'تصفح {required} مرة واربح {amount}$ ({progress}/{required} اليوم)',
     'tasks.go': 'اذهب',
     'tasks.claimTask': 'استلام',
     'tasks.noTaskAvailable': 'لا توجد مهام متاحة الآن — حاول بعد قليل',
@@ -102,6 +104,13 @@ const RC_STRINGS = {
     'rewards.smartlinkClaim': 'استلام',
     'rewards.smartlinkSuccess': 'حصلت على {points} نقاط 🎉',
     'rewards.smartlinkDailyLimit': 'وصلت للحد الأقصى من مرات اليوم، جرب بكرة',
+
+    'block.title': '⛔ لازم توقف مانع الإعلانات / VPN',
+    'block.adblockMsg': 'لاحظنا وجود مانع إعلانات (AdBlock) مفعّل على متصفحك. لازم توقفه عشان تقدر تكمل هالميزة، وبعدين اضغط "تحقق مرة أخرى".',
+    'block.vpnMsg': 'لاحظنا إنك تستخدم VPN أو بروكسي. لازم توقفه عشان تقدر تكمل هالميزة، وبعدين اضغط "تحقق مرة أخرى".',
+    'block.bothMsg': 'لاحظنا وجود مانع إعلانات (AdBlock) و VPN مفعّلين. لازم توقفهم الاثنين عشان تقدر تكمل، وبعدين اضغط "تحقق مرة أخرى".',
+    'block.recheck': 'تحقق مرة أخرى',
+    'block.stillBlocked': 'ما زال فيه مانع إعلانات أو VPN مفعّل. أوقفه بالكامل وحاول من جديد.',
 
     'referral.heading': 'ادعُ أصدقاءك واربح معًا',
     'referral.desc': 'احصل على 500 نقطة مسابقة فور تفعيل حساب صديقك، بالإضافة إلى 10% من أرباحه مدى الحياة',
@@ -189,6 +198,7 @@ const RC_STRINGS = {
     'toast.dailyClaimed': 'تم استلام مكافأة اليوم +{amount}$',
     'toast.streakComplete': ' 🎉 سلسلة كاملة!',
     'toast.taskAdReward': 'تم استلام المهمة +{amount}$',
+    'toast.browseTaskReward': '🎉 أنجزت مهمة تصفح 100 مرة! +{amount}$',
     'toast.sessionTooLong': 'الجلسة طويلة جدًا — أعد فتح التطبيق للحصول على مهام جديدة',
 
     'errors.daily_limit_reached': 'وصلت للحد الأقصى من الإعلانات اليوم',
@@ -295,6 +305,8 @@ const RC_STRINGS = {
     'tasks.taskAds': 'Quick Tasks',
     'tasks.taskAdProgress': 'short tasks ${amount} each ({progress}/{required} today)',
     'tasks.taskAdRewardTag': '+$0.001',
+    'tasks.browse100': 'Browse 100 times',
+    'tasks.browseProgress': 'Browse {required} times and earn ${amount} ({progress}/{required} today)',
     'tasks.go': 'Go',
     'tasks.claimTask': 'Claim',
     'tasks.noTaskAvailable': 'No tasks available right now — try again shortly',
@@ -330,6 +342,13 @@ const RC_STRINGS = {
     'rewards.smartlinkClaim': 'Claim',
     'rewards.smartlinkSuccess': 'You earned {points} points 🎉',
     'rewards.smartlinkDailyLimit': "You've reached today's limit, try again tomorrow",
+
+    'block.title': '⛔ Please disable AdBlock / VPN',
+    'block.adblockMsg': 'We detected an active ad blocker in your browser. Please disable it to continue, then tap "Check again".',
+    'block.vpnMsg': 'We detected you\'re using a VPN or proxy. Please disable it to continue, then tap "Check again".',
+    'block.bothMsg': 'We detected both an ad blocker and a VPN active. Please disable both to continue, then tap "Check again".',
+    'block.recheck': 'Check again',
+    'block.stillBlocked': 'An ad blocker or VPN is still active. Please disable it fully and try again.',
 
     'referral.heading': 'Invite Friends & Earn Together',
     'referral.desc': "Get 500 contest points as soon as your friend's account is activated, plus 10% of their earnings for life",
@@ -417,6 +436,7 @@ const RC_STRINGS = {
     'toast.dailyClaimed': "Today's reward claimed +${amount}",
     'toast.streakComplete': ' 🎉 Full streak!',
     'toast.taskAdReward': 'Task claimed +${amount}',
+    'toast.browseTaskReward': '🎉 Browse 100 times task complete! +${amount}',
     'toast.sessionTooLong': 'Session too long — reopen the app to get new tasks',
 
     'errors.daily_limit_reached': "You've reached today's ad limit",

@@ -3,6 +3,109 @@
    الإحالات، الإعدادات، الرسم على الصفحات، وتشغيل التطبيق
 ══════════════════════════════════════════════════════ */
 
+  /* ═══════════ حماية AdBlock / VPN — تحمي صفحة "تصفح واربح" وروابط المهام (Task Ads / Smart Link) ═══════════
+     كشف مجاني best-effort (بدون API مدفوع):
+     - AdBlock: عنصر طُعم بأسماء كلاسات إعلانية معروفة + طلب لمورد إعلاني معروف — لو انحجب/انحظر نعتبره مفعّل
+     - VPN: تقريبي فقط عبر مقارنة منطقة IP العام (ipapi.co) بمنطقة جهاز المستخدم الزمنية + كلمات مفتاحية
+       شائعة بحقل "org" (استضافة/VPN معروفة) — مو كشف دقيق 100%، ممكن يستبدل لاحقاً بخدمة مدفوعة أدق */
+  let _lastAdblockState = false;
+  let _lastVpnState = false;
+  let _blockCheckInFlight = null;
+  let _blockGuardRetry = null;
+
+  function detectAdBlock(){
+    return new Promise((resolve) => {
+      const bait = document.createElement('div');
+      bait.className = 'adsbox ad-banner adsbygoogle ad-placement pub_300x250 textads banner_ads ads';
+      bait.style.cssText = 'position:absolute; left:-9999px; top:-9999px; width:1px; height:1px;';
+      document.body.appendChild(bait);
+      setTimeout(() => {
+        const cssBlocked = bait.offsetParent === null || bait.offsetHeight === 0 || bait.clientHeight === 0
+          || getComputedStyle(bait).display === 'none' || getComputedStyle(bait).visibility === 'hidden';
+        bait.remove();
+        fetch('https://pagead2.googlesyndication.com/pagead/id', { mode: 'no-cors', cache: 'no-store' })
+          .then(() => resolve(cssBlocked))
+          .catch(() => resolve(true));
+      }, 120);
+    });
+  }
+
+  async function detectVpn(){
+    try{
+      const res = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
+      if (!res.ok) return false;
+      const info = await res.json();
+      const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      const ipTz = info.timezone || '';
+      const tzMismatch = !!(deviceTz && ipTz && deviceTz !== ipTz);
+      const org = String(info.org || '').toLowerCase();
+      const vpnKeywords = ['vpn','proxy','hosting','cloud','datacenter','data center','digitalocean','ovh','m247','choopa','leaseweb','amazon','linode','vultr','g-core','nordvpn','expressvpn','surfshark','private internet access','psiphon'];
+      const orgLooksLikeVpn = vpnKeywords.some(k => org.includes(k));
+      return !!(tzMismatch || orgLooksLikeVpn);
+    } catch(err){
+      return false; // فشل الفحص (شبكة/حظر) ما يُعتبر VPN — تجنّب حجب مستخدمين شرعيين بالغلط
+    }
+  }
+
+  async function checkAdblockAndVpn(){
+    if (_blockCheckInFlight) return _blockCheckInFlight;
+    _blockCheckInFlight = Promise.all([detectAdBlock(), detectVpn()])
+      .then(([adblock, vpn]) => {
+        _lastAdblockState = adblock;
+        _lastVpnState = vpn;
+        return { adblock, vpn };
+      })
+      .finally(() => { _blockCheckInFlight = null; });
+    return _blockCheckInFlight;
+  }
+
+  // 🔄 فحص خلفي (بدون حجب الواجهة) — يحدّث الحالة المحفوظة اللي يعتمد عليها معترض ضغطة Task Ad
+  function refreshBlockStateCache(){
+    checkAdblockAndVpn().catch(() => {});
+  }
+
+  // يُستخدم قبل أي إجراء نتحكم فيه بالكامل (بدء جلسة تصفح، فتح رابط سريع) — فحص فوري
+  // (مو من الكاش) قبل السماح بالمتابعة، ويعرض شاشة الحظر ويحفظ دالة إعادة المحاولة لو انحظر
+  async function guardAgainstAdblockVpn(retryCallback){
+    const { adblock, vpn } = await checkAdblockAndVpn();
+    if (adblock || vpn){
+      showAdblockVpnBlock(adblock, vpn, retryCallback);
+      return false;
+    }
+    return true;
+  }
+
+  function showAdblockVpnBlock(adblock, vpn, retryCallback){
+    _blockGuardRetry = retryCallback || null;
+    const overlay = document.getElementById('adblockVpnOverlay');
+    const msgEl = document.getElementById('adblockVpnMsg');
+    if (!overlay || !msgEl) return;
+    msgEl.textContent = (adblock && vpn) ? t('block.bothMsg') : adblock ? t('block.adblockMsg') : t('block.vpnMsg');
+    overlay.style.display = 'flex';
+  }
+
+  async function recheckAdblockVpn(){
+    const retryBtn = document.getElementById('adblockVpnRetryBtn');
+    setBtnLoading(retryBtn, true);
+    const { adblock, vpn } = await checkAdblockAndVpn();
+    setBtnLoading(retryBtn, false, t('block.recheck'));
+    if (!adblock && !vpn){
+      document.getElementById('adblockVpnOverlay').style.display = 'none';
+      const cb = _blockGuardRetry;
+      _blockGuardRetry = null;
+      if (cb) cb();
+    } else {
+      showToast(t('block.stillBlocked'), 'error');
+      showAdblockVpnBlock(adblock, vpn, _blockGuardRetry);
+    }
+  }
+
+  function closeAdblockVpnOverlay(){
+    const overlay = document.getElementById('adblockVpnOverlay');
+    if (overlay) overlay.style.display = 'none';
+    _blockGuardRetry = null;
+  }
+
   /* ===== TON Connect wallet ===== */
   let tonConnectUI = null;
   let connectedWallet = null;
@@ -107,6 +210,18 @@
     const widget = document.getElementById('adsgramTaskWidget');
     if (!widget) return;
 
+    // 🛡️ ممنوع فتح رابط مهمة Task Ad ومانع الإعلانات أو VPN مفعّل — نعترض الضغطة بمرحلة الـ capture
+    // قبل ما توصل لمعالج العنصر الداخلي (best-effort، العنصر مكون خارجي مغلق فما نقدر نضمنها 100%).
+    // القرار يعتمد على آخر فحص محفوظ بالذاكرة (refreshBlockStateCache) لأن الضغطة نفسها متزامنة
+    // وما نقدر ننتظر فيها نتيجة فحص شبكي جديد قبل ما يتصرف العنصر الداخلي.
+    widget.addEventListener('click', function(e){
+      if (_lastAdblockState || _lastVpnState){
+        e.preventDefault();
+        e.stopPropagation();
+        showAdblockVpnBlock(_lastAdblockState, _lastVpnState, null);
+      }
+    }, true);
+
     widget.addEventListener('reward', () => { handleTaskAdReward(); });
 
     widget.addEventListener('onError', (event) => {
@@ -125,6 +240,11 @@
 
   async function handleTaskAdReward(){
     if (_taskAdClaiming) return; // 🛡️ يمنع استدعاءات مكررة لو أطلق العنصر الحدث أكثر من مرة
+    // 🛡️ شبكة أمان أخيرة قبل صرف المكافأة — لو تبين إن مانع إعلانات أو VPN مفعّل ما نصرفها
+    if (_lastAdblockState || _lastVpnState){
+      showAdblockVpnBlock(_lastAdblockState, _lastVpnState, null);
+      return;
+    }
     _taskAdClaiming = true;
     try{
       let claim = await apiCall('tasks.claimTaskAd', {});
@@ -339,6 +459,9 @@
 
   async function startSmartlinkTask(btn){
     if (smartlinkState) return; // مهمة شغالة أصلاً
+    // 🛡️ ممنوع فتح رابط المهمة ومانع الإعلانات أو VPN مفعّل
+    const passed = await guardAgainstAdblockVpn(() => startSmartlinkTask(btn));
+    if (!passed) return;
     setBtnLoading(btn, true);
     try{
       const res = await apiCall('tasks.smartlinkStart', {});
@@ -475,12 +598,16 @@
     surfSocialBarFrame = null;
   }
 
-  function openSurfPage(){
+  async function openSurfPage(){
     // 🚧 شبكة أمان إضافية غير عرض/إخفاء الزر — حتى لو اتنادت الدالة مباشرة (كونسول مثلاً)
     if (SURF_UNDER_DEVELOPMENT && !isSurfAdmin()){
       showToast(t('surf.underDevelopment'), 'error');
       return;
     }
+    // 🛡️ ممنوع الدخول لصفحة "تصفح واربح" ومانع الإعلانات أو VPN مفعّل
+    const passed = await guardAgainstAdblockVpn(() => openSurfPage());
+    if (!passed) return;
+
     // نتذكر الصفحة الحالية عشان نرجع لها عند الإلغاء/الانتهاء
     const activePage = document.querySelector('.page.active');
     surfPreviousPageId = activePage ? activePage.id.replace('page-', '') : 'rewards';
@@ -563,6 +690,20 @@
         clearInterval(surfState.displayTimer);
         // 📣 إشعار أخير بمبلغ الربح بالضبط (بدل نص عام) — نفس القيمة المتراكمة من ردود السيرفر
         showToast(t('surf.completed', { amount: surfState.earned.toFixed(5) }), 'success');
+
+        // 🎯 مهمة "تصفح 100 مرة" — لو هالجلسة أكملت العدد المطلوب، السيرفر يرجع المكافأة هون
+        if (res.browseTaskReward){
+          setTimeout(() => showToast(t('toast.browseTaskReward', { amount: res.browseTaskReward.toFixed(3) }), 'success'), 900);
+        }
+        if (appState?.tasks?.browse_100){
+          appState.tasks.browse_100.progress = Math.min(
+            appState.tasks.browse_100.required,
+            (appState.tasks.browse_100.progress || 0) + 1
+          );
+          if (res.browseTaskReward) appState.tasks.browse_100.done = true;
+          renderTasks();
+        }
+
         setTimeout(() => { exitSurfPage(); loadHome(); }, 1800);
       }
     } catch(err){
@@ -729,6 +870,8 @@
   }
 
   function renderTasks(){
+    // 🔄 نحدّث حالة AdBlock/VPN المحفوظة كل ما تترسم صفحة المهام — عشان معترض ضغطة Task Ad يكون محدّث
+    refreshBlockStateCache();
     const s = appState;
     const w = s.tasks.watch_ads_5;
     document.getElementById('watchAdsProgress').textContent = t('tasks.watchProgress', { amount: s.config.ad_batch_bonus_usd.toFixed(3), progress: w.progress, required: w.required });
@@ -779,6 +922,21 @@
       if (taProgressEl) taProgressEl.style.display = 'none';
       if (taStatus) taStatus.style.display = 'none';
     }
+
+    const br = s.tasks.browse_100;
+    if (br){
+      const brBtn = document.getElementById('taskBtn-browse_100');
+      const brStatus = document.getElementById('browseTaskStatus');
+      const brProgressEl = document.getElementById('browseTaskProgress');
+      if (brProgressEl && s.config) brProgressEl.textContent = t('tasks.browseProgress', { amount: s.config.browse_task_reward_usd.toFixed(3), progress: br.progress, required: br.required });
+      if (br.done){ if (brBtn) brBtn.style.display='none'; if (brStatus) brStatus.style.display='flex'; }
+      else { if (brBtn) brBtn.style.display='inline-flex'; if (brStatus) brStatus.style.display='none'; }
+    }
+  }
+
+  // 🎯 مهمة "تصفح 100 مرة" — الزر ينقل مباشرة لصفحة المكافآت اللي فيها كرت "تصفح واربح"
+  function goToBrowseTask(){
+    goTo('rewards');
   }
 
   function renderReferral(){
