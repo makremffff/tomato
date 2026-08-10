@@ -527,7 +527,7 @@
   <div class="page" id="page-surf">
     <!-- 🚪 زر خروج وحيد — ثابت على الشاشة (fixed) أعلى يمين، بأعلى طبقة (z-index) حتى يضل
          ظاهر وقابل للنقر فوق أي إعلان قد يظهر بكامل الشاشة -->
-    <button id="surfExitBtn" onclick="exitSurfPage()" aria-label="خروج" style="position:fixed; top:68px; right:14px; z-index:99999; width:40px; height:40px; border-radius:50%; background:var(--glass-strong); backdrop-filter:blur(10px); border:1px solid var(--border); color:var(--text-1); display:flex; align-items:center; justify-content:center;">
+    <button id="surfExitBtn" onclick="exitSurfPage()" aria-label="خروج" style="position:fixed; top:64px; right:14px; z-index:99999; width:40px; height:40px; border-radius:50%; background:var(--glass-strong); backdrop-filter:blur(10px); border:1px solid var(--border); color:var(--text-1); display:flex; align-items:center; justify-content:center;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
 
@@ -537,10 +537,13 @@
       </div>
     </div>
 
+    <!-- 📌 وحدة إعلان علوية — تتجدد مع باقي الوحدات كل SURF_AD_REFRESH_MS -->
+    <div id="surfAdContainerTop" style="margin:10px 0; display:flex; flex-direction:column; align-items:center; gap:12px;"></div>
+
     <!-- ⏱️ العداد الرئيسي — أعلى الصفحة، بمنتصفها، بأرقام كبيرة، يبدأ العد التنازلي فقط
          بعد ما يوافق المستخدم على تنبيه الإعلانات (surfConsentScreen) -->
     <div style="text-align:center; margin-top:18px;">
-      <div id="surfCountdownDisplay" style="font-size:56px; font-weight:800; color:var(--text-1); line-height:1;">60</div>
+      <div id="surfCountdownDisplay" style="font-size:56px; font-weight:800; color:var(--text-1); line-height:1;">130</div>
       <div style="color:var(--text-3); font-size:12px; margin-top:4px;" data-i18n="surf.secondsLeft">ثانية متبقية</div>
     </div>
 
@@ -549,10 +552,10 @@
     </div>
     <div class="eyebrow" style="text-align:center;"><span id="surfEarnedSoFar">+0.0000$</span></div>
 
-    <!-- 📌 وحدات إعلان Adsterra — تُحقن ديناميكياً جوا iframe معزول (حتى document.write اللي
+    <!-- 📌 وحدة إعلان سفلية — تُحقن ديناميكياً جوا iframe معزول (حتى document.write اللي
          بيستخدمه سكربت Adsterra ما يمسحش صفحة التطبيق كلها) فقط لحظة بدء الجلسة، وتُزال
          بالكامل أول ما تنتهي الجلسة أو يخرج المستخدم من الصفحة -->
-    <div id="surfAdContainer" style="margin:14px 0; display:flex; flex-direction:column; align-items:center; gap:12px;"></div>
+    <div id="surfAdContainerBottom" style="margin:14px 0; display:flex; flex-direction:column; align-items:center; gap:12px;"></div>
 
     <div class="bottom-pad"></div>
   </div>

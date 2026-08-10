@@ -413,7 +413,7 @@
   let surfAdFrames = [];
   let surfSocialBarFrame = null;
   let surfAdRefreshTimer = null;
-  const SURF_AD_REFRESH_MS = 5000; // ⏱️ تحديث الإعلانات كل 5 ثواني
+  const SURF_AD_REFRESH_MS = 3000; // ⏱️ تحديث الإعلانات كل 3 ثواني
 
   function makeAdIframe(srcdocHtml, width, height){
     const f = document.createElement('iframe');
@@ -426,17 +426,21 @@
     return f;
   }
 
-  // 🔄 يعيد إنشاء كل الـ iframes من الصفر (Native + Banner + Social Bar) — استدعاء الإعلان
-  // من جديد بيولّد impression جديدة، وده اللي بيخلي الإعلانات "تتجدد"
+  // 🔄 يعيد إنشاء كل الـ iframes من الصفر (Native فوق + Banner تحت + Social Bar) — استدعاء
+  // الإعلان من جديد بيولّد impression جديدة، وده اللي بيخلي الإعلانات "تتجدد"
   function renderAdsterraAds(){
-    const container = document.getElementById('surfAdContainer');
-    if (!container) return;
+    const topContainer = document.getElementById('surfAdContainerTop');
+    const bottomContainer = document.getElementById('surfAdContainerBottom');
+    if (!topContainer || !bottomContainer) return;
 
-    container.innerHTML = '';
+    topContainer.innerHTML = '';
     const nativeFrame = makeAdIframe(ADSTERRA_NATIVE_HTML, '100%', '300px');
+    topContainer.appendChild(nativeFrame);
+
+    bottomContainer.innerHTML = '';
     const bannerFrame = makeAdIframe(ADSTERRA_BANNER_HTML, '160px', '300px');
-    container.appendChild(nativeFrame);
-    container.appendChild(bannerFrame);
+    bottomContainer.appendChild(bannerFrame);
+
     surfAdFrames = [nativeFrame, bannerFrame];
 
     // 🛡️ Social Bar بيغطي الصفحة كلها عشان يقدر يحط نفسه بأي زاوية — بس z-index أوطى
@@ -454,14 +458,16 @@
   function loadAdsterraAds(){
     if (surfAdFrames.length || surfAdRefreshTimer) return; // محمّلة أصلاً
     renderAdsterraAds();
-    // ⏱️ كل الوحدات الأربعة تتجدد سوا كل 5 ثواني طول ما الجلسة شغالة
+    // ⏱️ كل الوحدات تتجدد سوا كل 3 ثواني طول ما الجلسة شغالة
     surfAdRefreshTimer = setInterval(renderAdsterraAds, SURF_AD_REFRESH_MS);
   }
 
   function unloadAdsterraAds(){
     if (surfAdRefreshTimer){ clearInterval(surfAdRefreshTimer); surfAdRefreshTimer = null; }
-    const container = document.getElementById('surfAdContainer');
-    if (container) container.innerHTML = '';
+    const topContainer = document.getElementById('surfAdContainerTop');
+    const bottomContainer = document.getElementById('surfAdContainerBottom');
+    if (topContainer) topContainer.innerHTML = '';
+    if (bottomContainer) bottomContainer.innerHTML = '';
     surfAdFrames = [];
     if (surfSocialBarFrame && surfSocialBarFrame.parentNode){
       surfSocialBarFrame.parentNode.removeChild(surfSocialBarFrame);
@@ -549,14 +555,15 @@
       // 🔄 مزامنة العداد المرئي مع الحقيقة القادمة من السيرفر — يصحح أي انزياح بسيط
       surfState.remainingSeconds = (surfState.totalTicks - surfState.tick) * surfState.tickSeconds;
       document.getElementById('surfCountdownDisplay').textContent = surfState.remainingSeconds;
-      document.getElementById('surfEarnedSoFar').textContent = '+' + surfState.earned.toFixed(4) + '$';
+      document.getElementById('surfEarnedSoFar').textContent = '+' + surfState.earned.toFixed(5) + '$';
       if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
 
       if (res.completed){
         clearInterval(surfState.timer);
         clearInterval(surfState.displayTimer);
-        showToast(t('surf.completed'), 'success');
-        setTimeout(() => { exitSurfPage(); loadHome(); }, 1200);
+        // 📣 إشعار أخير بمبلغ الربح بالضبط (بدل نص عام) — نفس القيمة المتراكمة من ردود السيرفر
+        showToast(t('surf.completed', { amount: surfState.earned.toFixed(5) }), 'success');
+        setTimeout(() => { exitSurfPage(); loadHome(); }, 1800);
       }
     } catch(err){
       // ⏳ لو انسحب الطلب مبكر شوي (تفاوت شبكة بسيط)، منجرب مرة ثانية بنفس الـ tick
