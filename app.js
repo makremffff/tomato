@@ -754,7 +754,7 @@
       const title = (RC_STRINGS[rcCurrentLang()] && RC_STRINGS[rcCurrentLang()][titleKey]) || r.title;
       return `
       <div class="task-card">
-        <div class="task-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18"/></svg></div>
+        <div class="task-ic"><img src="asesst/ic-redeem.png" alt=""></div>
         <div class="task-mid">
           <div class="tn">${title}</div>
           <div class="td">${t('rewards.cost', { cost: r.cost.toLocaleString('en-US') })}</div>
