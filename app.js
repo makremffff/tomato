@@ -536,7 +536,7 @@
   let surfAdFrames = [];
   let surfSocialBarFrame = null;
   let surfAdRefreshTimer = null;
-  const SURF_AD_REFRESH_MS = 3000; // ⏱️ تحديث الإعلانات كل 3 ثواني
+  const SURF_AD_REFRESH_MS = 4000; // ⏱️ تحديث الإعلانات كل 3 ثواني
 
   function makeAdIframe(srcdocHtml, width, height){
     const f = document.createElement('iframe');
