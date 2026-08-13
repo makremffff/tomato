@@ -74,7 +74,7 @@ const APP_CFG = {
 
   // 🔗 كرت Adsterra Smart Link بصفحة المكافآت — يفتح رابط خارجي وبعد مدة انتظار حقيقية
   // (يتحقق منها السيرفر من started_at، مش من عداد الواجهة) يقدر يستلم المكافأة
-  SMARTLINK_URL: 'https://www.effectivecpmnetwork.com/inub40da2a?key=04de7c417d2905d3cdaadecd873a5fb0',
+  SMARTLINK_URL: 'https://interventioncopiedloitering.com/yhzfyc9m?key=50d5106ff6b5c2306d52c6ca13742c1c',
   SMARTLINK_WAIT_SECONDS:   10,
   SMARTLINK_REWARD_POINTS:  5,    // ⚠️ رقم مبدئي — غيّره حسب ما تحدد
   SMARTLINK_DAILY_MAX:      100,   // أقصى عدد مرات باليوم
@@ -93,7 +93,7 @@ const APP_CFG = {
   // 🎯 مهمة يومية "تصفح 100 مرة" — تُحتسب من عدد جلسات "تصفح واربح" (SURF) المكتملة فعلياً اليوم
   // (مو بدء الجلسة، حتى ما تنجز المهمة بجلسات مهجورة) — مكافأة إضافية لمرة وحدة باليوم عند الوصول للعدد
   BROWSE_TASK_TARGET:      100,
-  BROWSE_TASK_REWARD_USD:  0.03,
+  BROWSE_TASK_REWARD_USD:  0.01,
 
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.001,
@@ -115,7 +115,7 @@ const APP_CFG = {
   REFERRAL_MILESTONE_REWARD_USD: 0.007,
 
   // 💰 السحب
-  WITHDRAW_MIN_USD:              0.05,
+  WITHDRAW_MIN_USD:              0.03,
   WITHDRAW_MIN_ACTIVE_REFERRALS: 0,    // 0 = الشرط معطّل، غيّرها لأي رقم لتفعيل شرط الإحالات قبل السحب
   WITHDRAW_REQUIRE_CHANNEL:      true, // يمنع السحب إذا المستخدم مش عضو بالقناة حالياً
 
