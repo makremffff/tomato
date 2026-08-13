@@ -518,19 +518,31 @@
 
   // Native Banner (يتمدد مع عرض الحاوية)
   const ADSTERRA_NATIVE_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
-    '<div id="container-f2de86b0d8774fcfe15876af7dedef3a"></div>' +
-    '<script async data-cfasync="false" src="https://pl30769265.effectivecpmnetwork.com/f2de86b0d8774fcfe15876af7dedef3a/invoke.js"></script>' +
+    '<div id="container-30e20b615096518ccd4af02a8de2c86e"></div>' +
+    '<script async data-cfasync="false" src="https://interventioncopiedloitering.com/30e20b615096518ccd4af02a8de2c86e/invoke.js"></script>' +
     '</body></html>';
 
-  // Banner 160×300
+  // Banner 320×50
+  const ADSTERRA_BANNER_MOBILE_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"04bcf6532017b6790ab2ddac95a5621d",format:"iframe",height:50,width:320,params:{}};</script>' +
+    '<script src="https://interventioncopiedloitering.com/04bcf6532017b6790ab2ddac95a5621d/invoke.js"></script>' +
+    '</body></html>';
+
+  // Banner 728×90
+  const ADSTERRA_LEADERBOARD_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"6591d8cb13042eb0d24df990ae424042",format:"iframe",height:90,width:728,params:{}};</script>' +
+    '<script src="https://interventioncopiedloitering.com/6591d8cb13042eb0d24df990ae424042/invoke.js"></script>' +
+    '</body></html>';
+
+  // Banner 160×600
   const ADSTERRA_BANNER_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
-    '<script>atOptions={key:"c3b0b1cc8721647603856fec45b52ff5",format:"iframe",height:300,width:160,params:{}};</script>' +
-    '<script src="https://www.highperformanceformat.com/c3b0b1cc8721647603856fec45b52ff5/invoke.js"></script>' +
+    '<script>atOptions={key:"832c2ab019ed7e5b767d47265f24fd72",format:"iframe",height:600,width:160,params:{}};</script>' +
+    '<script src="https://interventioncopiedloitering.com/832c2ab019ed7e5b767d47265f24fd72/invoke.js"></script>' +
     '</body></html>';
 
   // Social Bar (إعلان عائم فوق الصفحة كلها — بيحقن نفسه بمكانه بشكل تلقائي)
   const ADSTERRA_SOCIALBAR_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
-    '<script src="https://pl30769264.effectivecpmnetwork.com/96/90/da/9690da690d344e2579dffa12d4e2ac24.js"></script>' +
+    '<script src="https://interventioncopiedloitering.com/d0/f6/b3/d0f6b318f29b5787025697029ae72f23.js"></script>' +
     '</body></html>';
 
   let surfAdFrames = [];
@@ -549,8 +561,8 @@
     return f;
   }
 
-  // 🔄 يعيد إنشاء كل الـ iframes من الصفر (Native فوق + Banner تحت + Social Bar) — استدعاء
-  // الإعلان من جديد بيولّد impression جديدة، وده اللي بيخلي الإعلانات "تتجدد"
+  // 🔄 يعيد إنشاء كل الـ iframes من الصفر (Native + Mobile Banner فوق، Leaderboard + Skyscraper تحت،
+  // Social Bar عائم) — استدعاء الإعلان من جديد بيولّد impression جديدة، وده اللي بيخلي الإعلانات "تتجدد"
   function renderAdsterraAds(){
     const topContainer = document.getElementById('surfAdContainerTop');
     const bottomContainer = document.getElementById('surfAdContainerBottom');
@@ -559,12 +571,16 @@
     topContainer.innerHTML = '';
     const nativeFrame = makeAdIframe(ADSTERRA_NATIVE_HTML, '100%', '300px');
     topContainer.appendChild(nativeFrame);
+    const mobileBannerFrame = makeAdIframe(ADSTERRA_BANNER_MOBILE_HTML, '320px', '50px');
+    topContainer.appendChild(mobileBannerFrame);
 
     bottomContainer.innerHTML = '';
-    const bannerFrame = makeAdIframe(ADSTERRA_BANNER_HTML, '160px', '300px');
+    const leaderboardFrame = makeAdIframe(ADSTERRA_LEADERBOARD_HTML, '728px', '90px');
+    bottomContainer.appendChild(leaderboardFrame);
+    const bannerFrame = makeAdIframe(ADSTERRA_BANNER_HTML, '160px', '600px');
     bottomContainer.appendChild(bannerFrame);
 
-    surfAdFrames = [nativeFrame, bannerFrame];
+    surfAdFrames = [nativeFrame, mobileBannerFrame, leaderboardFrame, bannerFrame];
 
     // 🛡️ Social Bar بيغطي الصفحة كلها عشان يقدر يحط نفسه بأي زاوية — بس z-index أوطى
     // من زر الخروج (99999) عشان الزر يضل فوقه دايماً وقابل للنقر
