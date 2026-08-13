@@ -93,7 +93,7 @@ const APP_CFG = {
   // 🎯 مهمة يومية "تصفح 100 مرة" — تُحتسب من عدد جلسات "تصفح واربح" (SURF) المكتملة فعلياً اليوم
   // (مو بدء الجلسة، حتى ما تنجز المهمة بجلسات مهجورة) — مكافأة إضافية لمرة وحدة باليوم عند الوصول للعدد
   BROWSE_TASK_TARGET:      100,
-  BROWSE_TASK_REWARD_USD:  0.01,
+  BROWSE_TASK_REWARD_USD:  0.03,
 
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.001,
@@ -115,7 +115,7 @@ const APP_CFG = {
   REFERRAL_MILESTONE_REWARD_USD: 0.007,
 
   // 💰 السحب
-  WITHDRAW_MIN_USD:              0.03,
+  WITHDRAW_MIN_USD:              0.05,
   WITHDRAW_MIN_ACTIVE_REFERRALS: 0,    // 0 = الشرط معطّل، غيّرها لأي رقم لتفعيل شرط الإحالات قبل السحب
   WITHDRAW_REQUIRE_CHANNEL:      true, // يمنع السحب إذا المستخدم مش عضو بالقناة حالياً
 
