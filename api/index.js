@@ -72,9 +72,13 @@ const APP_CFG = {
   TADDY_REWARD_POINTS: 5,
   TADDY_DAILY_MAX:     200,   // أقصى عدد مرات يقدر المستخدم ياخد المكافأة فيها باليوم
 
-  // 🎁 المكافأة اليومية (Daily Bonus) بصفحة المكافآت — استلام فوري بدون رابط أو انتظار
+  // 🎁 المكافأة اليومية (Daily Bonus) بصفحة المكافآت — يفتح رابط خارجي وبعد مدة انتظار
+  // حقيقية (يتحقق منها السيرفر من started_at، مش من عداد الواجهة) يقدر يستلم المكافأة
   // حد أقصى 3 مرات لكل مستخدم كل 24 ساعة (نافذة متجددة من أول استلام، مش يوم تقويمي)
   // إجمالي 0.005$ مقسومة على 3 مرات = مكافأة كل مرة
+  DAILY_BONUS_URL: 'http://horrorpay.online/3gRmcK',
+  DAILY_BONUS_WAIT_SECONDS:   10,
+  DAILY_BONUS_SESSION_EXPIRE_MIN: 10, // أي جلسة غير مستلمة تعتبر منتهية بعد هالمدة
   DAILY_BONUS_MAX_PER_WINDOW: 3,
   DAILY_BONUS_WINDOW_HOURS:   24,
   DAILY_BONUS_TOTAL_USD:      0.005,
@@ -307,6 +311,17 @@ async function ensureSchema() {
   await sql(`CREATE INDEX IF NOT EXISTS idx_surf_sessions_nonce ON ad_surf_sessions(nonce)`);
   await sql(`CREATE INDEX IF NOT EXISTS idx_surf_sessions_user ON ad_surf_sessions(user_id)`);
 
+  // 🎁 جلسات المكافأة اليومية — نفس منطق ad_surf_sessions: التحقق من مدة الانتظار
+  // (10 ثواني افتراضياً) يتم من started_at المسجّل بالسيرفر، مش من عداد الواجهة
+  await sql(`CREATE TABLE IF NOT EXISTS ad_daily_bonus_sessions (
+    id         SERIAL PRIMARY KEY,
+    user_id    INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    nonce      TEXT NOT NULL UNIQUE,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    claimed    BOOLEAN NOT NULL DEFAULT FALSE
+  )`);
+  await sql(`CREATE INDEX IF NOT EXISTS idx_daily_bonus_sessions_nonce ON ad_daily_bonus_sessions(nonce)`);
+  await sql(`CREATE INDEX IF NOT EXISTS idx_daily_bonus_sessions_user ON ad_daily_bonus_sessions(user_id)`);
   // السحوبات
   await sql(`CREATE TABLE IF NOT EXISTS withdrawals (
     id         SERIAL PRIMARY KEY,
@@ -1199,12 +1214,11 @@ module.exports = async function handler(req, res) {
         });
       }
 
-      // ═══════════ كرت المكافأة اليومية (Daily Bonus) — استلام فوري، 3 مرات كل 24 ساعة ═══════════
-      case 'tasks.dailyBonusClaim': {
+      // ═══════════ كرت المكافأة اليومية — بدء (فتح الرابط + 10 ثواني انتظار) ═══════════
+      case 'tasks.dailyBonusStart': {
         const windowStart = dbUser.daily_bonus_window_start ? new Date(dbUser.daily_bonus_window_start) : null;
         const windowExpired = !windowStart ||
           (Date.now() - windowStart.getTime()) >= APP_CFG.DAILY_BONUS_WINDOW_HOURS * 3600 * 1000;
-
         const currentCount = windowExpired ? 0 : dbUser.daily_bonus_count;
         if (currentCount >= APP_CFG.DAILY_BONUS_MAX_PER_WINDOW) {
           const retryAfterSec = Math.ceil(
@@ -1213,15 +1227,47 @@ module.exports = async function handler(req, res) {
           return res.status(429).json({ ok: false, error: 'daily_limit_reached', retryAfterSec });
         }
 
+        // بدء المهمة يُحتسب من حصة النافذة فوراً — يمنع تكرار بدء/هجر لاستغلال أي ثغرة
+        await sql(
+          `UPDATE users SET
+             daily_bonus_count = $1,
+             daily_bonus_window_start = CASE WHEN $2 THEN NOW() ELSE daily_bonus_window_start END
+           WHERE id = $3`,
+          [currentCount + 1, windowExpired, dbUser.id]
+        );
+
+        const nonce = crypto.randomBytes(24).toString('hex');
+        await sql(`INSERT INTO ad_daily_bonus_sessions (user_id, nonce) VALUES ($1, $2)`, [dbUser.id, nonce]);
+
+        return res.json({ ok: true, nonce, waitSeconds: APP_CFG.DAILY_BONUS_WAIT_SECONDS, url: APP_CFG.DAILY_BONUS_URL });
+      }
+
+      // ═══════════ كرت المكافأة اليومية — استلام المكافأة ═══════════
+      case 'tasks.dailyBonusClaim': {
+        const nonce = String(data.nonce || '');
+        if (!nonce) return res.status(400).json({ ok: false, error: 'invalid_request' });
+
+        const rows = await sql(
+          `SELECT id, claimed, EXTRACT(EPOCH FROM (NOW() - started_at)) AS elapsed_sec
+           FROM ad_daily_bonus_sessions
+           WHERE nonce = $1 AND user_id = $2
+             AND started_at > NOW() - INTERVAL '${APP_CFG.DAILY_BONUS_SESSION_EXPIRE_MIN} minutes'`,
+          [nonce, dbUser.id]
+        );
+        if (!rows.length) return res.status(400).json({ ok: false, error: 'invalid_session' });
+        const session = rows[0];
+        if (session.claimed) return res.status(400).json({ ok: false, error: 'session_completed' });
+
+        // 🛡️ التحقق الحقيقي من الوقت من السيرفر (started_at) — هامش ثانية واحدة بس لتأخير الشبكة
+        if (Number(session.elapsed_sec) < APP_CFG.DAILY_BONUS_WAIT_SECONDS - 1) {
+          return res.status(400).json({ ok: false, error: 'too_early' });
+        }
+
+        await sql(`UPDATE ad_daily_bonus_sessions SET claimed = TRUE WHERE id = $1`, [session.id]);
         const reward = APP_CFG.DAILY_BONUS_REWARD_USD;
         const claimed = await sql(
-          `UPDATE users SET
-             balance_usd = balance_usd + $1,
-             daily_bonus_count = $2,
-             daily_bonus_window_start = CASE WHEN $3 THEN NOW() ELSE daily_bonus_window_start END
-           WHERE id = $4
-           RETURNING balance_usd, daily_bonus_count, daily_bonus_window_start`,
-          [reward, currentCount + 1, windowExpired, dbUser.id]
+          `UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2 RETURNING balance_usd, daily_bonus_count`,
+          [reward, dbUser.id]
         );
 
         return res.json({
