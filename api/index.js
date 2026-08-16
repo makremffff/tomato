@@ -72,13 +72,13 @@ const APP_CFG = {
   TADDY_REWARD_POINTS: 5,
   TADDY_DAILY_MAX:     200,   // أقصى عدد مرات يقدر المستخدم ياخد المكافأة فيها باليوم
 
-  // 🔗 كرت Adsterra Smart Link بصفحة المكافآت — يفتح رابط خارجي وبعد مدة انتظار حقيقية
-  // (يتحقق منها السيرفر من started_at، مش من عداد الواجهة) يقدر يستلم المكافأة
-  SMARTLINK_URL: 'https://interventioncopiedloitering.com/yhzfyc9m?key=50d5106ff6b5c2306d52c6ca13742c1c',
-  SMARTLINK_WAIT_SECONDS:   10,
-  SMARTLINK_REWARD_POINTS:  5,    // ⚠️ رقم مبدئي — غيّره حسب ما تحدد
-  SMARTLINK_DAILY_MAX:      100,   // أقصى عدد مرات باليوم
-  SMARTLINK_SESSION_EXPIRE_MIN: 10, // أي جلسة غير مستلمة تعتبر منتهية بعد هالمدة
+  // 🎁 المكافأة اليومية (Daily Bonus) بصفحة المكافآت — استلام فوري بدون رابط أو انتظار
+  // حد أقصى 3 مرات لكل مستخدم كل 24 ساعة (نافذة متجددة من أول استلام، مش يوم تقويمي)
+  // إجمالي 0.005$ مقسومة على 3 مرات = مكافأة كل مرة
+  DAILY_BONUS_MAX_PER_WINDOW: 3,
+  DAILY_BONUS_WINDOW_HOURS:   24,
+  DAILY_BONUS_TOTAL_USD:      0.005,
+  get DAILY_BONUS_REWARD_USD() { return this.DAILY_BONUS_TOTAL_USD / this.DAILY_BONUS_MAX_PER_WINDOW; },
 
   // 🌊 "تصفح واربح" — صفحة فيها عداد 60 ثانية وإعلانات Adcash تحمّل بالخلفية، تُصرف دفعات
   // صغيرة كل 10 ثواني. ⚠️ التحقق من الوقت يتم بالكامل من فرق الوقت المسجّل بالسيرفر
@@ -242,9 +242,9 @@ async function ensureSchema() {
     // عشان يمنع تكرار بدء/هجر الجلسة لاستغلال مكافأة الدفعة الأولى بلا حدود)
     ['daily_surf', 'INT NOT NULL DEFAULT 0'],
     ['last_surf_date', 'DATE'],
-    // 🔗 كرت Adsterra Smart Link بصفحة المكافآت — حصة يومية مستقلة تماماً
-    ['daily_smartlink', 'INT NOT NULL DEFAULT 0'],
-    ['last_smartlink_date', 'DATE'],
+    // 🎁 المكافأة اليومية (Daily Bonus) — عداد ضمن نافذة 24 ساعة متجددة (مش يوم تقويمي)
+    ['daily_bonus_count', 'INT NOT NULL DEFAULT 0'],
+    ['daily_bonus_window_start', 'TIMESTAMPTZ'],
     // 🎯 مهمة "تصفح 100 مرة" — عداد الجلسات المكتملة فعلياً (منفصل عن daily_surf اللي يعد المحاولات)
     // + تاريخ آخر مرة استُلمت فيها مكافأة المهمة (لمنعها من التكرار أكثر من مرة باليوم)
     ['daily_surf_completed', 'INT NOT NULL DEFAULT 0'],
@@ -307,17 +307,6 @@ async function ensureSchema() {
   await sql(`CREATE INDEX IF NOT EXISTS idx_surf_sessions_nonce ON ad_surf_sessions(nonce)`);
   await sql(`CREATE INDEX IF NOT EXISTS idx_surf_sessions_user ON ad_surf_sessions(user_id)`);
 
-  // 🔗 جلسات كرت Adsterra Smart Link — نفس منطق ad_surf_sessions: التحقق من مدة الانتظار
-  // (10 ثواني افتراضياً) يتم من started_at المسجّل بالسيرفر، مش من عداد الواجهة
-  await sql(`CREATE TABLE IF NOT EXISTS ad_smartlink_sessions (
-    id         SERIAL PRIMARY KEY,
-    user_id    INT  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    nonce      TEXT NOT NULL UNIQUE,
-    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    claimed    BOOLEAN NOT NULL DEFAULT FALSE
-  )`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_smartlink_sessions_nonce ON ad_smartlink_sessions(nonce)`);
-  await sql(`CREATE INDEX IF NOT EXISTS idx_smartlink_sessions_user ON ad_smartlink_sessions(user_id)`);
   // السحوبات
   await sql(`CREATE TABLE IF NOT EXISTS withdrawals (
     id         SERIAL PRIMARY KEY,
@@ -880,6 +869,12 @@ module.exports = async function handler(req, res) {
             daily_login: { streak: dbUser.daily_login_streak, required: APP_CFG.DAILY_LOGIN_STREAK_DAYS, done: toDateStr(dbUser.last_daily_login) === today },
             task_ad: { progress: taskAdsDoneToday, required: APP_CFG.TASK_AD_DAILY_MAX, done: taskAdDone, enabled: !!ADSGRAM_REWARD_SECRET },
             browse_100: { progress: browseProgressToday, required: APP_CFG.BROWSE_TASK_TARGET, done: browseDone },
+            daily_bonus: {
+              progress: (!dbUser.daily_bonus_window_start ||
+                (Date.now() - new Date(dbUser.daily_bonus_window_start).getTime()) >= APP_CFG.DAILY_BONUS_WINDOW_HOURS * 3600 * 1000)
+                ? 0 : dbUser.daily_bonus_count,
+              required: APP_CFG.DAILY_BONUS_MAX_PER_WINDOW,
+            },
           },
           leaderboard: leaderboard.map(r => ({
             telegram_id: Number(r.telegram_id), name: r.first_name || 'مستخدم', photo_url: r.photo_url || null,
@@ -910,6 +905,8 @@ module.exports = async function handler(req, res) {
             taddy_reward_points: APP_CFG.TADDY_REWARD_POINTS,
             browse_task_reward_usd: APP_CFG.BROWSE_TASK_REWARD_USD,
             browse_task_target: APP_CFG.BROWSE_TASK_TARGET,
+            daily_bonus_reward_usd: APP_CFG.DAILY_BONUS_REWARD_USD,
+            daily_bonus_max: APP_CFG.DAILY_BONUS_MAX_PER_WINDOW,
           },
         });
       }
@@ -1202,57 +1199,38 @@ module.exports = async function handler(req, res) {
         });
       }
 
-      // ═══════════ كرت Adsterra Smart Link بصفحة المكافآت — بدء (10 ثواني انتظار) ═══════════
-      case 'tasks.smartlinkStart': {
-        const today = new Date().toISOString().slice(0, 10);
-        const dailyCount = toDateStr(dbUser.last_smartlink_date) === today ? dbUser.daily_smartlink : 0;
-        if (dailyCount >= APP_CFG.SMARTLINK_DAILY_MAX) {
-          return res.status(429).json({ ok: false, error: 'daily_limit_reached' });
+      // ═══════════ كرت المكافأة اليومية (Daily Bonus) — استلام فوري، 3 مرات كل 24 ساعة ═══════════
+      case 'tasks.dailyBonusClaim': {
+        const windowStart = dbUser.daily_bonus_window_start ? new Date(dbUser.daily_bonus_window_start) : null;
+        const windowExpired = !windowStart ||
+          (Date.now() - windowStart.getTime()) >= APP_CFG.DAILY_BONUS_WINDOW_HOURS * 3600 * 1000;
+
+        const currentCount = windowExpired ? 0 : dbUser.daily_bonus_count;
+        if (currentCount >= APP_CFG.DAILY_BONUS_MAX_PER_WINDOW) {
+          const retryAfterSec = Math.ceil(
+            APP_CFG.DAILY_BONUS_WINDOW_HOURS * 3600 - (Date.now() - windowStart.getTime()) / 1000
+          );
+          return res.status(429).json({ ok: false, error: 'daily_limit_reached', retryAfterSec });
         }
 
-        // بدء المهمة يُحتسب من حصة اليوم فوراً — يمنع تكرار بدء/هجر لاستغلال أي ثغرة
-        await sql(
-          `UPDATE users SET
-             daily_smartlink = CASE WHEN last_smartlink_date = $1 THEN daily_smartlink + 1 ELSE 1 END,
-             last_smartlink_date = $1
-           WHERE id = $2`,
-          [today, dbUser.id]
-        );
-
-        const nonce = crypto.randomBytes(24).toString('hex');
-        await sql(`INSERT INTO ad_smartlink_sessions (user_id, nonce) VALUES ($1, $2)`, [dbUser.id, nonce]);
-
-        return res.json({ ok: true, nonce, waitSeconds: APP_CFG.SMARTLINK_WAIT_SECONDS, url: APP_CFG.SMARTLINK_URL });
-      }
-
-      // ═══════════ كرت Adsterra Smart Link بصفحة المكافآت — استلام المكافأة ═══════════
-      case 'tasks.smartlinkClaim': {
-        const nonce = String(data.nonce || '');
-        if (!nonce) return res.status(400).json({ ok: false, error: 'invalid_request' });
-
-        const rows = await sql(
-          `SELECT id, claimed, EXTRACT(EPOCH FROM (NOW() - started_at)) AS elapsed_sec
-           FROM ad_smartlink_sessions
-           WHERE nonce = $1 AND user_id = $2
-             AND started_at > NOW() - INTERVAL '${APP_CFG.SMARTLINK_SESSION_EXPIRE_MIN} minutes'`,
-          [nonce, dbUser.id]
-        );
-        if (!rows.length) return res.status(400).json({ ok: false, error: 'invalid_session' });
-        const session = rows[0];
-        if (session.claimed) return res.status(400).json({ ok: false, error: 'session_completed' });
-
-        // 🛡️ التحقق الحقيقي من الوقت من السيرفر (started_at) — هامش ثانية واحدة بس لتأخير الشبكة
-        if (Number(session.elapsed_sec) < APP_CFG.SMARTLINK_WAIT_SECONDS - 1) {
-          return res.status(400).json({ ok: false, error: 'too_early' });
-        }
-
-        await sql(`UPDATE ad_smartlink_sessions SET claimed = TRUE WHERE id = $1`, [session.id]);
+        const reward = APP_CFG.DAILY_BONUS_REWARD_USD;
         const claimed = await sql(
-          `UPDATE users SET points = points + $1 WHERE id = $2 RETURNING points`,
-          [APP_CFG.SMARTLINK_REWARD_POINTS, dbUser.id]
+          `UPDATE users SET
+             balance_usd = balance_usd + $1,
+             daily_bonus_count = $2,
+             daily_bonus_window_start = CASE WHEN $3 THEN NOW() ELSE daily_bonus_window_start END
+           WHERE id = $4
+           RETURNING balance_usd, daily_bonus_count, daily_bonus_window_start`,
+          [reward, currentCount + 1, windowExpired, dbUser.id]
         );
 
-        return res.json({ ok: true, reward: APP_CFG.SMARTLINK_REWARD_POINTS, newPointsBalance: Number(claimed[0].points) });
+        return res.json({
+          ok: true,
+          reward,
+          newBalance: parseFloat(claimed[0].balance_usd),
+          progress: Number(claimed[0].daily_bonus_count),
+          required: APP_CFG.DAILY_BONUS_MAX_PER_WINDOW,
+        });
       }
 
       // ═══════════ "تصفح واربح" — بدء جلسة (60 ثانية، 12 دفعة كل 5 ثواني) ═══════════
