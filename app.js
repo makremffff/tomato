@@ -461,17 +461,17 @@
   function renderDailyBonusCard(){
     const s = appState;
     const btn = document.getElementById('dailyBonusBtn');
-    const desc = document.getElementById('dailyBonusRewardDesc');
+    const desc = document.getElementById('dailyBonusProgress');
     if (!btn || !desc || !s || !s.tasks || !s.tasks.daily_bonus) return;
     if (dailyBonusState) return; // مهمة شغالة أصلاً — لا تلمس الزر أثناء العد التنازلي
     const { progress, required } = s.tasks.daily_bonus;
-    desc.textContent = t('rewards.dailyBonusDesc', { progress, required });
+    desc.textContent = t('tasks.dailyBonusDesc', { progress, required });
     if (progress >= required){
       btn.disabled = true;
-      btn.textContent = t('rewards.dailyBonusDone');
+      btn.textContent = t('tasks.dailyBonusDone');
     } else {
       btn.disabled = false;
-      btn.textContent = t('rewards.dailyBonusStart');
+      btn.textContent = t('tasks.dailyBonusStart');
       btn.onclick = () => startDailyBonus(btn);
     }
   }
@@ -489,24 +489,24 @@
 
       setBtnLoading(btn, false);
       btn.disabled = true;
-      btn.textContent = t('rewards.dailyBonusWaiting', { sec: dailyBonusState.remaining });
+      btn.textContent = t('tasks.dailyBonusWaiting', { sec: dailyBonusState.remaining });
 
       dailyBonusState.timer = setInterval(() => {
         dailyBonusState.remaining -= 1;
         if (dailyBonusState.remaining <= 0){
           clearInterval(dailyBonusState.timer);
           btn.disabled = false;
-          btn.textContent = t('rewards.dailyBonusClaim');
+          btn.textContent = t('tasks.dailyBonusClaim');
           btn.onclick = () => claimDailyBonus(btn);
         } else {
-          btn.textContent = t('rewards.dailyBonusWaiting', { sec: dailyBonusState.remaining });
+          btn.textContent = t('tasks.dailyBonusWaiting', { sec: dailyBonusState.remaining });
         }
       }, 1000);
     } catch(err){
       dailyBonusState = null;
-      if (err && err.message === 'daily_limit_reached') showToast(t('rewards.dailyBonusLimit'), 'error');
+      if (err && err.message === 'daily_limit_reached') showToast(t('tasks.dailyBonusLimit'), 'error');
       else showToast(friendlyError(err), 'error');
-      setBtnLoading(btn, false, t('rewards.dailyBonusStart'));
+      setBtnLoading(btn, false, t('tasks.dailyBonusStart'));
     }
   }
 
@@ -515,7 +515,7 @@
     setBtnLoading(btn, true);
     try{
       const res = await apiCall('tasks.dailyBonusClaim', { nonce: dailyBonusState.nonce });
-      showToast(t('rewards.dailyBonusSuccess', { amount: Number(res.reward).toFixed(4) }), 'success');
+      showToast(t('tasks.dailyBonusSuccess', { amount: Number(res.reward).toFixed(4) }), 'success');
       if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
       loadHome();
       loadWalletTx();
@@ -524,7 +524,7 @@
       showToast(friendlyError(err), 'error');
     } finally {
       dailyBonusState = null;
-      setBtnLoading(btn, false, t('rewards.dailyBonusStart'));
+      setBtnLoading(btn, false, t('tasks.dailyBonusStart'));
       renderDailyBonusCard();
     }
   }
@@ -783,7 +783,6 @@
     const surfCard = document.getElementById('surfRewardCard');
     if (surfCard) surfCard.style.display = (SURF_UNDER_DEVELOPMENT && !isSurfAdmin()) ? 'none' : '';
     document.getElementById('pointsBalance').textContent = Number(s.user.points).toLocaleString('en-US');
-    renderDailyBonusCard();
     const catalog = s?.config?.rewards_catalog || {};
     const list = document.getElementById('rewardsList');
     list.innerHTML = Object.entries(catalog).map(([id, r]) => {
@@ -971,6 +970,8 @@
       if (br.done){ if (brBtn) brBtn.style.display='none'; if (brStatus) brStatus.style.display='flex'; }
       else { if (brBtn) brBtn.style.display='inline-flex'; if (brStatus) brStatus.style.display='none'; }
     }
+
+    renderDailyBonusCard();
   }
 
   // 🎯 مهمة "تصفح 100 مرة" — الزر ينقل مباشرة لصفحة المكافآت اللي فيها كرت "تصفح واربح"
