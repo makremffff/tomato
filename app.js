@@ -448,13 +448,22 @@
   }
 
   /* ===== Rewards: كرت المكافأة اليومية (Daily Bonus) =====
-     استلام فوري بدون رابط أو انتظار — 3 مرات كل 24 ساعة (نافذة متجددة من أول استلام)،
-     إجمالي 0.005$ مقسومة على 3 مرات. التحقق من الحد يتم بالكامل من السيرفر. */
+     زر بيفتح الرابط بتاب/متصفح خارجي، وبعدها انتظار 10 ثواني حقيقية (يتحقق منها
+     السيرفر من started_at، مش من عداد الواجهة)، وبعدين يقدر يستلم المكافأة.
+     3 مرات كل 24 ساعة (نافذة متجددة من أول استلام)، إجمالي 0.005$ مقسومة على 3 مرات. */
+  let dailyBonusState = null; // { nonce, timer, remaining }
+
+  function openExternalLink(url){
+    if (tg && tg.openLink) tg.openLink(url);
+    else window.open(url, '_blank');
+  }
+
   function renderDailyBonusCard(){
     const s = appState;
     const btn = document.getElementById('dailyBonusBtn');
     const desc = document.getElementById('dailyBonusRewardDesc');
     if (!btn || !desc || !s || !s.tasks || !s.tasks.daily_bonus) return;
+    if (dailyBonusState) return; // مهمة شغالة أصلاً — لا تلمس الزر أثناء العد التنازلي
     const { progress, required } = s.tasks.daily_bonus;
     desc.textContent = t('rewards.dailyBonusDesc', { progress, required });
     if (progress >= required){
@@ -462,25 +471,61 @@
       btn.textContent = t('rewards.dailyBonusDone');
     } else {
       btn.disabled = false;
-      btn.textContent = t('rewards.dailyBonusClaim');
-      btn.onclick = () => claimDailyBonus(btn);
+      btn.textContent = t('rewards.dailyBonusStart');
+      btn.onclick = () => startDailyBonus(btn);
+    }
+  }
+
+  async function startDailyBonus(btn){
+    if (dailyBonusState) return; // مهمة شغالة أصلاً
+    // 🛡️ ممنوع فتح رابط المهمة ومانع الإعلانات أو VPN مفعّل
+    const passed = await guardAgainstAdblockVpn(() => startDailyBonus(btn));
+    if (!passed) return;
+    setBtnLoading(btn, true);
+    try{
+      const res = await apiCall('tasks.dailyBonusStart', {});
+      dailyBonusState = { nonce: res.nonce, timer: null, remaining: res.waitSeconds };
+      openExternalLink(res.url);
+
+      setBtnLoading(btn, false);
+      btn.disabled = true;
+      btn.textContent = t('rewards.dailyBonusWaiting', { sec: dailyBonusState.remaining });
+
+      dailyBonusState.timer = setInterval(() => {
+        dailyBonusState.remaining -= 1;
+        if (dailyBonusState.remaining <= 0){
+          clearInterval(dailyBonusState.timer);
+          btn.disabled = false;
+          btn.textContent = t('rewards.dailyBonusClaim');
+          btn.onclick = () => claimDailyBonus(btn);
+        } else {
+          btn.textContent = t('rewards.dailyBonusWaiting', { sec: dailyBonusState.remaining });
+        }
+      }, 1000);
+    } catch(err){
+      dailyBonusState = null;
+      if (err && err.message === 'daily_limit_reached') showToast(t('rewards.dailyBonusLimit'), 'error');
+      else showToast(friendlyError(err), 'error');
+      setBtnLoading(btn, false, t('rewards.dailyBonusStart'));
     }
   }
 
   async function claimDailyBonus(btn){
+    if (!dailyBonusState) return;
     setBtnLoading(btn, true);
     try{
-      const res = await apiCall('tasks.dailyBonusClaim', {});
+      const res = await apiCall('tasks.dailyBonusClaim', { nonce: dailyBonusState.nonce });
       showToast(t('rewards.dailyBonusSuccess', { amount: Number(res.reward).toFixed(4) }), 'success');
       if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
       loadHome();
       loadWalletTx();
       loadHistory('all');
     } catch(err){
-      if (err && err.message === 'daily_limit_reached') showToast(t('rewards.dailyBonusLimit'), 'error');
-      else showToast(friendlyError(err), 'error');
+      showToast(friendlyError(err), 'error');
     } finally {
-      setBtnLoading(btn, false);
+      dailyBonusState = null;
+      setBtnLoading(btn, false, t('rewards.dailyBonusStart'));
+      renderDailyBonusCard();
     }
   }
 

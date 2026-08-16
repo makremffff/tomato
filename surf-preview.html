@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>معاينة إعلانات — تصفح واربح (بدون حماية)</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #0b0b12;
+    color: #f4f4f8;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 18px 14px 60px; }
+  .badge {
+    display: inline-block; background: #ff3b3b; color: #fff; font-size: 11px;
+    font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 10px;
+  }
+  h1 { font-size: 18px; margin: 4px 0 4px; }
+  .sub { color: #9a9aa8; font-size: 13px; margin-bottom: 18px; line-height: 1.6; }
+  .refresh-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 999px; padding: 6px 12px; font-size: 12px; color: #cfcfe0; margin-bottom: 20px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #34d399; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  .ad-slot-label { font-size: 12px; color: #7d7d90; margin: 18px 0 8px; }
+  .ad-container {
+    background: rgba(255,255,255,0.04); border: 1px dashed rgba(255,255,255,0.15);
+    border-radius: 14px; min-height: 60px; display: flex; align-items: center; justify-content: center;
+    overflow: hidden; padding: 6px;
+  }
+  #adTop { min-height: 300px; }
+  #adTopMobile { min-height: 50px; }
+  #adBottomLeader { min-height: 90px; }
+  #adBottom { min-height: 600px; }
+  .counter {
+    position: fixed; top: 14px; left: 14px; z-index: 99999;
+    background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+    padding: 6px 12px; font-size: 12px; color: #fff;
+  }
+</style>
+</head>
+<body>
+
+<div class="counter">🔄 تحديث كل ثانية — <span id="tickCount">0</span></div>
+
+<div class="wrap">
+  <span class="badge">⚠️ معاينة فقط — بدون أي حماية (AdBlock/VPN)</span>
+  <h1>معاينة مباشرة لإعلانات "تصفح واربح"</h1>
+  <div class="sub">
+    هاي صفحة معاينة مستقلة لعرض شكل وسلوك الإعلانات فقط — ما فيها جلسة مستخدم، ولا مكافآت،
+    ولا تحقق سيرفر، ولا حظر AdBlock/VPN. الإعلانات تتجدد كل ثانية وحدة.
+  </div>
+  <div class="refresh-chip"><span class="dot"></span> تحديث تلقائي كل 1000ms</div>
+
+  <div class="ad-slot-label">Native Banner (أعلى)</div>
+  <div class="ad-container" id="adTop"></div>
+
+  <div class="ad-slot-label">Banner 320×50 (أعلى)</div>
+  <div class="ad-container" id="adTopMobile"></div>
+
+  <div class="ad-slot-label">Banner 728×90 (أسفل)</div>
+  <div class="ad-container" id="adBottomLeader"></div>
+
+  <div class="ad-slot-label">Banner 160×600 (أسفل)</div>
+  <div class="ad-container" id="adBottom"></div>
+</div>
+
+<script>
+  // ⚠️ نفس وحدات Adsterra المستخدمة بصفحة "تصفح واربح" الحقيقية — بدون أي تعديل على الروابط/المفاتيح
+
+  const ADSTERRA_NATIVE_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
+    '<div id="container-30e20b615096518ccd4af02a8de2c86e"></div>' +
+    '<script async data-cfasync="false" src="https://interventioncopiedloitering.com/30e20b615096518ccd4af02a8de2c86e/invoke.js"><\/script>' +
+    '</body></html>';
+
+  const ADSTERRA_BANNER_MOBILE_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"04bcf6532017b6790ab2ddac95a5621d",format:"iframe",height:50,width:320,params:{}};<\/script>' +
+    '<script src="https://interventioncopiedloitering.com/04bcf6532017b6790ab2ddac95a5621d/invoke.js"><\/script>' +
+    '</body></html>';
+
+  const ADSTERRA_LEADERBOARD_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"6591d8cb13042eb0d24df990ae424042",format:"iframe",height:90,width:728,params:{}};<\/script>' +
+    '<script src="https://interventioncopiedloitering.com/6591d8cb13042eb0d24df990ae424042/invoke.js"><\/script>' +
+    '</body></html>';
+
+  const ADSTERRA_BANNER_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"832c2ab019ed7e5b767d47265f24fd72",format:"iframe",height:600,width:160,params:{}};<\/script>' +
+    '<script src="https://interventioncopiedloitering.com/832c2ab019ed7e5b767d47265f24fd72/invoke.js"><\/script>' +
+    '</body></html>';
+
+  const ADSTERRA_SOCIALBAR_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
+    '<script src="https://interventioncopiedloitering.com/d0/f6/b3/d0f6b318f29b5787025697029ae72f23.js"><\/script>' +
+    '</body></html>';
+
+  const PREVIEW_AD_REFRESH_MS = 1000; // ⏱️ تحديث كل ثانية وحدة (بدل 3 ثواني بالصفحة الحقيقية) — للمعاينة فقط
+
+  let socialBarFrame = null;
+  let tickCount = 0;
+
+  function makeAdIframe(srcdocHtml, width, height){
+    const f = document.createElement('iframe');
+    f.srcdoc = srcdocHtml;
+    f.style.border = '0';
+    f.style.width = width;
+    f.style.height = height;
+    f.style.maxWidth = '100%';
+    f.scrolling = 'no';
+    return f;
+  }
+
+  function renderAds(){
+    const topContainer = document.getElementById('adTop');
+    const topMobileContainer = document.getElementById('adTopMobile');
+    const bottomLeaderContainer = document.getElementById('adBottomLeader');
+    const bottomContainer = document.getElementById('adBottom');
+    if (!topContainer || !bottomContainer) return;
+
+    topContainer.innerHTML = '';
+    topContainer.appendChild(makeAdIframe(ADSTERRA_NATIVE_HTML, '100%', '300px'));
+
+    topMobileContainer.innerHTML = '';
+    topMobileContainer.appendChild(makeAdIframe(ADSTERRA_BANNER_MOBILE_HTML, '320px', '50px'));
+
+    bottomLeaderContainer.innerHTML = '';
+    bottomLeaderContainer.appendChild(makeAdIframe(ADSTERRA_LEADERBOARD_HTML, '728px', '90px'));
+
+    bottomContainer.innerHTML = '';
+    bottomContainer.appendChild(makeAdIframe(ADSTERRA_BANNER_HTML, '160px', '600px'));
+
+    if (socialBarFrame && socialBarFrame.parentNode){
+      socialBarFrame.parentNode.removeChild(socialBarFrame);
+    }
+    socialBarFrame = makeAdIframe(ADSTERRA_SOCIALBAR_HTML, '100%', '100%');
+    socialBarFrame.style.position = 'fixed';
+    socialBarFrame.style.inset = '0';
+    socialBarFrame.style.zIndex = '9000';
+    socialBarFrame.style.pointerEvents = 'none';
+    document.body.appendChild(socialBarFrame);
+
+    tickCount++;
+    document.getElementById('tickCount').textContent = tickCount;
+  }
+
+  renderAds();
+  setInterval(renderAds, PREVIEW_AD_REFRESH_MS);
+</script>
+
+</body>
+</html>
