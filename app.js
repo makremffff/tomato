@@ -460,16 +460,17 @@
 
   function renderDailyBonusCard(){
     const s = appState;
+    const card = document.getElementById('dailyBonusTaskCard');
     const btn = document.getElementById('dailyBonusBtn');
     const desc = document.getElementById('dailyBonusProgress');
-    if (!btn || !desc || !s || !s.tasks || !s.tasks.daily_bonus) return;
+    if (!card || !btn || !desc || !s || !s.tasks || !s.tasks.daily_bonus) return;
     if (dailyBonusState) return; // مهمة شغالة أصلاً — لا تلمس الزر أثناء العد التنازلي
     const { progress, required } = s.tasks.daily_bonus;
     if (progress >= required){
+      card.classList.add('ended');
       desc.textContent = t('tasks.dailyBonusEnded');
-      btn.disabled = true;
-      btn.textContent = t('tasks.dailyBonusDone');
     } else {
+      card.classList.remove('ended');
       desc.textContent = t('tasks.dailyBonusDesc', { progress, required });
       btn.disabled = false;
       btn.textContent = t('tasks.dailyBonusStart');
