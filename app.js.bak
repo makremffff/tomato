@@ -447,40 +447,63 @@
     openModal('confirmModalOverlay');
   }
 
-  /* ===== Rewards: كرت المكافأة اليومية (Daily Bonus) =====
-     استلام فوري بدون رابط أو انتظار — 3 مرات كل 24 ساعة (نافذة متجددة من أول استلام)،
-     إجمالي 0.005$ مقسومة على 3 مرات. التحقق من الحد يتم بالكامل من السيرفر. */
-  function renderDailyBonusCard(){
-    const s = appState;
-    const btn = document.getElementById('dailyBonusBtn');
-    const desc = document.getElementById('dailyBonusRewardDesc');
-    if (!btn || !desc || !s || !s.tasks || !s.tasks.daily_bonus) return;
-    const { progress, required } = s.tasks.daily_bonus;
-    desc.textContent = t('rewards.dailyBonusDesc', { progress, required });
-    if (progress >= required){
+  /* ===== Rewards: Adsterra Smart Link card =====
+     زر بيفتح الرابط الذكي بتاب/متصفح خارجي، وبعدها انتظار 10 ثواني حقيقية (يتحقق منها
+     السيرفر من started_at، مش من عداد الواجهة)، وبعدين يقدر يستلم النقاط. */
+  let smartlinkState = null; // { nonce, timer, remaining }
+
+  function openExternalLink(url){
+    if (tg && tg.openLink) tg.openLink(url);
+    else window.open(url, '_blank');
+  }
+
+  async function startSmartlinkTask(btn){
+    if (smartlinkState) return; // مهمة شغالة أصلاً
+    // 🛡️ ممنوع فتح رابط المهمة ومانع الإعلانات أو VPN مفعّل
+    const passed = await guardAgainstAdblockVpn(() => startSmartlinkTask(btn));
+    if (!passed) return;
+    setBtnLoading(btn, true);
+    try{
+      const res = await apiCall('tasks.smartlinkStart', {});
+      smartlinkState = { nonce: res.nonce, timer: null, remaining: res.waitSeconds };
+      openExternalLink(res.url);
+
+      setBtnLoading(btn, false);
       btn.disabled = true;
-      btn.textContent = t('rewards.dailyBonusDone');
-    } else {
-      btn.disabled = false;
-      btn.textContent = t('rewards.dailyBonusClaim');
-      btn.onclick = () => claimDailyBonus(btn);
+      btn.textContent = t('rewards.smartlinkWaiting', { sec: smartlinkState.remaining });
+
+      smartlinkState.timer = setInterval(() => {
+        smartlinkState.remaining -= 1;
+        if (smartlinkState.remaining <= 0){
+          clearInterval(smartlinkState.timer);
+          btn.disabled = false;
+          btn.textContent = t('rewards.smartlinkClaim');
+          btn.onclick = () => claimSmartlinkTask(btn);
+        } else {
+          btn.textContent = t('rewards.smartlinkWaiting', { sec: smartlinkState.remaining });
+        }
+      }, 1000);
+    } catch(err){
+      smartlinkState = null;
+      if (err && err.message === 'daily_limit_reached') showToast(t('rewards.smartlinkDailyLimit'), 'error');
+      else showToast(friendlyError(err), 'error');
+      setBtnLoading(btn, false, t('rewards.smartlinkStart'));
     }
   }
 
-  async function claimDailyBonus(btn){
+  async function claimSmartlinkTask(btn){
+    if (!smartlinkState) return;
     setBtnLoading(btn, true);
     try{
-      const res = await apiCall('tasks.dailyBonusClaim', {});
-      showToast(t('rewards.dailyBonusSuccess', { amount: Number(res.reward).toFixed(4) }), 'success');
-      if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
-      loadHome();
-      loadWalletTx();
-      loadHistory('all');
+      const res = await apiCall('tasks.smartlinkClaim', { nonce: smartlinkState.nonce });
+      document.getElementById('pointsBalance').textContent = Number(res.newPointsBalance).toLocaleString('en-US');
+      showToast(t('rewards.smartlinkSuccess', { points: res.reward }), 'success');
     } catch(err){
-      if (err && err.message === 'daily_limit_reached') showToast(t('rewards.dailyBonusLimit'), 'error');
-      else showToast(friendlyError(err), 'error');
+      showToast(friendlyError(err), 'error');
     } finally {
-      setBtnLoading(btn, false);
+      smartlinkState = null;
+      setBtnLoading(btn, false, t('rewards.smartlinkStart'));
+      btn.onclick = () => startSmartlinkTask(btn);
     }
   }
 
@@ -525,7 +548,7 @@
   let surfAdFrames = [];
   let surfSocialBarFrame = null;
   let surfAdRefreshTimer = null;
-  const SURF_AD_REFRESH_MS = 4000; // ⏱️ تحديث الإعلانات كل 3 ثواني
+  const SURF_AD_REFRESH_MS = 3000; // ⏱️ تحديث الإعلانات كل 3 ثواني
 
   function makeAdIframe(srcdocHtml, width, height){
     const f = document.createElement('iframe');
@@ -738,7 +761,6 @@
     const surfCard = document.getElementById('surfRewardCard');
     if (surfCard) surfCard.style.display = (SURF_UNDER_DEVELOPMENT && !isSurfAdmin()) ? 'none' : '';
     document.getElementById('pointsBalance').textContent = Number(s.user.points).toLocaleString('en-US');
-    renderDailyBonusCard();
     const catalog = s?.config?.rewards_catalog || {};
     const list = document.getElementById('rewardsList');
     list.innerHTML = Object.entries(catalog).map(([id, r]) => {
