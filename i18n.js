@@ -103,6 +103,7 @@ const RC_STRINGS = {
     'tasks.dailyBonusWaiting': 'استنى {sec} ث',
     'tasks.dailyBonusClaim': 'استلام',
     'tasks.dailyBonusDone': 'خلصت مرات اليوم',
+    'tasks.dailyBonusEnded': 'انتهت لليوم',
     'tasks.dailyBonusSuccess': 'حصلت على {amount}$ 🎉',
     'tasks.dailyBonusLimit': 'وصلت للحد الأقصى، جرب بعد 24 ساعة',
 
@@ -342,6 +343,7 @@ const RC_STRINGS = {
     'tasks.dailyBonusWaiting': 'Wait {sec}s',
     'tasks.dailyBonusClaim': 'Claim',
     'tasks.dailyBonusDone': "You've claimed all for today",
+    'tasks.dailyBonusEnded': 'Ended for today',
     'tasks.dailyBonusSuccess': 'You earned {amount}$ 🎉',
     'tasks.dailyBonusLimit': 'Limit reached, try again in 24 hours',
 

@@ -465,11 +465,12 @@
     if (!btn || !desc || !s || !s.tasks || !s.tasks.daily_bonus) return;
     if (dailyBonusState) return; // مهمة شغالة أصلاً — لا تلمس الزر أثناء العد التنازلي
     const { progress, required } = s.tasks.daily_bonus;
-    desc.textContent = t('tasks.dailyBonusDesc', { progress, required });
     if (progress >= required){
+      desc.textContent = t('tasks.dailyBonusEnded');
       btn.disabled = true;
       btn.textContent = t('tasks.dailyBonusDone');
     } else {
+      desc.textContent = t('tasks.dailyBonusDesc', { progress, required });
       btn.disabled = false;
       btn.textContent = t('tasks.dailyBonusStart');
       btn.onclick = () => startDailyBonus(btn);
