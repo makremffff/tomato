@@ -657,9 +657,9 @@
     ...GLOBAL_FLOAT_UNITS.map(html => ({ type: 'float', html }))
   ];
 
-  const AD_VISIBLE_MS = 4000;                       // ⏱️ مدة الظهور: 4 ثواني بالضبط لكل إعلان
-  const AD_REST_MS_CHOICES = [15000, 16000, 17000, 18000, 19000, 20000]; // 😌 فترة الراحة: بين 15 و20 ثانية
-  const AD_MAX_CONCURRENT = 4;                       // 4 أنواع إعلانات تظهر مع بعض كل دورة
+  const AD_VISIBLE_MS = 6000;                       // ⏱️ مدة الظهور: 4 ثواني بالضبط لكل إعلان
+  const AD_REST_MS_CHOICES = [11000, 11000, 11000, 10000, 10000, 10000]; // 😌 فترة الراحة: بين 15 و20 ثانية
+  const AD_MAX_CONCURRENT = 5;                       // 4 أنواع إعلانات تظهر مع بعض كل دورة
 
   let globalAdStackEl = null;
   let globalAdSchedulerTimer = null;
