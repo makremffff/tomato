@@ -657,9 +657,9 @@
     ...GLOBAL_FLOAT_UNITS.map(html => ({ type: 'float', html }))
   ];
 
-  const AD_VISIBLE_MS = 4000;                       // ⏱️ مدة الظهور: 4 ثواني بس
-  const AD_REST_MS_CHOICES = [20000, 25000, 30000]; // 😌 فترة الراحة: 20/25/30 ثانية بدون إعلانات
-  const AD_MAX_CONCURRENT_CHOICES = [1, 1, 2];      // عدد الوحدات الظاهرة بنفس اللحظة (غالباً وحدة وحدة)
+  const AD_VISIBLE_MS = 4000;                       // ⏱️ مدة الظهور: 4 ثواني بالضبط لكل إعلان
+  const AD_REST_MS_CHOICES = [20000, 25000, 30000]; // 😌 فترة الراحة: 20/25/30 ثانية بدون أي إعلان
+  const AD_MAX_CONCURRENT = 1;                       // إعلان واحد بس في كل مرة — بعدها يتوقف تماماً
 
   let globalAdStackEl = null;
   let globalAdSchedulerTimer = null;
@@ -722,7 +722,7 @@
   function runAdCycle(){
     clearCurrentAds();
 
-    const count = AD_MAX_CONCURRENT_CHOICES[Math.floor(Math.random() * AD_MAX_CONCURRENT_CHOICES.length)];
+    const count = AD_MAX_CONCURRENT;
     const pool = [...ALL_AD_ENTRIES];
     for (let i = 0; i < count && pool.length; i++){
       const idx = Math.floor(Math.random() * pool.length);
