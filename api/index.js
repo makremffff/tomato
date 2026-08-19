@@ -84,8 +84,20 @@ const APP_CFG = {
   DAILY_BONUS_TOTAL_USD:      0.01,
   get DAILY_BONUS_REWARD_USD() { return this.DAILY_BONUS_TOTAL_USD / this.DAILY_BONUS_MAX_PER_WINDOW; },
 
-  // 🌊 "تصفح واربح" أُلغيت بالكامل — أصبحت إعلانات تصفّح سلبية (بدون مكافآت) تظهر عبر
-  // كل صفحات التطبيق. مهمة "تصفح 10 مرة" أُزيلت معها بالكامل من الواجهة والسيرفر.
+  // 🌊 "تصفح واربح" — صفحة فيها عداد 60 ثانية وإعلانات Adcash تحمّل بالخلفية، تُصرف دفعات
+  // صغيرة كل 10 ثواني. ⚠️ التحقق من الوقت يتم بالكامل من فرق الوقت المسجّل بالسيرفر
+  // (started_at بجدول ad_surf_sessions) وليس من عداد الواجهة — عشان ما ينقدر يتلاعب فيه أحد
+  // عبر تعديل الـ JS أو نداء API مباشرة بدون انتظار.
+  SURF_TICK_SECONDS:       10,     // طول كل دفعة بالثواني
+  SURF_TOTAL_TICKS:        6,      // 6 × 10 ثانية = 60 ثانية إجمالي
+  SURF_REWARD_PER_TICK_USD: 0.00002, // ⚠️ رقم مبدئي بسيط — غيّره حسب ما تحدد
+  SURF_DAILY_MAX_SESSIONS: 10,     // أقصى عدد جلسات (محاولات بدء) باليوم — يحد من استغلال بدء/هجر الجلسة لتكرار مكافأة أول دفعة فقط
+  SURF_SESSION_EXPIRE_MIN: 10,     // أي جلسة غير مكتملة تعتبر منتهية بعد هالمدة (تنظيف/أمان)
+
+  // 🎯 مهمة يومية "تصفح 100 مرة" — تُحتسب من عدد جلسات "تصفح واربح" (SURF) المكتملة فعلياً اليوم
+  // (مو بدء الجلسة، حتى ما تنجز المهمة بجلسات مهجورة) — مكافأة إضافية لمرة وحدة باليوم عند الوصول للعدد
+  BROWSE_TASK_TARGET:      10,
+  BROWSE_TASK_REWARD_USD:  0.008,
 
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.001,
@@ -230,12 +242,18 @@ async function ensureSchema() {
     // 🎬 كرت Taddy بصفحة المكافآت — حصة يومية مستقلة تمامًا عن daily_ads / daily_task_ads
     ['daily_taddy', 'INT NOT NULL DEFAULT 0'],
     ['last_taddy_date', 'DATE'],
+    // 🌊 "تصفح واربح" — حصة يومية لعدد الجلسات (بدء الجلسة يُحتسب حتى لو ما اكتملت،
+    // عشان يمنع تكرار بدء/هجر الجلسة لاستغلال مكافأة الدفعة الأولى بلا حدود)
+    ['daily_surf', 'INT NOT NULL DEFAULT 0'],
+    ['last_surf_date', 'DATE'],
     // 🎁 المكافأة اليومية (Daily Bonus) — عداد ضمن نافذة 24 ساعة متجددة (مش يوم تقويمي)
     ['daily_bonus_count', 'INT NOT NULL DEFAULT 0'],
     ['daily_bonus_window_start', 'TIMESTAMPTZ'],
-    // ⚠️ daily_surf / last_surf_date / daily_surf_completed / last_surf_completed_date /
-    // last_browse_reward_date أُبقيت بقاعدة البيانات فقط لأعمدة قديمة (بدون استخدام بالكود
-    // بعد إلغاء "تصفح واربح" ومهمة "تصفح 10 مرة") — لا داعي لحذفها لتفادي أي مخاطرة على البيانات.
+    // 🎯 مهمة "تصفح 100 مرة" — عداد الجلسات المكتملة فعلياً (منفصل عن daily_surf اللي يعد المحاولات)
+    // + تاريخ آخر مرة استُلمت فيها مكافأة المهمة (لمنعها من التكرار أكثر من مرة باليوم)
+    ['daily_surf_completed', 'INT NOT NULL DEFAULT 0'],
+    ['last_surf_completed_date', 'DATE'],
+    ['last_browse_reward_date', 'DATE'],
   ];
   for (const [col, def] of backfillCols) {
     await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -832,6 +850,8 @@ module.exports = async function handler(req, res) {
         const inviteDone = inviteProgressToday >= APP_CFG.REFERRAL_MILESTONE_FRIENDS;
         const taskAdsDoneToday = toDateStr(dbUser.last_task_ad_date) === today ? dbUser.daily_task_ads : 0;
         const taskAdDone = taskAdsDoneToday >= APP_CFG.TASK_AD_DAILY_MAX;
+        const browseProgressToday = toDateStr(dbUser.last_surf_completed_date) === today ? dbUser.daily_surf_completed : 0;
+        const browseDone = toDateStr(dbUser.last_browse_reward_date) === today;
 
         return res.json({
           ok: true,
@@ -863,6 +883,7 @@ module.exports = async function handler(req, res) {
             invite_3_friends: { progress: inviteProgressToday, required: APP_CFG.REFERRAL_MILESTONE_FRIENDS, done: inviteDone },
             daily_login: { streak: dbUser.daily_login_streak, required: APP_CFG.DAILY_LOGIN_STREAK_DAYS, done: toDateStr(dbUser.last_daily_login) === today },
             task_ad: { progress: taskAdsDoneToday, required: APP_CFG.TASK_AD_DAILY_MAX, done: taskAdDone, enabled: !!ADSGRAM_REWARD_SECRET },
+            browse_100: { progress: browseProgressToday, required: APP_CFG.BROWSE_TASK_TARGET, done: browseDone },
             daily_bonus: {
               progress: (!dbUser.daily_bonus_window_start ||
                 (Date.now() - new Date(dbUser.daily_bonus_window_start).getTime()) >= APP_CFG.DAILY_BONUS_WINDOW_HOURS * 3600 * 1000)
@@ -897,6 +918,8 @@ module.exports = async function handler(req, res) {
             withdraw_min_usd: APP_CFG.WITHDRAW_MIN_USD, rewards_catalog: APP_CFG.REWARDS_CATALOG,
             channel_username: CHANNEL_USERNAME || null,
             taddy_reward_points: APP_CFG.TADDY_REWARD_POINTS,
+            browse_task_reward_usd: APP_CFG.BROWSE_TASK_REWARD_USD,
+            browse_task_target: APP_CFG.BROWSE_TASK_TARGET,
             daily_bonus_reward_usd: APP_CFG.DAILY_BONUS_REWARD_USD,
             daily_bonus_max: APP_CFG.DAILY_BONUS_MAX_PER_WINDOW,
           },
@@ -1256,8 +1279,124 @@ module.exports = async function handler(req, res) {
         });
       }
 
-      // ⚠️ ads.surfStart / ads.surfClaim أُزيلا بالكامل — "تصفح واربح" لم تعد تمنح مكافآت،
-      // صارت إعلانات تصفّح سلبية بدون سيرفر/جلسة (راجع app.js: global ad rotator).
+      // ═══════════ "تصفح واربح" — بدء جلسة (60 ثانية، 12 دفعة كل 5 ثواني) ═══════════
+      case 'ads.surfStart': {
+        const today = new Date().toISOString().slice(0, 10);
+        const dailyCount = toDateStr(dbUser.last_surf_date) === today ? dbUser.daily_surf : 0;
+        if (dailyCount >= APP_CFG.SURF_DAILY_MAX_SESSIONS) {
+          return res.status(429).json({ ok: false, error: 'daily_limit_reached' });
+        }
+
+        // بدء الجلسة يُحتسب من حصة اليوم فوراً (مش بس عند الاكتمال) — عشان يمنع
+        // حد يبدأ ويهجر الجلسة بشكل متكرر لاستغلال مكافأة أول دفعة فقط بلا حدود
+        await sql(
+          `UPDATE users SET
+             daily_surf = CASE WHEN last_surf_date = $1 THEN daily_surf + 1 ELSE 1 END,
+             last_surf_date = $1
+           WHERE id = $2`,
+          [today, dbUser.id]
+        );
+
+        const nonce = crypto.randomBytes(24).toString('hex');
+        await sql(`INSERT INTO ad_surf_sessions (user_id, nonce) VALUES ($1, $2)`, [dbUser.id, nonce]);
+
+        return res.json({
+          ok: true,
+          nonce,
+          tickSeconds: APP_CFG.SURF_TICK_SECONDS,
+          totalTicks: APP_CFG.SURF_TOTAL_TICKS,
+          rewardPerTick: APP_CFG.SURF_REWARD_PER_TICK_USD,
+        });
+      }
+
+      // ═══════════ "تصفح واربح" — تأكيد دفعة (كل 5 ثواني) ═══════════
+      case 'ads.surfClaim': {
+        const nonce = String(data.nonce || '');
+        const tick = parseInt(data.tick, 10);
+        if (!nonce || !Number.isInteger(tick) || tick < 1 || tick > APP_CFG.SURF_TOTAL_TICKS) {
+          return res.status(400).json({ ok: false, error: 'invalid_request' });
+        }
+
+        const rows = await sql(
+          `SELECT id, claimed_ticks, completed,
+                  EXTRACT(EPOCH FROM (NOW() - started_at)) AS elapsed_sec
+           FROM ad_surf_sessions
+           WHERE nonce = $1 AND user_id = $2
+             AND started_at > NOW() - INTERVAL '${APP_CFG.SURF_SESSION_EXPIRE_MIN} minutes'`,
+          [nonce, dbUser.id]
+        );
+        if (!rows.length) return res.status(400).json({ ok: false, error: 'invalid_session' });
+        const session = rows[0];
+        if (session.completed) return res.status(400).json({ ok: false, error: 'session_completed' });
+
+        // 🛡️ لازم تكون الدفعة التالية بالتسلسل بالظبط (يمنع تكرار/تخطي دفعات)
+        if (tick !== session.claimed_ticks + 1) {
+          return res.status(400).json({ ok: false, error: 'invalid_tick' });
+        }
+
+        // 🛡️ التحقق الحقيقي من الوقت: لازم يكون فعلاً مرّ الوقت المطلوب حسب started_at
+        // بالسيرفر (مو حسب عداد الواجهة) — هامش ثانية واحدة بس لتأخير الشبكة
+        const requiredSec = tick * APP_CFG.SURF_TICK_SECONDS;
+        if (Number(session.elapsed_sec) < requiredSec - 1) {
+          return res.status(400).json({ ok: false, error: 'too_early' });
+        }
+
+        const isLastTick = tick >= APP_CFG.SURF_TOTAL_TICKS;
+        const reward = APP_CFG.SURF_REWARD_PER_TICK_USD;
+
+        const updatedUser = await sql(
+          `UPDATE users SET balance_usd = balance_usd + $1 WHERE id = $2 RETURNING balance_usd`,
+          [reward, dbUser.id]
+        );
+        await sql(
+          `UPDATE ad_surf_sessions SET claimed_ticks = $1, completed = $2 WHERE id = $3`,
+          [tick, isLastTick, session.id]
+        );
+
+        let browseTaskReward = null;
+        if (isLastTick) {
+          const totalUsd = reward * APP_CFG.SURF_TOTAL_TICKS;
+          await logTx(dbUser.id, 'ads', 'تصفح وربح — جلسة إعلانات', totalUsd, 'tx.surfSession');
+          await creditReferralCommission(dbUser, totalUsd);
+
+          // 🎯 مهمة "تصفح 100 مرة" — عدّ هذه الجلسة كواحدة من العدد المطلوب (جلسة مكتملة فعلياً فقط)
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const wasNewDay = toDateStr(dbUser.last_surf_completed_date) !== todayStr;
+          const browseRows = await sql(
+            `UPDATE users SET
+               daily_surf_completed = CASE WHEN last_surf_completed_date = $1 THEN daily_surf_completed + 1 ELSE 1 END,
+               last_surf_completed_date = $1
+             WHERE id = $2
+             RETURNING daily_surf_completed, last_browse_reward_date`,
+            [todayStr, dbUser.id]
+          );
+          const browseProgress = browseRows[0]?.daily_surf_completed ?? (wasNewDay ? 1 : dbUser.daily_surf_completed + 1);
+          const alreadyRewardedToday = toDateStr(browseRows[0]?.last_browse_reward_date) === todayStr;
+
+          if (browseProgress >= APP_CFG.BROWSE_TASK_TARGET && !alreadyRewardedToday) {
+            await sql(
+              `UPDATE users SET balance_usd = balance_usd + $1, last_browse_reward_date = $2 WHERE id = $3`,
+              [APP_CFG.BROWSE_TASK_REWARD_USD, todayStr, dbUser.id]
+            );
+            await logTx(dbUser.id, 'task', 'مكافأة: تصفح 100 مرة', APP_CFG.BROWSE_TASK_REWARD_USD, 'tx.browseTask');
+            await creditReferralCommission(dbUser, APP_CFG.BROWSE_TASK_REWARD_USD);
+            browseTaskReward = APP_CFG.BROWSE_TASK_REWARD_USD;
+          }
+        }
+
+        const finalBalance = browseTaskReward
+          ? await sql(`SELECT balance_usd FROM users WHERE id = $1`, [dbUser.id])
+          : null;
+
+        return res.json({
+          ok: true,
+          tick,
+          completed: isLastTick,
+          reward,
+          newBalance: finalBalance ? parseFloat(finalBalance[0].balance_usd) : parseFloat(updatedUser[0].balance_usd),
+          browseTaskReward,
+        });
+      }
 
       // ═══════════ المحفظة: TON Connect ═══════════
       case 'wallet.connect': {
