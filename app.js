@@ -658,8 +658,8 @@
   ];
 
   const AD_VISIBLE_MS = 4000;                       // ⏱️ مدة الظهور: 4 ثواني بالضبط لكل إعلان
-  const AD_REST_MS_CHOICES = [20000, 25000, 30000]; // 😌 فترة الراحة: 20/25/30 ثانية بدون أي إعلان
-  const AD_MAX_CONCURRENT = 1;                       // إعلان واحد بس في كل مرة — بعدها يتوقف تماماً
+  const AD_REST_MS_CHOICES = [15000, 16000, 17000, 18000, 19000, 20000]; // 😌 فترة الراحة: بين 15 و20 ثانية
+  const AD_MAX_CONCURRENT = 4;                       // 4 أنواع إعلانات تظهر مع بعض كل دورة
 
   let globalAdStackEl = null;
   let globalAdSchedulerTimer = null;
@@ -933,22 +933,7 @@
       if (taStatus) taStatus.style.display = 'none';
     }
 
-    const br = s.tasks.browse_100;
-    if (br){
-      const brBtn = document.getElementById('taskBtn-browse_100');
-      const brStatus = document.getElementById('browseTaskStatus');
-      const brProgressEl = document.getElementById('browseTaskProgress');
-      if (brProgressEl && s.config) brProgressEl.textContent = t('tasks.browseProgress', { amount: s.config.browse_task_reward_usd.toFixed(3), progress: br.progress, required: br.required });
-      if (br.done){ if (brBtn) brBtn.style.display='none'; if (brStatus) brStatus.style.display='flex'; }
-      else { if (brBtn) brBtn.style.display='inline-flex'; if (brStatus) brStatus.style.display='none'; }
-    }
-
     renderDailyBonusCard();
-  }
-
-  // 🎯 مهمة "تصفح 100 مرة" — الزر ينقل مباشرة لصفحة المكافآت اللي فيها كرت "تصفح واربح"
-  function goToBrowseTask(){
-    goTo('rewards');
   }
 
   function renderReferral(){
