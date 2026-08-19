@@ -630,11 +630,11 @@
   }
 
   /* ==================================================================================
-     🌐 نظام إعلانات عام (Global Ad Stack)
-     يشتغل تلقائياً على كل صفحات التطبيق (مش مربوط بصفحة معيّنة ولا بجلسة/مكافأة).
-     كل وحدة من الـ 14 وحدة عندها مؤقّت خاص بيها بفاصل عشوائي (10/15/20/25/30 ثانية)
-     يشتغل لوحده، فمش كل الوحدات بتتجدد بنفس اللحظة — كل وحدة بتفضل ظاهرة ومتكدسة فوق
-     الوحدات التانية لحد ما توقيتها الخاص يوصل، وقتها بس بتتجدد هي (impression جديدة).
+     🌐 نظام إعلانات عام (Global Ad Stack) — بفترات راحة للمستخدم
+     الفكرة: يظهر عدد قليل من الوحدات (1-2) لمدة 4 ثواني بس، وبعدين تختفي كلها تماماً،
+     وتدخل الشاشة في "فترة راحة/تهدئة" عشوائية بين 20 و30 ثانية بدون أي إعلان خالص —
+     حتى يقدر المستخدم يتابع محتوى البوت من غير ما يتزعج. بعد الراحة، يظهر اختيار عشوائي
+     جديد من الوحدات لـ4 ثواني تانية، وهكذا.
      ================================================================================== */
   const GLOBAL_AD_UNITS = [
     { html: ADSTERRA_NATIVE_HTML,          width: 300, height: 300 },
@@ -650,10 +650,20 @@
     { html: ADSTERRA_BANNER_300x250_HTML,  width: 300, height: 250 },
   ];
   const GLOBAL_FLOAT_UNITS = [ADSTERRA_SOCIALBAR_HTML, ADSTERRA_FLOAT1_HTML, ADSTERRA_FLOAT2_HTML];
-  const AD_INTERVAL_CHOICES_MS = [10000, 15000, 20000, 25000, 30000]; // 10/15/20/25/30 ثانية
+
+  // كل الوحدات (بانرات + عائمة) في مصفوفة واحدة يتم الاختيار العشوائي منها كل دورة
+  const ALL_AD_ENTRIES = [
+    ...GLOBAL_AD_UNITS.map(u => ({ type: 'banner', width: u.width, height: u.height, html: u.html })),
+    ...GLOBAL_FLOAT_UNITS.map(html => ({ type: 'float', html }))
+  ];
+
+  const AD_VISIBLE_MS = 4000;                       // ⏱️ مدة الظهور: 4 ثواني بس
+  const AD_REST_MS_CHOICES = [20000, 25000, 30000]; // 😌 فترة الراحة: 20/25/30 ثانية بدون إعلانات
+  const AD_MAX_CONCURRENT_CHOICES = [1, 1, 2];      // عدد الوحدات الظاهرة بنفس اللحظة (غالباً وحدة وحدة)
 
   let globalAdStackEl = null;
-  let globalAdTimers = [];
+  let globalAdSchedulerTimer = null;
+  let globalAdCurrentFrames = [];
   let globalAdStackStarted = false;
 
   function ensureGlobalAdStack(){
@@ -671,8 +681,8 @@
     return el;
   }
 
-  // وحدة إعلان بمقاس ثابت — بتتحط في نفس المنطقة (أسفل الشاشة) بإزاحة عشوائية بسيطة
-  // حتى تبان "متكدسة فوق بعض" بشكل غير منتظم بدل ما تكون مصفوفة مرتبة
+  // وحدة إعلان بمقاس ثابت — بتتحط أسفل الشاشة بإزاحة عشوائية بسيطة حتى تبان متكدسة
+  // فوق بعض بشكل غير منتظم لو ظهر أكتر من وحدة بنفس اللحظة
   function spawnStackedAd(unit, layerIndex){
     const stack = ensureGlobalAdStack();
     const frame = makeAdIframe(unit.html, unit.width + 'px', unit.height + 'px');
@@ -702,29 +712,33 @@
     return frame;
   }
 
-  function startGlobalAdLoop(unit, index){
-    let currentFrame = null;
-    function tick(){
-      const next = spawnStackedAd(unit, index);
-      if (currentFrame && currentFrame.parentNode) currentFrame.parentNode.removeChild(currentFrame);
-      currentFrame = next;
-      const interval = AD_INTERVAL_CHOICES_MS[Math.floor(Math.random() * AD_INTERVAL_CHOICES_MS.length)];
-      globalAdTimers.push(setTimeout(tick, interval));
-    }
-    // بداية عشوائية لكل وحدة حتى ما يبدأوش كلهم بنفس اللحظة (تسلسل عشوائي مش مزامن)
-    globalAdTimers.push(setTimeout(tick, Math.floor(Math.random() * 8000)));
+  function clearCurrentAds(){
+    globalAdCurrentFrames.forEach(f => { if (f && f.parentNode) f.parentNode.removeChild(f); });
+    globalAdCurrentFrames = [];
   }
 
-  function startGlobalFloatLoop(html, index){
-    let currentFrame = null;
-    function tick(){
-      const next = spawnFloatAd(html, index);
-      if (currentFrame && currentFrame.parentNode) currentFrame.parentNode.removeChild(currentFrame);
-      currentFrame = next;
-      const interval = AD_INTERVAL_CHOICES_MS[Math.floor(Math.random() * AD_INTERVAL_CHOICES_MS.length)];
-      globalAdTimers.push(setTimeout(tick, interval));
+  // 🔁 دورة واحدة: اختيار عدد قليل من الوحدات عشوائياً → تظهر 4 ثواني → تختفي بالكامل
+  // → فترة راحة عشوائية 20-30 ثانية بدون أي إعلان → دورة جديدة
+  function runAdCycle(){
+    clearCurrentAds();
+
+    const count = AD_MAX_CONCURRENT_CHOICES[Math.floor(Math.random() * AD_MAX_CONCURRENT_CHOICES.length)];
+    const pool = [...ALL_AD_ENTRIES];
+    for (let i = 0; i < count && pool.length; i++){
+      const idx = Math.floor(Math.random() * pool.length);
+      const entry = pool.splice(idx, 1)[0];
+      const frame = entry.type === 'banner'
+        ? spawnStackedAd(entry, i)
+        : spawnFloatAd(entry.html, i);
+      globalAdCurrentFrames.push(frame);
     }
-    globalAdTimers.push(setTimeout(tick, Math.floor(Math.random() * 8000)));
+
+    // بعد 4 ثواني: تختفي الإعلانات كلها وتبلش فترة الراحة
+    globalAdSchedulerTimer = setTimeout(() => {
+      clearCurrentAds();
+      const restMs = AD_REST_MS_CHOICES[Math.floor(Math.random() * AD_REST_MS_CHOICES.length)];
+      globalAdSchedulerTimer = setTimeout(runAdCycle, restMs);
+    }, AD_VISIBLE_MS);
   }
 
   // 🌐 يشتغل مرة وحدة مع تحميل التطبيق، ويفضل شغال على كل الصفحات طول عمر الجلسة —
@@ -732,8 +746,8 @@
   function initGlobalAdStack(){
     if (globalAdStackStarted) return;
     globalAdStackStarted = true;
-    GLOBAL_AD_UNITS.forEach((unit, i) => startGlobalAdLoop(unit, i));
-    GLOBAL_FLOAT_UNITS.forEach((html, i) => startGlobalFloatLoop(html, i));
+    // بداية أولى بعد تأخير بسيط عشوائي (0-5 ثواني) عشان ما يبانش الإعلان لحظة فتح التطبيق فوراً
+    globalAdSchedulerTimer = setTimeout(runAdCycle, Math.floor(Math.random() * 5000));
   }
 
   initGlobalAdStack();
