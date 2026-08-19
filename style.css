@@ -644,10 +644,6 @@
     cursor:not-allowed;
   }
   .task-btn:active{transform:scale(.92);}
-  .task-card.ended{justify-content:center; padding:14px;}
-  .task-card.ended .task-ic, .task-card.ended .tn, .task-card.ended .task-btn{display:none;}
-  .task-card.ended .task-mid{flex:none; text-align:center;}
-  .task-card.ended .td{margin:0; font-size:13px; font-weight:700; color:var(--text-2);}
 
   /* ===== Task Ads (Adsgram <adsgram-task>) — نفس شكل كارد المهام، مطبّق على العنصر نفسه ===== */
   .task-section-label{

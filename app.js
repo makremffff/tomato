@@ -450,7 +450,7 @@
   /* ===== Rewards: كرت المكافأة اليومية (Daily Bonus) =====
      زر بيفتح الرابط بتاب/متصفح خارجي، وبعدها انتظار 10 ثواني حقيقية (يتحقق منها
      السيرفر من started_at، مش من عداد الواجهة)، وبعدين يقدر يستلم المكافأة.
-     3 مرات كل 24 ساعة (نافذة متجددة من أول استلام)، إجمالي 0.005$ مقسومة على 3 مرات. */
+     3 مرات كل 24 ساعة (نافذة متجددة من أول استلام)، إجمالي 0.01$ مقسومة على 3 مرات. */
   let dailyBonusState = null; // { nonce, timer, remaining }
 
   function openExternalLink(url){
@@ -460,17 +460,16 @@
 
   function renderDailyBonusCard(){
     const s = appState;
-    const card = document.getElementById('dailyBonusTaskCard');
     const btn = document.getElementById('dailyBonusBtn');
     const desc = document.getElementById('dailyBonusProgress');
-    if (!card || !btn || !desc || !s || !s.tasks || !s.tasks.daily_bonus) return;
+    if (!btn || !desc || !s || !s.tasks || !s.tasks.daily_bonus) return;
     if (dailyBonusState) return; // مهمة شغالة أصلاً — لا تلمس الزر أثناء العد التنازلي
     const { progress, required } = s.tasks.daily_bonus;
     if (progress >= required){
-      card.classList.add('ended');
       desc.textContent = t('tasks.dailyBonusEnded');
+      btn.disabled = true;
+      btn.textContent = t('tasks.dailyBonusDone');
     } else {
-      card.classList.remove('ended');
       desc.textContent = t('tasks.dailyBonusDesc', { progress, required });
       btn.disabled = false;
       btn.textContent = t('tasks.dailyBonusStart');
@@ -569,6 +568,60 @@
     '<script src="https://interventioncopiedloitering.com/d0/f6/b3/d0f6b318f29b5787025697029ae72f23.js"></script>' +
     '</body></html>';
 
+  // === وحدات إضافية (مفاتيح مختلفة) — تظهر بنفس وقت الوحدات اللي فوق ===
+
+  // Native Banner إضافي
+  const ADSTERRA_NATIVE2_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
+    '<div id="container-edcc6b64c6bd0828f216780427110f9e"></div>' +
+    '<script async data-cfasync="false" src="https://interventioncopiedloitering.com/edcc6b64c6bd0828f216780427110f9e/invoke.js"></script>' +
+    '</body></html>';
+
+  // Banner 160×300
+  const ADSTERRA_BANNER_160x300_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"07ba49d9751a7850eaada0ec92f2b9ab",format:"iframe",height:300,width:160,params:{}};</script>' +
+    '<script src="https://interventioncopiedloitering.com/07ba49d9751a7850eaada0ec92f2b9ab/invoke.js"></script>' +
+    '</body></html>';
+
+  // Banner 320×50 إضافي
+  const ADSTERRA_BANNER_MOBILE2_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"b895987c82805b8778a34f54911e8de0",format:"iframe",height:50,width:320,params:{}};</script>' +
+    '<script src="https://interventioncopiedloitering.com/b895987c82805b8778a34f54911e8de0/invoke.js"></script>' +
+    '</body></html>';
+
+  // Banner 728×90 إضافي
+  const ADSTERRA_LEADERBOARD2_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"52387ebcd1498aa0c9c53e6965993fdc",format:"iframe",height:90,width:728,params:{}};</script>' +
+    '<script src="https://interventioncopiedloitering.com/52387ebcd1498aa0c9c53e6965993fdc/invoke.js"></script>' +
+    '</body></html>';
+
+  // Banner 160×600 إضافي
+  const ADSTERRA_BANNER2_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"e5adfc0f5e5225f4680755acfd93fbc0",format:"iframe",height:600,width:160,params:{}};</script>' +
+    '<script src="https://interventioncopiedloitering.com/e5adfc0f5e5225f4680755acfd93fbc0/invoke.js"></script>' +
+    '</body></html>';
+
+  // Banner 468×60
+  const ADSTERRA_BANNER_468x60_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"1749e30af32d97f3e94a600bf0581123",format:"iframe",height:60,width:468,params:{}};</script>' +
+    '<script src="https://interventioncopiedloitering.com/1749e30af32d97f3e94a600bf0581123/invoke.js"></script>' +
+    '</body></html>';
+
+  // Banner 300×250
+  const ADSTERRA_BANNER_300x250_HTML = '<html><body style="margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center;">' +
+    '<script>atOptions={key:"f54816edb76c2de5faa09943209d794d",format:"iframe",height:250,width:300,params:{}};</script>' +
+    '<script src="https://interventioncopiedloitering.com/f54816edb76c2de5faa09943209d794d/invoke.js"></script>' +
+    '</body></html>';
+
+  // سكربتات عائمة إضافية (نفس نمط Social Bar بدون atOptions)
+  const ADSTERRA_FLOAT1_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
+    '<script src="https://interventioncopiedloitering.com/0d/51/8d/0d518d9629f90a733d63c6cdff05cac6.js"></script>' +
+    '</body></html>';
+
+  const ADSTERRA_FLOAT2_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
+    '<script src="https://interventioncopiedloitering.com/5d/77/0f/5d770ff402768d79ddda9c1cd67e9819.js"></script>' +
+    '</body></html>';
+
+  let surfExtraFloatFrames = [];
   let surfAdFrames = [];
   let surfSocialBarFrame = null;
   let surfAdRefreshTimer = null;
@@ -597,14 +650,35 @@
     topContainer.appendChild(nativeFrame);
     const mobileBannerFrame = makeAdIframe(ADSTERRA_BANNER_MOBILE_HTML, '320px', '50px');
     topContainer.appendChild(mobileBannerFrame);
+    // وحدات إضافية بأعلى الصفحة
+    const native2Frame = makeAdIframe(ADSTERRA_NATIVE2_HTML, '100%', '300px');
+    topContainer.appendChild(native2Frame);
+    const banner160x300Frame = makeAdIframe(ADSTERRA_BANNER_160x300_HTML, '160px', '300px');
+    topContainer.appendChild(banner160x300Frame);
+    const mobileBanner2Frame = makeAdIframe(ADSTERRA_BANNER_MOBILE2_HTML, '320px', '50px');
+    topContainer.appendChild(mobileBanner2Frame);
+    const banner300x250Frame = makeAdIframe(ADSTERRA_BANNER_300x250_HTML, '300px', '250px');
+    topContainer.appendChild(banner300x250Frame);
 
     bottomContainer.innerHTML = '';
     const leaderboardFrame = makeAdIframe(ADSTERRA_LEADERBOARD_HTML, '728px', '90px');
     bottomContainer.appendChild(leaderboardFrame);
     const bannerFrame = makeAdIframe(ADSTERRA_BANNER_HTML, '160px', '600px');
     bottomContainer.appendChild(bannerFrame);
+    // وحدات إضافية بأسفل الصفحة
+    const leaderboard2Frame = makeAdIframe(ADSTERRA_LEADERBOARD2_HTML, '728px', '90px');
+    bottomContainer.appendChild(leaderboard2Frame);
+    const banner2Frame = makeAdIframe(ADSTERRA_BANNER2_HTML, '160px', '600px');
+    bottomContainer.appendChild(banner2Frame);
+    const banner468x60Frame = makeAdIframe(ADSTERRA_BANNER_468x60_HTML, '468px', '60px');
+    bottomContainer.appendChild(banner468x60Frame);
 
-    surfAdFrames = [nativeFrame, mobileBannerFrame, leaderboardFrame, bannerFrame];
+    surfAdFrames = [
+      nativeFrame, mobileBannerFrame,
+      native2Frame, banner160x300Frame, mobileBanner2Frame, banner300x250Frame,
+      leaderboardFrame, bannerFrame,
+      leaderboard2Frame, banner2Frame, banner468x60Frame
+    ];
 
     // 🛡️ Social Bar بيغطي الصفحة كلها عشان يقدر يحط نفسه بأي زاوية — بس z-index أوطى
     // من زر الخروج (99999) عشان الزر يضل فوقه دايماً وقابل للنقر
@@ -616,6 +690,18 @@
     surfSocialBarFrame.style.inset = '0';
     surfSocialBarFrame.style.zIndex = '9000';
     document.getElementById('page-surf').appendChild(surfSocialBarFrame);
+
+    // سكربتات عائمة إضافية (نفس فكرة Social Bar) — بتظهر مع بعض بنفس الوقت
+    surfExtraFloatFrames.forEach(f => { if (f && f.parentNode) f.parentNode.removeChild(f); });
+    surfExtraFloatFrames = [ADSTERRA_FLOAT1_HTML, ADSTERRA_FLOAT2_HTML].map(html => {
+      const f = makeAdIframe(html, '100%', '100%');
+      f.style.position = 'fixed';
+      f.style.inset = '0';
+      f.style.zIndex = '8999';
+      f.style.pointerEvents = 'none';
+      document.getElementById('page-surf').appendChild(f);
+      return f;
+    });
   }
 
   function loadAdsterraAds(){
