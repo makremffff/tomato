@@ -81,7 +81,7 @@ const APP_CFG = {
   DAILY_BONUS_SESSION_EXPIRE_MIN: 10, // أي جلسة غير مستلمة تعتبر منتهية بعد هالمدة
   DAILY_BONUS_MAX_PER_WINDOW: 3,
   DAILY_BONUS_WINDOW_HOURS:   24,
-  DAILY_BONUS_TOTAL_USD:      0.005,
+  DAILY_BONUS_TOTAL_USD:      0.01,
   get DAILY_BONUS_REWARD_USD() { return this.DAILY_BONUS_TOTAL_USD / this.DAILY_BONUS_MAX_PER_WINDOW; },
 
   // 🌊 "تصفح واربح" — صفحة فيها عداد 60 ثانية وإعلانات Adcash تحمّل بالخلفية، تُصرف دفعات
