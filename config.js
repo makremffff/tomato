@@ -16,6 +16,10 @@
   const ADSGRAM_BLOCK_ID  = '40439';                          // نفس Block ID المستخدم في BigLeague
   const ADSGRAM_TASK_BLOCK_ID = 'task-40539';                  // Block ID لإعلانات Task (نوعه Task في partner.adsgram.ai) — دائمًا بصيغة task-xxx
 
+  // ✅ "تصفح واربح" صارت ظاهرة لكل المستخدمين (كانت سابقاً قيد التطوير وظاهرة للأدمن فقط)
+  const SURF_UNDER_DEVELOPMENT = false;
+  const SURF_ADMIN_TELEGRAM_ID = '7741750541';
+
   // 🔗 رابط الإحالة الرسمي — Mini App deep link عبر startapp (وليس start العادي)
   // الصيغة: https://t.me/<bot_username>/<mini_app_short_name>?startapp=<referral_code>
   const REFERRAL_LINK_BASE = 'https://t.me/tamatoFarm_bot/earn?startapp=';
@@ -30,6 +34,12 @@
     try { tg.lockOrientation && tg.lockOrientation(); } catch(e){}
   }
   const initData = tg ? tg.initData : '';
+
+  // 🚧 يتحقق إذا كان المستخدم الحالي هو الأدمن المسموح له يشوف "تصفح واربح" وهي قيد التطوير
+  function isSurfAdmin(){
+    const uid = tg?.initDataUnsafe?.user?.id;
+    return uid != null && String(uid) === SURF_ADMIN_TELEGRAM_ID;
+  }
 
   // 🔗 يلتقط start_param (ref_<telegram_id>) من رابط الدعوة عند أول فتح للتطبيق
   const startParam = tg?.initDataUnsafe?.start_param || null;
