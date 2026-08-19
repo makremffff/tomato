@@ -659,7 +659,7 @@
 
   const AD_VISIBLE_MS = 6000;                       // ⏱️ مدة الظهور: 4 ثواني بالضبط لكل إعلان
   const AD_REST_MS_CHOICES = [11000, 11000, 11000, 10000, 10000, 10000]; // 😌 فترة الراحة: بين 15 و20 ثانية
-  const AD_MAX_CONCURRENT = 5;                       // 4 أنواع إعلانات تظهر مع بعض كل دورة
+  const AD_MAX_CONCURRENT = 14;                       // 4 أنواع إعلانات تظهر مع بعض كل دورة
 
   let globalAdStackEl = null;
   let globalAdSchedulerTimer = null;
