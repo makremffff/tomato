@@ -16,11 +16,6 @@
   }
 
   function goTo(pageId){
-    // 🛡️ لو المستخدم كان بصفحة "تصفح واربح" وطلع منها لأي صفحة تانية (رابط بالسايدبار،
-    // زر quick-item، ...إلخ) لازم تنتهي جلسة السيرفينج ويتشال سكربت الإعلان فوراً
-    if (pageId !== 'surf' && document.getElementById('page-surf').classList.contains('active') && typeof endSurfSession === 'function'){
-      endSurfSession();
-    }
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
     const pageEl = document.getElementById('page-'+pageId);
     pageEl.classList.add('active');
