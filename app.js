@@ -536,9 +536,6 @@
      كل وحدة بتتحط جوا iframe معزول (srcdoc) — سكربتات Adsterra بتستخدم document.write، ولو
      حقناها مباشرة بصفحة التطبيق بعد ما الصفحة خلصت تحميل، document.write هتمسح صفحة التطبيق
      كلها. الـ iframe بيعزل الـ document.write جوا صفحته الخاصة بس. */
-  let surfState = null; // { nonce, tick, totalTicks, tickSeconds, timer, displayTimer, remainingSeconds, earned }
-  let surfPreviousPageId = 'rewards';
-
   // Native Banner (يتمدد مع عرض الحاوية)
   const ADSTERRA_NATIVE_HTML = '<html><body style="margin:0;padding:0;background:transparent;">' +
     '<div id="container-30e20b615096518ccd4af02a8de2c86e"></div>' +
@@ -621,12 +618,6 @@
     '<script src="https://interventioncopiedloitering.com/5d/77/0f/5d770ff402768d79ddda9c1cd67e9819.js"></script>' +
     '</body></html>';
 
-  let surfExtraFloatFrames = [];
-  let surfAdFrames = [];
-  let surfSocialBarFrame = null;
-  let surfAdRefreshTimer = null;
-  const SURF_AD_REFRESH_MS = 4000; // ⏱️ تحديث الإعلانات كل 3 ثواني
-
   function makeAdIframe(srcdocHtml, width, height){
     const f = document.createElement('iframe');
     f.srcdoc = srcdocHtml;
@@ -638,238 +629,117 @@
     return f;
   }
 
-  // 🔄 يعيد إنشاء كل الـ iframes من الصفر (Native + Mobile Banner فوق، Leaderboard + Skyscraper تحت،
-  // Social Bar عائم) — استدعاء الإعلان من جديد بيولّد impression جديدة، وده اللي بيخلي الإعلانات "تتجدد"
-  function renderAdsterraAds(){
-    const topContainer = document.getElementById('surfAdContainerTop');
-    const bottomContainer = document.getElementById('surfAdContainerBottom');
-    if (!topContainer || !bottomContainer) return;
+  /* ==================================================================================
+     🌐 نظام إعلانات عام (Global Ad Stack)
+     يشتغل تلقائياً على كل صفحات التطبيق (مش مربوط بصفحة معيّنة ولا بجلسة/مكافأة).
+     كل وحدة من الـ 14 وحدة عندها مؤقّت خاص بيها بفاصل عشوائي (10/15/20/25/30 ثانية)
+     يشتغل لوحده، فمش كل الوحدات بتتجدد بنفس اللحظة — كل وحدة بتفضل ظاهرة ومتكدسة فوق
+     الوحدات التانية لحد ما توقيتها الخاص يوصل، وقتها بس بتتجدد هي (impression جديدة).
+     ================================================================================== */
+  const GLOBAL_AD_UNITS = [
+    { html: ADSTERRA_NATIVE_HTML,          width: 300, height: 300 },
+    { html: ADSTERRA_BANNER_MOBILE_HTML,   width: 320, height: 50  },
+    { html: ADSTERRA_LEADERBOARD_HTML,     width: 728, height: 90  },
+    { html: ADSTERRA_BANNER_HTML,          width: 160, height: 600 },
+    { html: ADSTERRA_NATIVE2_HTML,         width: 300, height: 300 },
+    { html: ADSTERRA_BANNER_160x300_HTML,  width: 160, height: 300 },
+    { html: ADSTERRA_BANNER_MOBILE2_HTML,  width: 320, height: 50  },
+    { html: ADSTERRA_LEADERBOARD2_HTML,    width: 728, height: 90  },
+    { html: ADSTERRA_BANNER2_HTML,         width: 160, height: 600 },
+    { html: ADSTERRA_BANNER_468x60_HTML,   width: 468, height: 60  },
+    { html: ADSTERRA_BANNER_300x250_HTML,  width: 300, height: 250 },
+  ];
+  const GLOBAL_FLOAT_UNITS = [ADSTERRA_SOCIALBAR_HTML, ADSTERRA_FLOAT1_HTML, ADSTERRA_FLOAT2_HTML];
+  const AD_INTERVAL_CHOICES_MS = [10000, 15000, 20000, 25000, 30000]; // 10/15/20/25/30 ثانية
 
-    topContainer.innerHTML = '';
-    const nativeFrame = makeAdIframe(ADSTERRA_NATIVE_HTML, '100%', '300px');
-    topContainer.appendChild(nativeFrame);
-    const mobileBannerFrame = makeAdIframe(ADSTERRA_BANNER_MOBILE_HTML, '320px', '50px');
-    topContainer.appendChild(mobileBannerFrame);
-    // وحدات إضافية بأعلى الصفحة
-    const native2Frame = makeAdIframe(ADSTERRA_NATIVE2_HTML, '100%', '300px');
-    topContainer.appendChild(native2Frame);
-    const banner160x300Frame = makeAdIframe(ADSTERRA_BANNER_160x300_HTML, '160px', '300px');
-    topContainer.appendChild(banner160x300Frame);
-    const mobileBanner2Frame = makeAdIframe(ADSTERRA_BANNER_MOBILE2_HTML, '320px', '50px');
-    topContainer.appendChild(mobileBanner2Frame);
-    const banner300x250Frame = makeAdIframe(ADSTERRA_BANNER_300x250_HTML, '300px', '250px');
-    topContainer.appendChild(banner300x250Frame);
+  let globalAdStackEl = null;
+  let globalAdTimers = [];
+  let globalAdStackStarted = false;
 
-    bottomContainer.innerHTML = '';
-    const leaderboardFrame = makeAdIframe(ADSTERRA_LEADERBOARD_HTML, '728px', '90px');
-    bottomContainer.appendChild(leaderboardFrame);
-    const bannerFrame = makeAdIframe(ADSTERRA_BANNER_HTML, '160px', '600px');
-    bottomContainer.appendChild(bannerFrame);
-    // وحدات إضافية بأسفل الصفحة
-    const leaderboard2Frame = makeAdIframe(ADSTERRA_LEADERBOARD2_HTML, '728px', '90px');
-    bottomContainer.appendChild(leaderboard2Frame);
-    const banner2Frame = makeAdIframe(ADSTERRA_BANNER2_HTML, '160px', '600px');
-    bottomContainer.appendChild(banner2Frame);
-    const banner468x60Frame = makeAdIframe(ADSTERRA_BANNER_468x60_HTML, '468px', '60px');
-    bottomContainer.appendChild(banner468x60Frame);
+  function ensureGlobalAdStack(){
+    if (globalAdStackEl) return globalAdStackEl;
+    const el = document.createElement('div');
+    el.id = 'globalAdStack';
+    el.style.position = 'fixed';
+    el.style.left = '0';
+    el.style.right = '0';
+    el.style.bottom = '0';
+    el.style.zIndex = '7000';
+    el.style.pointerEvents = 'none'; // كل إعلان بيفعّل النقر على نفسه بس
+    document.body.appendChild(el);
+    globalAdStackEl = el;
+    return el;
+  }
 
-    surfAdFrames = [
-      nativeFrame, mobileBannerFrame,
-      native2Frame, banner160x300Frame, mobileBanner2Frame, banner300x250Frame,
-      leaderboardFrame, bannerFrame,
-      leaderboard2Frame, banner2Frame, banner468x60Frame
-    ];
+  // وحدة إعلان بمقاس ثابت — بتتحط في نفس المنطقة (أسفل الشاشة) بإزاحة عشوائية بسيطة
+  // حتى تبان "متكدسة فوق بعض" بشكل غير منتظم بدل ما تكون مصفوفة مرتبة
+  function spawnStackedAd(unit, layerIndex){
+    const stack = ensureGlobalAdStack();
+    const frame = makeAdIframe(unit.html, unit.width + 'px', unit.height + 'px');
+    frame.style.position = 'absolute';
+    const offsetX = Math.floor(Math.random() * 40) - 20;
+    const offsetY = Math.floor(Math.random() * 24) - 12;
+    frame.style.left = 'calc(50% - ' + (unit.width / 2) + 'px + ' + offsetX + 'px)';
+    frame.style.bottom = Math.max(6, 10 + offsetY) + 'px';
+    frame.style.zIndex = String(7000 + layerIndex);
+    frame.style.pointerEvents = 'auto';
+    frame.style.borderRadius = '10px';
+    frame.style.boxShadow = '0 6px 24px rgba(0,0,0,.35)';
+    frame.style.maxWidth = '92vw';
+    stack.appendChild(frame);
+    return frame;
+  }
 
-    // 🛡️ Social Bar بيغطي الصفحة كلها عشان يقدر يحط نفسه بأي زاوية — بس z-index أوطى
-    // من زر الخروج (99999) عشان الزر يضل فوقه دايماً وقابل للنقر
-    if (surfSocialBarFrame && surfSocialBarFrame.parentNode){
-      surfSocialBarFrame.parentNode.removeChild(surfSocialBarFrame);
+  // وحدة عائمة بتغطي الشاشة كلها (Social Bar وشبيهاتها) — بتحقن نفسها بمكانها تلقائياً
+  function spawnFloatAd(html, layerIndex){
+    const stack = ensureGlobalAdStack();
+    const frame = makeAdIframe(html, '100%', '100%');
+    frame.style.position = 'fixed';
+    frame.style.inset = '0';
+    frame.style.zIndex = String(7500 + layerIndex);
+    frame.style.pointerEvents = 'none';
+    stack.appendChild(frame);
+    return frame;
+  }
+
+  function startGlobalAdLoop(unit, index){
+    let currentFrame = null;
+    function tick(){
+      const next = spawnStackedAd(unit, index);
+      if (currentFrame && currentFrame.parentNode) currentFrame.parentNode.removeChild(currentFrame);
+      currentFrame = next;
+      const interval = AD_INTERVAL_CHOICES_MS[Math.floor(Math.random() * AD_INTERVAL_CHOICES_MS.length)];
+      globalAdTimers.push(setTimeout(tick, interval));
     }
-    surfSocialBarFrame = makeAdIframe(ADSTERRA_SOCIALBAR_HTML, '100%', '100%');
-    surfSocialBarFrame.style.position = 'fixed';
-    surfSocialBarFrame.style.inset = '0';
-    surfSocialBarFrame.style.zIndex = '9000';
-    document.getElementById('page-surf').appendChild(surfSocialBarFrame);
-
-    // سكربتات عائمة إضافية (نفس فكرة Social Bar) — بتظهر مع بعض بنفس الوقت
-    surfExtraFloatFrames.forEach(f => { if (f && f.parentNode) f.parentNode.removeChild(f); });
-    surfExtraFloatFrames = [ADSTERRA_FLOAT1_HTML, ADSTERRA_FLOAT2_HTML].map(html => {
-      const f = makeAdIframe(html, '100%', '100%');
-      f.style.position = 'fixed';
-      f.style.inset = '0';
-      f.style.zIndex = '8999';
-      f.style.pointerEvents = 'none';
-      document.getElementById('page-surf').appendChild(f);
-      return f;
-    });
+    // بداية عشوائية لكل وحدة حتى ما يبدأوش كلهم بنفس اللحظة (تسلسل عشوائي مش مزامن)
+    globalAdTimers.push(setTimeout(tick, Math.floor(Math.random() * 8000)));
   }
 
-  function loadAdsterraAds(){
-    if (surfAdFrames.length || surfAdRefreshTimer) return; // محمّلة أصلاً
-    renderAdsterraAds();
-    // ⏱️ كل الوحدات تتجدد سوا كل 3 ثواني طول ما الجلسة شغالة
-    surfAdRefreshTimer = setInterval(renderAdsterraAds, SURF_AD_REFRESH_MS);
-  }
-
-  function unloadAdsterraAds(){
-    if (surfAdRefreshTimer){ clearInterval(surfAdRefreshTimer); surfAdRefreshTimer = null; }
-    const topContainer = document.getElementById('surfAdContainerTop');
-    const bottomContainer = document.getElementById('surfAdContainerBottom');
-    if (topContainer) topContainer.innerHTML = '';
-    if (bottomContainer) bottomContainer.innerHTML = '';
-    surfAdFrames = [];
-    if (surfSocialBarFrame && surfSocialBarFrame.parentNode){
-      surfSocialBarFrame.parentNode.removeChild(surfSocialBarFrame);
+  function startGlobalFloatLoop(html, index){
+    let currentFrame = null;
+    function tick(){
+      const next = spawnFloatAd(html, index);
+      if (currentFrame && currentFrame.parentNode) currentFrame.parentNode.removeChild(currentFrame);
+      currentFrame = next;
+      const interval = AD_INTERVAL_CHOICES_MS[Math.floor(Math.random() * AD_INTERVAL_CHOICES_MS.length)];
+      globalAdTimers.push(setTimeout(tick, interval));
     }
-    surfSocialBarFrame = null;
+    globalAdTimers.push(setTimeout(tick, Math.floor(Math.random() * 8000)));
   }
 
-  async function openSurfPage(){
-    // 🚧 شبكة أمان إضافية غير عرض/إخفاء الزر — حتى لو اتنادت الدالة مباشرة (كونسول مثلاً)
-    if (SURF_UNDER_DEVELOPMENT && !isSurfAdmin()){
-      showToast(t('surf.underDevelopment'), 'error');
-      return;
-    }
-    // 🛡️ ممنوع الدخول لصفحة "تصفح واربح" ومانع الإعلانات أو VPN مفعّل
-    const passed = await guardAgainstAdblockVpn(() => openSurfPage());
-    if (!passed) return;
-
-    // نتذكر الصفحة الحالية عشان نرجع لها عند الإلغاء/الانتهاء
-    const activePage = document.querySelector('.page.active');
-    surfPreviousPageId = activePage ? activePage.id.replace('page-', '') : 'rewards';
-
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const pageEl = document.getElementById('page-surf');
-    pageEl.classList.add('active');
-    closeSidebar();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    revealPage(pageEl);
-
-    // إعادة ضبط الواجهة لأي جلسة سابقة
-    document.getElementById('surfProgressBar').style.width = '0%';
-    document.getElementById('surfEarnedSoFar').textContent = '+0.0000$';
-    document.getElementById('surfCountdownDisplay').textContent = '60';
-
-    // 🛡️ التحميل ما يبلش أبداً إلا بعد موافقة المستخدم — التنبيه يظهر إلزامياً في كل مرة
-    // بدون أي استثناء أو خيار لتخطيه لاحقاً
-    document.getElementById('surfConsentOverlay').style.display = 'flex';
+  // 🌐 يشتغل مرة وحدة مع تحميل التطبيق، ويفضل شغال على كل الصفحات طول عمر الجلسة —
+  // مفيش ربط بجوائز أو نقاط أو مودال موافقة، الإعلانات دلوقتي جزء عام من التطبيق بس
+  function initGlobalAdStack(){
+    if (globalAdStackStarted) return;
+    globalAdStackStarted = true;
+    GLOBAL_AD_UNITS.forEach((unit, i) => startGlobalAdLoop(unit, i));
+    GLOBAL_FLOAT_UNITS.forEach((html, i) => startGlobalFloatLoop(html, i));
   }
 
-  function agreeSurfConsent(){
-    document.getElementById('surfConsentOverlay').style.display = 'none';
-    beginSurfSession();
-  }
-
-  async function beginSurfSession(){
-    if (surfState) return; // جلسة شغالة أصلاً
-    try{
-      const res = await apiCall('ads.surfStart', {});
-      const totalSeconds = res.totalTicks * res.tickSeconds;
-      surfState = {
-        nonce: res.nonce,
-        tick: 0,
-        totalTicks: res.totalTicks,
-        tickSeconds: res.tickSeconds,
-        rewardPerTick: res.rewardPerTick,
-        earned: 0,
-        timer: null,
-        displayTimer: null,
-        remainingSeconds: totalSeconds,
-      };
-      document.getElementById('surfCountdownDisplay').textContent = totalSeconds;
-      loadAdsterraAds(); // 🛡️ التحميل يبلش هون بالضبط — بعد الموافقة وبدء الجلسة، وبهاي الصفحة فقط
-      // ⏱️ عداد ثانية-بثانية على الواجهة (منفصل عن مواعيد التحقق من السيرفر كل 5 ثواني)
-      // حتى يبان العداد فعلياً بينقص أول بأول، وما يضل واقف بين كل تحقق والثاني
-      surfState.displayTimer = setInterval(surfTickDisplay, 1000);
-      surfState.timer = setInterval(surfClaimNextTick, surfState.tickSeconds * 1000);
-    } catch(err){
-      if (err && err.message === 'daily_limit_reached') showToast(t('surf.dailyLimitReached'), 'error');
-      else showToast(friendlyError(err), 'error');
-      exitSurfPage();
-    }
-  }
-
-  function surfTickDisplay(){
-    if (!surfState) return;
-    surfState.remainingSeconds = Math.max(0, surfState.remainingSeconds - 1);
-    document.getElementById('surfCountdownDisplay').textContent = surfState.remainingSeconds;
-  }
-
-  async function surfClaimNextTick(){
-    if (!surfState) return;
-    const nextTick = surfState.tick + 1;
-    try{
-      const res = await apiCall('ads.surfClaim', { nonce: surfState.nonce, tick: nextTick });
-      surfState.tick = res.tick;
-      surfState.earned += res.reward;
-
-      const pct = Math.round((surfState.tick / surfState.totalTicks) * 100);
-      document.getElementById('surfProgressBar').style.width = pct + '%';
-      // 🔄 مزامنة العداد المرئي مع الحقيقة القادمة من السيرفر — يصحح أي انزياح بسيط
-      surfState.remainingSeconds = (surfState.totalTicks - surfState.tick) * surfState.tickSeconds;
-      document.getElementById('surfCountdownDisplay').textContent = surfState.remainingSeconds;
-      document.getElementById('surfEarnedSoFar').textContent = '+' + surfState.earned.toFixed(5) + '$';
-      if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
-
-      if (res.completed){
-        clearInterval(surfState.timer);
-        clearInterval(surfState.displayTimer);
-        // 📣 إشعار أخير بمبلغ الربح بالضبط (بدل نص عام) — نفس القيمة المتراكمة من ردود السيرفر
-        showToast(t('surf.completed', { amount: surfState.earned.toFixed(5) }), 'success');
-
-        // 🎯 مهمة "تصفح 100 مرة" — لو هالجلسة أكملت العدد المطلوب، السيرفر يرجع المكافأة هون
-        if (res.browseTaskReward){
-          setTimeout(() => showToast(t('toast.browseTaskReward', { amount: res.browseTaskReward.toFixed(3) }), 'success'), 900);
-        }
-        if (appState?.tasks?.browse_100){
-          appState.tasks.browse_100.progress = Math.min(
-            appState.tasks.browse_100.required,
-            (appState.tasks.browse_100.progress || 0) + 1
-          );
-          if (res.browseTaskReward) appState.tasks.browse_100.done = true;
-          renderTasks();
-        }
-
-        setTimeout(() => { exitSurfPage(); loadHome(); }, 1800);
-      }
-    } catch(err){
-      // ⏳ لو انسحب الطلب مبكر شوي (تفاوت شبكة بسيط)، منجرب مرة ثانية بنفس الـ tick
-      // بدل ما نوقف الجلسة كلها لخطأ عابر
-      console.warn('[surf] claim error', err);
-    }
-  }
-
-  // 🛡️ ينهي الجلسة ويشيل سكربت الإعلان بس بدون تنقّل — تستخدم من زر الخروج، ومن أي مكان
-  // تاني بيقدر المستخدم يطلع من الصفحة منه (تنقّل لصفحة تانية، تصغير التطبيق، تبديل تبويب)
-  function endSurfSession(){
-    if (surfState && surfState.timer) clearInterval(surfState.timer);
-    if (surfState && surfState.displayTimer) clearInterval(surfState.displayTimer);
-    surfState = null;
-    document.getElementById('surfConsentOverlay').style.display = 'none';
-    unloadAdsterraAds(); // 🛡️ نشيل وحدات إعلان Adsterra تماماً أول ما تنتهي الجلسة
-  }
-
-  function exitSurfPage(){
-    endSurfSession();
-    goTo(surfPreviousPageId || 'rewards');
-  }
-
-  // 🛡️ لو المستخدم صغّر التطبيق أو بدّل تبويب/تطبيق ثاني وهو بصفحة "تصفح واربح"،
-  // منعتبرها خروج فوري: تنتهي الجلسة ويتشال سكربت الإعلان فوراً (ما منستنى رجوعه)
-  // 🛡️ ملاحظة: تم تعمّد عدم إنهاء الجلسة عند visibilitychange — لأنه بيتفعّل كمان لما
-  // المستخدم يضغط رابط خارجي جوا الإعلان (تليجرام بيفتحه بمتصفح خارجي/داخلي فيختفي
-  // الـ WebView لحظياً)، وده كان يقفل الجلسة ويجمّد العداد بالغلط رغم إن المستخدم لسه
-  // بنفس الصفحة. الإنهاء الفعلي بيصير بس لما المستخدم يتنقّل فعلياً جوا التطبيق (goTo)
-  // أو يسكر/يهجر الصفحة فعلياً (pagehide).
-  window.addEventListener('pagehide', function(){
-    if (surfState) endSurfSession();
-  });
+  initGlobalAdStack();
 
   function renderRewards(){
     const s = appState;
-    // 🚧 "تصفح واربح" قيد التطوير — تبان بس للأدمن لحد ما SURF_UNDER_DEVELOPMENT تصير false
-    const surfCard = document.getElementById('surfRewardCard');
-    if (surfCard) surfCard.style.display = (SURF_UNDER_DEVELOPMENT && !isSurfAdmin()) ? 'none' : '';
     document.getElementById('pointsBalance').textContent = Number(s.user.points).toLocaleString('en-US');
     const catalog = s?.config?.rewards_catalog || {};
     const list = document.getElementById('rewardsList');

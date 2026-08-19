@@ -303,15 +303,6 @@
 
     <div id="rewardsList"></div>
 
-    <div class="task-card" id="surfRewardCard">
-      <div class="task-ic"><img src="asesst/ic-browse.png" alt=""></div>
-      <div class="task-mid">
-        <div class="tn" data-i18n="surf.cardTitle">تصفح واربح</div>
-        <div class="td" data-i18n="surf.cardDesc">دقيقة وحدة، دفعات صغيرة كل 10 ثواني</div>
-      </div>
-      <button class="task-btn" id="surfStartBtn" onclick="openSurfPage()" data-i18n="surf.start">ابدأ</button>
-    </div>
-
     <div class="bottom-pad"></div>
   </div>
 
@@ -531,57 +522,6 @@
     </div>
 
     <div class="bottom-pad"></div>
-  </div>
-
-  <!-- ============ SURF & EARN (صفحة كاملة مستقلة) ============ -->
-  <div class="page" id="page-surf">
-    <!-- 🚪 زر خروج وحيد — ثابت على الشاشة (fixed) أعلى يمين، بأعلى طبقة (z-index) حتى يضل
-         ظاهر وقابل للنقر فوق أي إعلان قد يظهر بكامل الشاشة -->
-    <button id="surfExitBtn" onclick="exitSurfPage()" aria-label="خروج" style="position:fixed; top:64px; right:14px; z-index:99999; width:40px; height:40px; border-radius:50%; background:var(--glass-strong); backdrop-filter:blur(10px); border:1px solid var(--border); color:var(--text-1); display:flex; align-items:center; justify-content:center;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
-
-    <div class="topbar" style="justify-content:center;">
-      <div class="brand-mini">
-        <span data-i18n="surf.title">تصفح واربح</span>
-      </div>
-    </div>
-
-    <!-- 📌 وحدة إعلان علوية — تتجدد مع باقي الوحدات كل SURF_AD_REFRESH_MS -->
-    <div id="surfAdContainerTop" style="margin:10px 0; display:flex; flex-direction:column; align-items:center; gap:12px;"></div>
-
-    <!-- ⏱️ العداد الرئيسي — أعلى الصفحة، بمنتصفها، بأرقام كبيرة، يبدأ العد التنازلي فقط
-         بعد ما يوافق المستخدم على تنبيه الإعلانات (surfConsentScreen) -->
-    <div style="text-align:center; margin-top:18px;">
-      <div id="surfCountdownDisplay" style="font-size:56px; font-weight:800; color:var(--text-1); line-height:1;">130</div>
-      <div style="color:var(--text-3); font-size:12px; margin-top:4px;" data-i18n="surf.secondsLeft">ثانية متبقية</div>
-    </div>
-
-    <div class="surf-progress-wrap" style="background:var(--glass); border-radius:20px; height:10px; overflow:hidden; margin:18px 0 8px;">
-      <div id="surfProgressBar" style="height:100%; width:0%; background:var(--violet); transition:width .4s ease;"></div>
-    </div>
-    <div class="eyebrow" style="text-align:center;"><span id="surfEarnedSoFar">+0.0000$</span></div>
-
-    <!-- 📌 وحدة إعلان سفلية — تُحقن ديناميكياً جوا iframe معزول (حتى document.write اللي
-         بيستخدمه سكربت Adsterra ما يمسحش صفحة التطبيق كلها) فقط لحظة بدء الجلسة، وتُزال
-         بالكامل أول ما تنتهي الجلسة أو يخرج المستخدم من الصفحة -->
-    <div id="surfAdContainerBottom" style="margin:14px 0; display:flex; flex-direction:column; align-items:center; gap:12px;"></div>
-
-    <div class="bottom-pad"></div>
-  </div>
-
-  <!-- 🛡️ شاشة منبثقة إلزامية بمنتصف الصفحة — تنبيه محتوى الإعلانات، تظهر قبل أي تحميل -->
-  <div class="modal-overlay show" id="surfConsentOverlay" style="display:none;">
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="surf.consentTitle">⚠️ تنبيه هام قبل المتابعة</div>
-      <div class="modal-sub" data-i18n="surf.consentBody">قد تظهر خلال هذه الجلسة إعلانات غير لائقة. نحن لا نعرض هذه الإعلانات ولا نتحكم بمحتواها — هي من طرف شبكات إعلانية خارجية بالكامل. بالمتابعة، أنت تقر بأنك مسؤول بشكل كامل عن قرارك بالتصفح، وأنك غير مُجبر على مشاهدة أي محتوى لست مقتنعاً به، ويمكنك الخروج من الصفحة في أي لحظة.</div>
-
-      <div class="modal-actions">
-        <button class="btn-ghost" onclick="exitSurfPage()" style="flex:1;" data-i18n="common.cancel">إلغاء</button>
-        <button class="btn-primary" onclick="agreeSurfConsent()" style="flex:2;" data-i18n="surf.agreeStart">أوافق وابدأ</button>
-      </div>
-    </div>
   </div>
 
   <!-- 🛡️ حظر AdBlock / VPN — يظهر قبل صفحة "تصفح واربح" وقبل روابط المهام (Task Ads / Smart Link) -->
