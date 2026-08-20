@@ -448,14 +448,23 @@
   }
 
   /* ===== Rewards: كرت المكافأة اليومية (Daily Bonus) =====
-     زر بيفتح الرابط بتاب/متصفح خارجي، وبعدها انتظار 10 ثواني حقيقية (يتحقق منها
-     السيرفر من started_at، مش من عداد الواجهة)، وبعدين يقدر يستلم المكافأة.
+     زر بيفتح الرابط بتاب/متصفح خارجي. المكافأة ما بتتفعّلش بمجرد عدّ ثواني جوا البوت —
+     لازم المستخدم يكون فعلاً غادر تطبيق تليجرام (Telegram بيولّد visibilitychange
+     لما يفتح رابط خارجي) لمدة 12 ثانية متراكمة على الأقل. العداد بيراقب الاختفاء
+     الحقيقي فقط، وزر "استلام" ما بيتفعّلش إلا بعد رجوعه فعلياً وتحقق السيرفر من
+     نفس الشرط (started_at + awayMs) بشكل مستقل تماماً عن الواجهة.
      3 مرات كل 24 ساعة (نافذة متجددة من أول استلام)، إجمالي 0.01$ مقسومة على 3 مرات. */
-  let dailyBonusState = null; // { nonce, timer, remaining }
+  let dailyBonusState = null; // { nonce, requiredMs, awayMs, hiddenAt, visibilityHandler, btn }
 
   function openExternalLink(url){
     if (tg && tg.openLink) tg.openLink(url);
     else window.open(url, '_blank');
+  }
+
+  function cleanupDailyBonusVisibilityTracking(){
+    if (dailyBonusState && dailyBonusState.visibilityHandler){
+      document.removeEventListener('visibilitychange', dailyBonusState.visibilityHandler);
+    }
   }
 
   function renderDailyBonusCard(){
@@ -485,24 +494,44 @@
     setBtnLoading(btn, true);
     try{
       const res = await apiCall('tasks.dailyBonusStart', {});
-      dailyBonusState = { nonce: res.nonce, timer: null, remaining: res.waitSeconds };
+      const requiredMs = res.waitSeconds * 1000;
+      dailyBonusState = {
+        nonce: res.nonce,
+        requiredMs,
+        awayMs: 0,
+        hiddenAt: null,
+        visibilityHandler: null,
+        btn,
+      };
       openExternalLink(res.url);
 
       setBtnLoading(btn, false);
       btn.disabled = true;
-      btn.textContent = t('tasks.dailyBonusWaiting', { sec: dailyBonusState.remaining });
+      btn.textContent = t('tasks.dailyBonusVisitFirst');
 
-      dailyBonusState.timer = setInterval(() => {
-        dailyBonusState.remaining -= 1;
-        if (dailyBonusState.remaining <= 0){
-          clearInterval(dailyBonusState.timer);
-          btn.disabled = false;
-          btn.textContent = t('tasks.dailyBonusClaim');
-          btn.onclick = () => claimDailyBonus(btn);
-        } else {
-          btn.textContent = t('tasks.dailyBonusWaiting', { sec: dailyBonusState.remaining });
+      // 🛡️ نراقب فترات اختفاء الصفحة الحقيقية بس (document.hidden) — مش عداد ثابت.
+      // كل مرة الصفحة تختفي (فتح الرابط فعلياً) ثم ترجع، نجمع المدة الفعلية اللي قضاها
+      // المستخدم خارج البوت. الزر ما بيتفعّلش إلا لما المجموع يوصل requiredMs فعلاً.
+      const handler = () => {
+        if (!dailyBonusState) return;
+        if (document.hidden){
+          dailyBonusState.hiddenAt = Date.now();
+        } else if (dailyBonusState.hiddenAt){
+          dailyBonusState.awayMs += Date.now() - dailyBonusState.hiddenAt;
+          dailyBonusState.hiddenAt = null;
+
+          if (dailyBonusState.awayMs >= dailyBonusState.requiredMs){
+            dailyBonusState.btn.disabled = false;
+            dailyBonusState.btn.textContent = t('tasks.dailyBonusClaim');
+            dailyBonusState.btn.onclick = () => claimDailyBonus(dailyBonusState.btn);
+          } else {
+            const remaining = Math.ceil((dailyBonusState.requiredMs - dailyBonusState.awayMs) / 1000);
+            dailyBonusState.btn.textContent = t('tasks.dailyBonusVisitAgain', { sec: remaining });
+          }
         }
-      }, 1000);
+      };
+      dailyBonusState.visibilityHandler = handler;
+      document.addEventListener('visibilitychange', handler);
     } catch(err){
       dailyBonusState = null;
       if (err && err.message === 'daily_limit_reached') showToast(t('tasks.dailyBonusLimit'), 'error');
@@ -513,17 +542,31 @@
 
   async function claimDailyBonus(btn){
     if (!dailyBonusState) return;
+    // 🛡️ حساب آخر فترة اختفاء لو الصفحة لسه مختفية لحظة الضغط (نادراً، لكن للدقة)
+    if (dailyBonusState.hiddenAt){
+      dailyBonusState.awayMs += Date.now() - dailyBonusState.hiddenAt;
+      dailyBonusState.hiddenAt = null;
+    }
+    if (dailyBonusState.awayMs < dailyBonusState.requiredMs){
+      showToast(t('tasks.dailyBonusMustVisit'), 'error');
+      return;
+    }
     setBtnLoading(btn, true);
     try{
-      const res = await apiCall('tasks.dailyBonusClaim', { nonce: dailyBonusState.nonce });
+      const res = await apiCall('tasks.dailyBonusClaim', {
+        nonce: dailyBonusState.nonce,
+        awayMs: Math.round(dailyBonusState.awayMs),
+      });
       showToast(t('tasks.dailyBonusSuccess', { amount: Number(res.reward).toFixed(4) }), 'success');
       if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
       loadHome();
       loadWalletTx();
       loadHistory('all');
     } catch(err){
-      showToast(friendlyError(err), 'error');
+      if (err && err.message === 'must_visit_link') showToast(t('tasks.dailyBonusMustVisit'), 'error');
+      else showToast(friendlyError(err), 'error');
     } finally {
+      cleanupDailyBonusVisibilityTracking();
       dailyBonusState = null;
       setBtnLoading(btn, false, t('tasks.dailyBonusStart'));
       renderDailyBonusCard();
@@ -658,8 +701,8 @@
   ];
 
   const AD_VISIBLE_MS = 6000;                       // ⏱️ مدة الظهور: 4 ثواني بالضبط لكل إعلان
-  const AD_REST_MS_CHOICES = [11000, 11000, 11000, 10000, 10000, 10000]; // 😌 فترة الراحة: بين 15 و20 ثانية
-  const AD_MAX_CONCURRENT = 14;                       // 4 أنواع إعلانات تظهر مع بعض كل دورة
+  const AD_REST_MS_CHOICES = [11000, 12000, 13000, 12000, 11000, 10000]; // 😌 فترة الراحة: بين 15 و20 ثانية
+  const AD_MAX_CONCURRENT = 19;                       // 4 أنواع إعلانات تظهر مع بعض كل دورة
 
   let globalAdStackEl = null;
   let globalAdSchedulerTimer = null;
