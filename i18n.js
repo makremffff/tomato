@@ -103,6 +103,8 @@ const RC_STRINGS = {
     'tasks.dailyBonusWaiting': 'استنى {sec} ث',
     'tasks.dailyBonusVisitFirst': 'افتح الرابط وارجع',
     'tasks.dailyBonusVisitAgain': 'ارجع للرابط {sec} ث كمان',
+    'tasks.stayTitle': 'ابقَ في التطبيق',
+    'tasks.stayProgress': 'ابقَ {required} دقيقة باليوم واربح {amount}$ — {progress}/{required} دقيقة',
     'tasks.dailyBonusMustVisit': 'لازم تفتح الرابط فعلاً وتضل فيه شوي قبل ما ترجع',
     'tasks.dailyBonusClaim': 'استلام',
     'tasks.dailyBonusDone': 'خلصت مرات اليوم',
@@ -204,6 +206,7 @@ const RC_STRINGS = {
     'toast.streakComplete': ' 🎉 سلسلة كاملة!',
     'toast.taskAdReward': 'تم استلام المهمة +{amount}$',
     'toast.browseTaskReward': '🎉 أنجزت مهمة تصفح 10 مرة! +{amount}$',
+    'toast.stayTaskReward': '🎉 أنجزت مهمة البقاء بالتطبيق! +{amount}$',
     'toast.sessionTooLong': 'الجلسة طويلة جدًا — أعد فتح التطبيق للحصول على مهام جديدة',
 
     'errors.daily_limit_reached': 'وصلت للحد الأقصى من الإعلانات اليوم',
@@ -346,6 +349,8 @@ const RC_STRINGS = {
     'tasks.dailyBonusWaiting': 'Wait {sec}s',
     'tasks.dailyBonusVisitFirst': 'Open the link and come back',
     'tasks.dailyBonusVisitAgain': 'Visit the link {sec}s more',
+    'tasks.stayTitle': 'Stay in the app',
+    'tasks.stayProgress': 'Stay {required} min/day to earn ${amount} — {progress}/{required} min',
     'tasks.dailyBonusMustVisit': 'You must actually open the link and stay on it before returning',
     'tasks.dailyBonusClaim': 'Claim',
     'tasks.dailyBonusDone': "You've claimed all for today",
@@ -447,6 +452,7 @@ const RC_STRINGS = {
     'toast.streakComplete': ' 🎉 Full streak!',
     'toast.taskAdReward': 'Task claimed +${amount}',
     'toast.browseTaskReward': '🎉 Browse 10 times task complete! +${amount}',
+    'toast.stayTaskReward': '🎉 Stay-in-app task complete! +${amount}',
     'toast.sessionTooLong': 'Session too long — reopen the app to get new tasks',
 
     'errors.daily_limit_reached': "You've reached today's ad limit",

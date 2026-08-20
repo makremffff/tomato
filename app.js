@@ -976,6 +976,17 @@
       if (taStatus) taStatus.style.display = 'none';
     }
 
+    const st = s.tasks.stay_in_app;
+    if (st){
+      const stStatus = document.getElementById('stayTaskStatus');
+      const stProgressEl = document.getElementById('stayTaskProgress');
+      const progMin = Math.floor(st.progress / 60);
+      const reqMin = Math.round(st.required / 60);
+      stProgressEl.textContent = t('tasks.stayProgress', { progress: progMin, required: reqMin, amount: s.config.stay_task_reward_usd.toFixed(3) });
+      if (st.done){ stProgressEl.style.display = 'none'; stStatus.style.display = 'flex'; }
+      else { stProgressEl.style.display = 'block'; stStatus.style.display = 'none'; }
+    }
+
     renderDailyBonusCard();
   }
 
@@ -1109,6 +1120,35 @@
     }
   }
 
+  /* ===== مهمة "ابقَ في التطبيق" — نبضة دورية بينما التطبيق مفتوح وظاهر أمام المستخدم =====
+     الوقت الفعلي يُحتسب بالكامل من السيرفر (فرق NOW() بين نبضتين)، هالنبضة فقط "تشغّل"
+     الاحتساب — حتى لو عدّل حد قيمة progress بالواجهة مافي أي تأثير على الرصيد الفعلي. */
+  let stayHeartbeatTimer = null;
+  async function sendStayHeartbeat(){
+    if (document.visibilityState !== 'visible') return;
+    if (!appState) return;
+    try{
+      const res = await apiCall('tasks.stayHeartbeat', {});
+      appState.tasks.stay_in_app = { progress: res.progress, required: res.required, done: res.done };
+      if (document.getElementById('page-tasks')?.classList.contains('active')) renderTasks();
+      if (res.reward){
+        showToast(t('toast.stayTaskReward', { amount: res.reward.toFixed(3) }), 'success');
+        if (typeof res.newBalance === 'number') updateBalanceDisplay(res.newBalance);
+        appState.stats.today_earn_usd = (appState.stats.today_earn_usd || 0) + res.reward;
+        renderHome();
+      }
+    } catch(err){ console.error('[stay heartbeat]', err); }
+  }
+  function startStayHeartbeat(){
+    if (stayHeartbeatTimer) return;
+    const intervalSec = (appState && appState.config && appState.config.stay_heartbeat_interval_sec) || 20;
+    sendStayHeartbeat();
+    stayHeartbeatTimer = setInterval(sendStayHeartbeat, intervalSec * 1000);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') sendStayHeartbeat();
+  });
+
   async function bootstrap(){
     initTonConnect();
     initAdsgramTaskWidget();
@@ -1117,6 +1157,7 @@
     loadHistory('all');
     revealPage(document.querySelector('.page.active'));
     animateNumbersIn(document.querySelector('.page.active'));
+    startStayHeartbeat();
   }
 
   // ننتظر اختيار اللغة (أو استرجاعها من الجلسة السابقة) قبل تحميل التطبيق
