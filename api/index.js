@@ -77,7 +77,7 @@ const APP_CFG = {
   // حد أقصى 3 مرات لكل مستخدم كل 24 ساعة (نافذة متجددة من أول استلام، مش يوم تقويمي)
   // إجمالي 0.005$ مقسومة على 3 مرات = مكافأة كل مرة
   DAILY_BONUS_URL: 'http://horrorpay.online/3gRmcK',
-  DAILY_BONUS_WAIT_SECONDS:   10,
+  DAILY_BONUS_WAIT_SECONDS:   12,
   DAILY_BONUS_SESSION_EXPIRE_MIN: 10, // أي جلسة غير مستلمة تعتبر منتهية بعد هالمدة
   DAILY_BONUS_MAX_PER_WINDOW: 3,
   DAILY_BONUS_WINDOW_HOURS:   24,
@@ -1261,6 +1261,15 @@ module.exports = async function handler(req, res) {
         // 🛡️ التحقق الحقيقي من الوقت من السيرفر (started_at) — هامش ثانية واحدة بس لتأخير الشبكة
         if (Number(session.elapsed_sec) < APP_CFG.DAILY_BONUS_WAIT_SECONDS - 1) {
           return res.status(400).json({ ok: false, error: 'too_early' });
+        }
+
+        // 🛡️ ما يكفيش إن الوقت عدى وهو قاعد جوا البوت — لازم يكون فعلاً فتح الرابط وغادر
+        // التطبيق (Telegram بيولّد visibilitychange لما يفتح رابط خارجي). العميل بيراقب
+        // فترات الاختفاء الفعلية (document.hidden) ويرسل مجموعها هون؛ لازم يكون مساوي أو
+        // أكبر من مدة الانتظار المطلوبة، وإلا اعتبرها محاولة انتظار داخل البوت بدون زيارة حقيقية.
+        const awayMs = Number(data.awayMs || 0);
+        if (!Number.isFinite(awayMs) || awayMs < (APP_CFG.DAILY_BONUS_WAIT_SECONDS - 1) * 1000) {
+          return res.status(400).json({ ok: false, error: 'must_visit_link' });
         }
 
         await sql(`UPDATE ad_daily_bonus_sessions SET claimed = TRUE WHERE id = $1`, [session.id]);
