@@ -99,6 +99,17 @@ const APP_CFG = {
   BROWSE_TASK_TARGET:      10,
   BROWSE_TASK_REWARD_USD:  0.008,
 
+  // ⏳ مهمة يومية "ابقَ في التطبيق" — تُحتسب من نبضات (heartbeat) موقّعة بالكامل من السيرفر
+  // أثناء بقاء المستخدم فاتح التطبيق فعليًا. الوقت المحتسب هو فرق التوقيت بين نبضتين
+  // متتاليتين مسجّل بـ NOW() بالسيرفر (وليس أي عداد أو رقم يرسله الكلايند)، بحد أقصى
+  // STAY_HEARTBEAT_MAX_CREDIT_SEC لكل نبضة — يمنع احتساب فجوات كبيرة (تبويب مغلق/تلاعب
+  // بتوقيت الجهاز) كوقت "بقاء فعلي".
+  STAY_TASK_TARGET_MINUTES:      35,   // عدد الدقائق المطلوبة يوميًا
+  STAY_TASK_REWARD_USD:          0.01, // المكافأة عند إكمال المدة
+  STAY_HEARTBEAT_INTERVAL_SEC:   20,   // كل كم ثانية يبعت الكلايند نبضة
+  STAY_HEARTBEAT_MAX_CREDIT_SEC: 30,   // أقصى مدة تُحتسب لكل نبضة واحدة
+  get STAY_TASK_TARGET_SECONDS() { return this.STAY_TASK_TARGET_MINUTES * 60; },
+
   // 📢 مهمة الانضمام للقناة
   JOIN_CHANNEL_REWARD_USD:    0.001,
   JOIN_CHANNEL_REWARD_POINTS: 50,
@@ -254,6 +265,12 @@ async function ensureSchema() {
     ['daily_surf_completed', 'INT NOT NULL DEFAULT 0'],
     ['last_surf_completed_date', 'DATE'],
     ['last_browse_reward_date', 'DATE'],
+    // ⏳ مهمة "ابقَ في التطبيق" — عدد الثواني المتراكمة اليوم (تُصفّر كل يوم) + تاريخ آخر
+    // نبضة (لحساب الفرق الزمني بين نبضتين) + تاريخ آخر مرة استُلمت فيها مكافأة المهمة
+    ['daily_stay_seconds', 'INT NOT NULL DEFAULT 0'],
+    ['last_stay_date', 'DATE'],
+    ['last_stay_heartbeat_at', 'TIMESTAMPTZ'],
+    ['last_stay_reward_date', 'DATE'],
   ];
   for (const [col, def] of backfillCols) {
     await sql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col} ${def}`);
@@ -852,6 +869,8 @@ module.exports = async function handler(req, res) {
         const taskAdDone = taskAdsDoneToday >= APP_CFG.TASK_AD_DAILY_MAX;
         const browseProgressToday = toDateStr(dbUser.last_surf_completed_date) === today ? dbUser.daily_surf_completed : 0;
         const browseDone = toDateStr(dbUser.last_browse_reward_date) === today;
+        const stayProgressToday = toDateStr(dbUser.last_stay_date) === today ? dbUser.daily_stay_seconds : 0;
+        const stayDone = toDateStr(dbUser.last_stay_reward_date) === today;
 
         return res.json({
           ok: true,
@@ -884,6 +903,7 @@ module.exports = async function handler(req, res) {
             daily_login: { streak: dbUser.daily_login_streak, required: APP_CFG.DAILY_LOGIN_STREAK_DAYS, done: toDateStr(dbUser.last_daily_login) === today },
             task_ad: { progress: taskAdsDoneToday, required: APP_CFG.TASK_AD_DAILY_MAX, done: taskAdDone, enabled: !!ADSGRAM_REWARD_SECRET },
             browse_100: { progress: browseProgressToday, required: APP_CFG.BROWSE_TASK_TARGET, done: browseDone },
+            stay_in_app: { progress: stayProgressToday, required: APP_CFG.STAY_TASK_TARGET_SECONDS, done: stayDone },
             daily_bonus: {
               progress: (!dbUser.daily_bonus_window_start ||
                 (Date.now() - new Date(dbUser.daily_bonus_window_start).getTime()) >= APP_CFG.DAILY_BONUS_WINDOW_HOURS * 3600 * 1000)
@@ -920,6 +940,9 @@ module.exports = async function handler(req, res) {
             taddy_reward_points: APP_CFG.TADDY_REWARD_POINTS,
             browse_task_reward_usd: APP_CFG.BROWSE_TASK_REWARD_USD,
             browse_task_target: APP_CFG.BROWSE_TASK_TARGET,
+            stay_task_reward_usd: APP_CFG.STAY_TASK_REWARD_USD,
+            stay_task_target_sec: APP_CFG.STAY_TASK_TARGET_SECONDS,
+            stay_heartbeat_interval_sec: APP_CFG.STAY_HEARTBEAT_INTERVAL_SEC,
             daily_bonus_reward_usd: APP_CFG.DAILY_BONUS_REWARD_USD,
             daily_bonus_max: APP_CFG.DAILY_BONUS_MAX_PER_WINDOW,
           },
@@ -1404,6 +1427,55 @@ module.exports = async function handler(req, res) {
           reward,
           newBalance: finalBalance ? parseFloat(finalBalance[0].balance_usd) : parseFloat(updatedUser[0].balance_usd),
           browseTaskReward,
+        });
+      }
+
+      // ═══════════ مهمة "ابقَ في التطبيق" — نبضة دورية بينما التطبيق مفتوح فعليًا ═══════════
+      case 'tasks.stayHeartbeat': {
+        const today = new Date().toISOString().slice(0, 10);
+        const targetSec = APP_CFG.STAY_TASK_TARGET_SECONDS;
+        const isNewDay = toDateStr(dbUser.last_stay_date) !== today;
+        const baseSeconds = isNewDay ? 0 : dbUser.daily_stay_seconds;
+
+        // 🛡️ الوقت المحتسب = الفرق الفعلي (بالسيرفر) بين هذه النبضة والنبضة السابقة لنفس
+        // اليوم، بحد أقصى STAY_HEARTBEAT_MAX_CREDIT_SEC — أي فجوة أكبر (تبويب مغلق، جهاز
+        // نايم، أو نداء API مباشر بمعدل أبطأ) تُقصّ لهذا الحد ولا تُحتسب كاملة
+        let elapsed = 0;
+        if (!isNewDay && dbUser.last_stay_heartbeat_at) {
+          const gapSec = (Date.now() - new Date(dbUser.last_stay_heartbeat_at).getTime()) / 1000;
+          if (gapSec > 0) elapsed = Math.min(gapSec, APP_CFG.STAY_HEARTBEAT_MAX_CREDIT_SEC);
+        }
+
+        const newSeconds = Math.min(Math.round(baseSeconds + elapsed), targetSec);
+
+        const updated = await sql(
+          `UPDATE users SET daily_stay_seconds = $1, last_stay_date = $2, last_stay_heartbeat_at = NOW()
+           WHERE id = $3 RETURNING balance_usd, last_stay_reward_date`,
+          [newSeconds, today, dbUser.id]
+        );
+
+        let reward = null;
+        let newBalance = parseFloat(updated[0].balance_usd);
+        const alreadyRewardedToday = toDateStr(updated[0].last_stay_reward_date) === today;
+
+        if (newSeconds >= targetSec && !alreadyRewardedToday) {
+          const rewardRows = await sql(
+            `UPDATE users SET balance_usd = balance_usd + $1, last_stay_reward_date = $2 WHERE id = $3 RETURNING balance_usd`,
+            [APP_CFG.STAY_TASK_REWARD_USD, today, dbUser.id]
+          );
+          await logTx(dbUser.id, 'task', 'مكافأة: البقاء في التطبيق', APP_CFG.STAY_TASK_REWARD_USD, 'tx.stayTask');
+          await creditReferralCommission(dbUser, APP_CFG.STAY_TASK_REWARD_USD);
+          reward = APP_CFG.STAY_TASK_REWARD_USD;
+          newBalance = parseFloat(rewardRows[0].balance_usd);
+        }
+
+        return res.json({
+          ok: true,
+          progress: newSeconds,
+          required: targetSec,
+          done: newSeconds >= targetSec,
+          reward,
+          newBalance,
         });
       }
 
