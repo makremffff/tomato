@@ -1,8 +1,7 @@
 {
-  "name": "realcash-backend",
+  "name": "usdt-claim-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "RealCash (ريل كاش) — Telegram Mini App backend on Vercel Serverless + Neon Postgres",
   "dependencies": {
     "@neondatabase/serverless": "^0.9.0"
   }
